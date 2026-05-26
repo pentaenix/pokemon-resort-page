@@ -1,0 +1,19 @@
+{
+  "projectName": "Pokémon Resort",
+  "tagline": "A cozy fan research atlas and game development board.",
+  "repoUrl": "https://github.com/your-name/pokemon-resort",
+  "legal": {
+    "shortNotice": "Unofficial, non-commercial fan project. Made by fans, for fans. No donations accepted.",
+    "fullNotice": "This is a non-commercial fan project created for research, documentation, and game development practice. Pokémon, Pokémon Concierge, character names, official imagery, concepts, and related intellectual property belong to their original owners. This project is not affiliated with, endorsed by, sponsored by, or approved by Netflix, The Pokémon Company, Nintendo, Game Freak, Creatures, or any related rights holders. We do not claim ownership of the Pokémon IP, Pokémon Concierge, its characters, official assets, screenshots, or any copyrighted material shown or referenced on this website. We do not accept donations, payments, crowdfunding, sponsorships, or financial support in any form. Encouragement and non-financial support are appreciated. All source code created for this project is open source. Original models, sprites, diagrams, tools, and other assets created during development may be reused elsewhere with appropriate credit unless otherwise stated. Official or reference material remains the property of its respective owners.",
+    "noDonations": "We do not accept donations, payments, crowdfunding, sponsorships, or financial support in any form.",
+    "reuse": "Original project-made code and development assets may be reused with credit. Official or referenced material remains the property of its owners."
+  },
+  "navigation": [
+    { "label": "Front Desk", "href": "#front-desk" },
+    { "label": "Island Atlas", "href": "#island-atlas" },
+    { "label": "Compatibility Lab", "href": "#compatibility-lab" },
+    { "label": "On-Flight Board", "href": "#on-flight-board" },
+    { "label": "Issue Desk", "href": "#issue-desk" },
+    { "label": "Source Guide", "href": "#source-guide" }
+  ]
+}

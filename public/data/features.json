@@ -1,0 +1,103 @@
+{
+  "stages": [
+    { "id": "boarding", "label": "Boarding Soon", "description": "Queued and ready to pick up." },
+    { "id": "on-flight", "label": "On-Flight", "description": "Actively being built." },
+    { "id": "testing", "label": "Testing", "description": "Implemented enough to verify." },
+    { "id": "landed", "label": "Landed", "description": "Completed for the current milestone." },
+    { "id": "blocked", "label": "Blocked", "description": "Waiting on a fix, asset, or decision." }
+  ],
+  "items": [
+    {
+      "id": "feature-transfer-compatibility",
+      "title": "Game Transfer Compatibility",
+      "category": "Compatibility Lab",
+      "stage": "on-flight",
+      "priority": "high",
+      "progress": 45,
+      "summary": "Round-trip testing for game → resort → game flows, with special focus on Gen 2 and Gen 7 self travel.",
+      "linkedBugs": ["BUG-TRANSFER-GEN2-001", "BUG-TRANSFER-GEN7-001"],
+      "linkedResearch": [],
+      "tasks": [
+        { "id": "task-gen2-self-travel", "label": "Fix Gen 2 self travel", "done": false },
+        { "id": "task-gen7-self-travel", "label": "Fix Gen 7 self travel", "done": false },
+        { "id": "task-route-coloring", "label": "Route coloring in compatibility graph", "done": true }
+      ]
+    },
+    {
+      "id": "feature-character-app",
+      "title": "Character App",
+      "category": "Resort Systems",
+      "stage": "boarding",
+      "priority": "medium",
+      "progress": 15,
+      "summary": "Character data package, staff duties, routines, and role notes for game behavior.",
+      "linkedBugs": [],
+      "linkedResearch": [],
+      "tasks": [
+        { "id": "task-character-data", "label": "Add character data to package", "done": false },
+        { "id": "task-staff-roles", "label": "Draft staff responsibility schema", "done": false }
+      ]
+    },
+    {
+      "id": "feature-map",
+      "title": "Island Map",
+      "category": "Research Atlas",
+      "stage": "on-flight",
+      "priority": "high",
+      "progress": 38,
+      "summary": "2D/3D island reconstruction based on frame analysis, map references, inferred paths, and gameplay needs.",
+      "linkedBugs": [],
+      "linkedResearch": ["ferry-dock", "main-lodge", "beach-path"],
+      "tasks": [
+        { "id": "task-3d-model", "label": "3D model blockout", "done": false },
+        { "id": "task-2d-map", "label": "2D map reference pass", "done": true },
+        { "id": "task-poi-system", "label": "Clickable POI marker system", "done": true }
+      ]
+    },
+    {
+      "id": "feature-rendering",
+      "title": "Rendering",
+      "category": "Engine",
+      "stage": "testing",
+      "priority": "medium",
+      "progress": 65,
+      "summary": "Visual rendering tasks for PDSM and rbmap output.",
+      "linkedBugs": ["BUG-RENDER-001"],
+      "linkedResearch": [],
+      "tasks": [
+        { "id": "task-pdsm", "label": "PDSM support", "done": true },
+        { "id": "task-render-rbmap", "label": "Render rbmap", "done": false }
+      ]
+    },
+    {
+      "id": "feature-summary-screen",
+      "title": "Summary Screen",
+      "category": "UI",
+      "stage": "boarding",
+      "priority": "medium",
+      "progress": 20,
+      "summary": "Resort-ready summary UI using data from PKHeX-compatible package values.",
+      "linkedBugs": [],
+      "linkedResearch": ["main-lodge"],
+      "tasks": [
+        { "id": "task-summary-ui", "label": "UI layout", "done": false },
+        { "id": "task-pkhex-data", "label": "Data from PKHeX", "done": true }
+      ]
+    },
+    {
+      "id": "feature-transport",
+      "title": "Ferry and Transport Flow",
+      "category": "Island Systems",
+      "stage": "blocked",
+      "priority": "medium",
+      "progress": 10,
+      "summary": "Arrival, departure, and route logic for the island ferry and guest flow.",
+      "linkedBugs": ["BUG-TRANSPORT-001"],
+      "linkedResearch": ["ferry-dock"],
+      "tasks": [
+        { "id": "task-ferry-asset", "label": "Create ferry proxy model", "done": false },
+        { "id": "task-arrival-trigger", "label": "Arrival trigger prototype", "done": false }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,130 @@
+{
+  "legend": [
+    { "status": "broken", "label": "Not working", "colorName": "Red" },
+    { "status": "edge", "label": "Edge cases failing", "colorName": "Yellow" },
+    { "status": "testing", "label": "More tests needed", "colorName": "Blue" },
+    { "status": "working", "label": "Fully working", "colorName": "Green" }
+  ],
+  "games": [
+    { "id": "gen1", "label": "Gen 1", "title": "Red / Blue / Yellow", "gen": 1, "x": 18, "y": 77, "platform": "Game Boy" },
+    { "id": "gen2", "label": "Gen 2", "title": "Gold / Silver / Crystal", "gen": 2, "x": 26, "y": 58, "platform": "Game Boy Color" },
+    { "id": "gen3", "label": "Gen 3", "title": "Ruby / Sapphire / Emerald / FireRed / LeafGreen", "gen": 3, "x": 18, "y": 38, "platform": "Game Boy Advance" },
+    { "id": "gen4", "label": "Gen 4", "title": "Diamond / Pearl / Platinum / HGSS", "gen": 4, "x": 35, "y": 22, "platform": "Nintendo DS" },
+    { "id": "gen5", "label": "Gen 5", "title": "Black / White / B2W2", "gen": 5, "x": 50, "y": 22, "platform": "Nintendo DS" },
+    { "id": "gen6", "label": "Gen 6", "title": "X / Y / ORAS", "gen": 6, "x": 65, "y": 22, "platform": "Nintendo 3DS" },
+    { "id": "gen7", "label": "Gen 7", "title": "Sun / Moon / USUM", "gen": 7, "x": 72, "y": 42, "platform": "Nintendo 3DS" },
+    { "id": "gen8", "label": "Gen 8", "title": "Sword / Shield / BDSP / Legends", "gen": 8, "x": 75, "y": 62, "platform": "Nintendo Switch" },
+    { "id": "gen9", "label": "Gen 9", "title": "Scarlet / Violet", "gen": 9, "x": 64, "y": 82, "platform": "Nintendo Switch" },
+    { "id": "resort", "label": "Resort", "title": "Pokémon Resort Save Package", "gen": 0, "x": 50, "y": 52, "platform": "Project Core" }
+  ],
+  "routes": [
+    {
+      "id": "route-gen1-resort-roundtrip",
+      "from": "gen1",
+      "to": "resort",
+      "status": "working",
+      "roundTrip": true,
+      "summary": "Round-trip route is represented as fully working in the current planning state.",
+      "knownIssues": [],
+      "testCoverage": "Baseline tests complete",
+      "relatedBugs": [],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen2-resort-roundtrip",
+      "from": "gen2",
+      "to": "resort",
+      "status": "broken",
+      "roundTrip": true,
+      "summary": "Gen 2 self travel currently does not complete a clean game → resort → game round trip.",
+      "knownIssues": ["Self travel return path fails"],
+      "testCoverage": "Needs reproduction matrix",
+      "relatedBugs": ["BUG-TRANSFER-GEN2-001"],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen3-resort-roundtrip",
+      "from": "gen3",
+      "to": "resort",
+      "status": "testing",
+      "roundTrip": true,
+      "summary": "The route is available in the ontology but needs more structured round-trip tests.",
+      "knownIssues": [],
+      "testCoverage": "Partial",
+      "relatedBugs": [],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen4-resort-roundtrip",
+      "from": "gen4",
+      "to": "resort",
+      "status": "working",
+      "roundTrip": true,
+      "summary": "Round-trip compatibility is considered stable in the current test notes.",
+      "knownIssues": [],
+      "testCoverage": "Core cases complete",
+      "relatedBugs": [],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen5-resort-roundtrip",
+      "from": "gen5",
+      "to": "resort",
+      "status": "working",
+      "roundTrip": true,
+      "summary": "No active blockers listed for the Gen 5 round trip path.",
+      "knownIssues": [],
+      "testCoverage": "Core cases complete",
+      "relatedBugs": [],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen6-resort-roundtrip",
+      "from": "gen6",
+      "to": "resort",
+      "status": "working",
+      "roundTrip": true,
+      "summary": "Current route is green while test coverage continues expanding.",
+      "knownIssues": [],
+      "testCoverage": "Core cases complete",
+      "relatedBugs": [],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen7-resort-roundtrip",
+      "from": "gen7",
+      "to": "resort",
+      "status": "broken",
+      "roundTrip": true,
+      "summary": "Gen 7 self travel has known round-trip failures and remains a priority bug area.",
+      "knownIssues": ["Return to source game fails in self-travel flow"],
+      "testCoverage": "Reproduction in progress",
+      "relatedBugs": ["BUG-TRANSFER-GEN7-001"],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen8-resort-roundtrip",
+      "from": "gen8",
+      "to": "resort",
+      "status": "working",
+      "roundTrip": true,
+      "summary": "Current Gen 8 round trip path is marked as working.",
+      "knownIssues": [],
+      "testCoverage": "Core cases complete",
+      "relatedBugs": [],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "route-gen9-resort-roundtrip",
+      "from": "gen9",
+      "to": "resort",
+      "status": "testing",
+      "roundTrip": true,
+      "summary": "Gen 9 needs a broader test matrix before it can move to fully working.",
+      "knownIssues": [],
+      "testCoverage": "More tests needed",
+      "relatedBugs": [],
+      "lastUpdated": "2026-05-25"
+    }
+  ]
+}

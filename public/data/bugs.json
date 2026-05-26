@@ -1,0 +1,71 @@
+{
+  "statuses": ["open", "on-flight", "blocked", "testing", "fixed", "archived"],
+  "severities": ["minor", "major", "critical"],
+  "items": [
+    {
+      "id": "BUG-TRANSFER-GEN2-001",
+      "title": "Gen 2 round-trip self travel fails",
+      "status": "open",
+      "severity": "major",
+      "area": "Game Transfer",
+      "summary": "Gen 2 Pokémon can be represented in the resort path, but the return-to-source flow needs a clean fix.",
+      "linkedFeature": "feature-transfer-compatibility",
+      "linkedRoutes": ["route-gen2-resort-roundtrip"],
+      "checklist": [
+        { "label": "Reproduce with Gold/Silver", "done": false },
+        { "label": "Reproduce with Crystal", "done": false },
+        { "label": "Document failure point", "done": false }
+      ],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "BUG-TRANSFER-GEN7-001",
+      "title": "Gen 7 round-trip self travel fails",
+      "status": "open",
+      "severity": "major",
+      "area": "Game Transfer",
+      "summary": "Gen 7 self travel is currently blocked during the return path from resort back to the original game source.",
+      "linkedFeature": "feature-transfer-compatibility",
+      "linkedRoutes": ["route-gen7-resort-roundtrip"],
+      "checklist": [
+        { "label": "Reproduce with Sun", "done": true },
+        { "label": "Reproduce with Moon", "done": false },
+        { "label": "Test Ultra Sun / Ultra Moon", "done": false },
+        { "label": "Compare package data before and after resort travel", "done": false }
+      ],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "BUG-RENDER-001",
+      "title": "rbmap render output needs validation pass",
+      "status": "testing",
+      "severity": "minor",
+      "area": "Rendering",
+      "summary": "Rendering output is visible, but needs a validation pass against expected map data and visual consistency.",
+      "linkedFeature": "feature-rendering",
+      "linkedRoutes": [],
+      "checklist": [
+        { "label": "Render sample rbmap", "done": true },
+        { "label": "Compare against expected dimensions", "done": false },
+        { "label": "Capture screenshot evidence", "done": false }
+      ],
+      "lastUpdated": "2026-05-25"
+    },
+    {
+      "id": "BUG-TRANSPORT-001",
+      "title": "Ferry arrival flow has no final dock anchor",
+      "status": "blocked",
+      "severity": "minor",
+      "area": "Transport",
+      "summary": "The ferry flow needs a confirmed or designed anchor point on the island before the arrival trigger can be finalized.",
+      "linkedFeature": "feature-transport",
+      "linkedRoutes": [],
+      "checklist": [
+        { "label": "Pick temporary dock coordinate", "done": true },
+        { "label": "Tie ferry anchor to POI", "done": false },
+        { "label": "Add arrival animation placeholder", "done": false }
+      ],
+      "lastUpdated": "2026-05-25"
+    }
+  ]
+}

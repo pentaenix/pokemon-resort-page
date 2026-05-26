@@ -1,0 +1,18 @@
+{
+  "mood": "sunny-resort",
+  "motion": "gentle",
+  "cardDensity": "comfortable",
+  "heroStyle": "cinematic",
+  "legalBannerStyle": "notice-strip",
+  "accent": "aqua",
+  "customProperties": {
+    "--sand": "#fff4d8",
+    "--reef": "#06b6d4",
+    "--lagoon": "#0f7aa5",
+    "--leaf": "#5aa368",
+    "--sun": "#ffd166",
+    "--coral": "#ff7a59",
+    "--ink": "#12323f",
+    "--paper": "#fffdf8"
+  }
+}

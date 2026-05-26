@@ -1,0 +1,59 @@
+{
+  "hero": {
+    "logo": "assets/logo/pokemon-resort-logo.png",
+    "eyebrow": "Unofficial fan research and development atlas",
+    "headline": "Welcome to the resort operations desk.",
+    "subheadline": "A public, data-driven hub for island reconstruction research, compatibility testing, active features, and curated bugs for a fan-made resort game project.",
+    "statusLabel": "Current resort status",
+    "statusValue": "Island reconstruction in progress",
+    "primaryAction": { "label": "Explore the Island", "href": "#island-atlas" },
+    "secondaryAction": { "label": "See On-Flight Work", "href": "#on-flight-board" }
+  },
+  "cards": [
+    {
+      "id": "research-atlas",
+      "title": "Explore the Island",
+      "kicker": "Research Atlas",
+      "summary": "Rotate a 3D island view, select points of interest, and see evidence, confidence, assets needed, and implementation status.",
+      "href": "#island-atlas"
+    },
+    {
+      "id": "compatibility-lab",
+      "title": "Trace Round Trips",
+      "kicker": "Compatibility Lab",
+      "summary": "Follow data-driven transfer routes from game to resort and back, with status colors and linked issues.",
+      "href": "#compatibility-lab"
+    },
+    {
+      "id": "flight-board",
+      "title": "Watch Features Land",
+      "kicker": "On-Flight Board",
+      "summary": "Track active work using resort-airport stages, subtasks, linked bugs, and progress indicators.",
+      "href": "#on-flight-board"
+    },
+    {
+      "id": "issue-desk",
+      "title": "Visit the Issue Desk",
+      "kicker": "Bug Tracker",
+      "summary": "Browse curated issues without comments, noise, or live submissions. Just useful status, severity, and checklists.",
+      "href": "#issue-desk"
+    }
+  ],
+  "featuredMedia": [
+    {
+      "type": "image",
+      "src": "assets/reference/on-flight-planning-board.png",
+      "caption": "Original on-flight planning sketch used to shape the project board."
+    },
+    {
+      "type": "image",
+      "src": "assets/reference/compatibility-planning-map.png",
+      "caption": "Early compatibility planning map, now represented as a data-driven graph."
+    }
+  ],
+  "weeklyPulse": [
+    "3 research points need stronger evidence labels.",
+    "2 transfer routes are blocked by self-travel bugs.",
+    "The island model viewport is ready for a GLB replacement when the model lands."
+  ]
+}

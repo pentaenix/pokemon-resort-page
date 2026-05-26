@@ -1,0 +1,72 @@
+{
+  "modelUrl": "",
+  "defaultSelectedId": "ferry-dock",
+  "confidenceLevels": ["Confirmed", "Likely", "Possible", "Speculative", "Original for Gameplay"],
+  "pois": [
+    {
+      "id": "ferry-dock",
+      "name": "Ferry Dock",
+      "type": "Transport",
+      "confidence": "Likely",
+      "position": [-2.8, 0.42, 1.8],
+      "summary": "Probable arrival and departure point for resort guests and ferry operations.",
+      "gameDevStatus": "Blockout in progress",
+      "canonStatus": "Inferred from visible transport and map references",
+      "evidence": [
+        {
+          "label": "Map relationship",
+          "image": "",
+          "note": "Coastal access implies a guest arrival route connected to the main resort path."
+        },
+        {
+          "label": "Transport role",
+          "image": "",
+          "note": "The ferry is treated as a recurring access method in the project design."
+        }
+      ],
+      "assetNeeds": ["Dock model", "Ferry boat model", "Rope posts", "Arrival signage", "Waterline props"],
+      "relatedFeatures": ["feature-map", "feature-transport"],
+      "relatedBugs": ["BUG-TRANSPORT-001"]
+    },
+    {
+      "id": "main-lodge",
+      "name": "Main Lodge",
+      "type": "Resort Facility",
+      "confidence": "Possible",
+      "position": [0.15, 0.56, -0.8],
+      "summary": "Central guest-facing facility used as the primary orientation point in the game layout.",
+      "gameDevStatus": "Needs scale pass",
+      "canonStatus": "Gameplay interpretation based on resort operations needs",
+      "evidence": [
+        {
+          "label": "Guest flow",
+          "image": "",
+          "note": "A central lodge supports arrival, summary screens, and staff routing."
+        }
+      ],
+      "assetNeeds": ["Lobby exterior", "Concierge counter", "Guest path markers", "Lighting pass"],
+      "relatedFeatures": ["feature-summary-screen"],
+      "relatedBugs": []
+    },
+    {
+      "id": "beach-path",
+      "name": "Beach Path",
+      "type": "Navigation",
+      "confidence": "Speculative",
+      "position": [2.2, 0.45, 1.4],
+      "summary": "A scenic traversal route that connects relaxation areas to the main resort loop.",
+      "gameDevStatus": "Not started",
+      "canonStatus": "Original for gameplay until stronger frame evidence is added",
+      "evidence": [
+        {
+          "label": "Gameplay need",
+          "image": "",
+          "note": "The island needs a readable walking loop that feels resort-like and supports exploration."
+        }
+      ],
+      "assetNeeds": ["Sand path material", "Palm clusters", "Tide props", "Trail signs"],
+      "relatedFeatures": ["feature-map"],
+      "relatedBugs": []
+    }
+  ]
+}
