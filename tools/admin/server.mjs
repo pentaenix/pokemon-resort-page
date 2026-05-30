@@ -1,136 +1,196 @@
-import 'dotenv/config';
-import express from 'express';
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import http from 'node:http';
+import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync, createReadStream } from 'node:fs';
+import { join, extname, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { loadProjectEnv } from '../lib/load-env.mjs';
+import { getGitHubStatus, listGitHubIssues } from '../lib/github-issues.mjs';
+import {
+  applyBoxArt,
+  boxartOptions,
+  boxartSearch,
+  fetchBoxArtForGames,
+  getLibretroStatus,
+  listMissingBoxArt,
+} from '../fetch-boxart.mjs';
+import { LIBRETRO_BASE } from '../lib/libretro-thumbnails.mjs';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const root = path.resolve(__dirname, '../..');
-const dataDir = path.join(root, 'public/data');
-const adminDir = path.join(__dirname, 'public');
-const port = Number(process.env.SITE_ADMIN_PORT || 8787);
-const branch = process.env.GITHUB_BRANCH || 'main';
-const allowedFiles = new Set(['site', 'homepage', 'theme', 'research-pois', 'compatibility', 'features', 'bugs']);
+loadProjectEnv();
+const root = resolve(new URL('../..', import.meta.url).pathname);
+const adminRoot = join(root, 'tools/admin/public');
+const publicRoot = join(root, 'public');
+const dataRoot = join(root, 'public/data');
+const allowedData = new Set(['site.json','homepage.json','theme.json','research-pois.json','compatibility.json','features.json','bugs.json','gallery.json','models.json','characters.json','roadmap.json','ideas.json']);
+const mime = { '.html':'text/html; charset=utf-8', '.css':'text/css; charset=utf-8', '.js':'text/javascript; charset=utf-8', '.json':'application/json; charset=utf-8', '.png':'image/png', '.svg':'image/svg+xml', '.webp':'image/webp', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.mp4':'video/mp4', '.glb':'model/gltf-binary', '.gltf':'model/gltf+json' };
 
-const app = express();
-app.use(express.json({ limit: '10mb' }));
-app.use(express.static(adminDir));
-
-function safeFile(name) {
-  if (!allowedFiles.has(name)) throw new Error(`Unknown data file: ${name}`);
-  return path.join(dataDir, `${name}.json`);
-}
-
-async function readJson(name) {
-  const file = safeFile(name);
-  const text = await fs.readFile(file, 'utf8');
-  return JSON.parse(text);
-}
-
-async function writeJson(name, data) {
-  const file = safeFile(name);
-  const pretty = `${JSON.stringify(data, null, 2)}\n`;
-  await fs.writeFile(file, pretty, 'utf8');
-}
-
-function run(command, args, options = {}) {
-  return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd: root, shell: process.platform === 'win32', ...options });
-    let stdout = '';
-    let stderr = '';
-    child.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
-    child.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
-    child.on('close', (code) => resolve({ code, stdout, stderr }));
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', (chunk) => { body += chunk; if (body.length > 15_000_000) reject(new Error('Body too large')); });
+    req.on('end', () => resolve(body));
+    req.on('error', reject);
   });
 }
-
-app.get('/api/files', async (_req, res) => {
-  const files = [];
-  for (const name of allowedFiles) {
-    const filePath = safeFile(name);
-    const stat = await fs.stat(filePath);
-    files.push({ name, path: `public/data/${name}.json`, modified: stat.mtime.toISOString() });
+function json(res, status, payload) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(payload, null, 2));
+}
+function run(command, args = []) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd: root, shell: process.platform === 'win32' });
+    let out = '', err = '';
+    child.stdout.on('data', (data) => out += data);
+    child.stderr.on('data', (data) => err += data);
+    child.on('close', (code) => resolve({ code, out, err }));
+  });
+}
+async function readAllData() {
+  const entries = await Promise.all([...allowedData].map(async (file) => [file, JSON.parse(await readFile(join(dataRoot, file), 'utf8'))]));
+  return Object.fromEntries(entries);
+}
+async function listAssets() {
+  async function walk(dir, base='') {
+    const fs = await import('node:fs/promises');
+    if (!existsSync(dir)) return [];
+    const items = await fs.readdir(dir, { withFileTypes: true });
+    const found = [];
+    for (const item of items) {
+      const rel = base ? `${base}/${item.name}` : item.name;
+      const full = join(dir, item.name);
+      if (item.isDirectory()) found.push(...await walk(full, rel));
+      else if (/\.(png|jpg|jpeg|webp|svg|gif|mp4|glb|gltf)$/i.test(item.name)) found.push(rel);
+    }
+    return found;
   }
-  res.json({ files: files.sort((a, b) => a.name.localeCompare(b.name)) });
-});
-
-app.get('/api/data/:name', async (req, res) => {
-  try {
-    const data = await readJson(req.params.name);
-    res.json({ name: req.params.name, data });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post('/api/data/:name', async (req, res) => {
-  try {
-    await writeJson(req.params.name, req.body);
-    res.json({ ok: true, saved: `public/data/${req.params.name}.json` });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-app.post('/api/validate', async (_req, res) => {
-  const result = await run('node', ['tools/validate-data.mjs', '--json']);
-  try {
-    const parsed = JSON.parse(result.stdout || '{}');
-    res.status(result.code === 0 ? 200 : 422).json(parsed);
-  } catch {
-    res.status(500).json({ ok: false, errors: [result.stderr || result.stdout || 'Validation failed without JSON output.'] });
-  }
-});
-
-app.get('/api/status', async (_req, res) => {
-  const status = await run('git', ['status', '--short']);
-  res.json({ ok: status.code === 0, status: status.stdout, error: status.stderr });
-});
-
-app.post('/api/publish', async (req, res) => {
-  const message = (req.body?.message || `${process.env.GIT_COMMIT_PREFIX || 'Resort update'}: data changes`).trim();
-  const validation = await run('node', ['tools/validate-data.mjs', '--json']);
-  if (validation.code !== 0) {
-    return res.status(422).json({ ok: false, step: 'validate', output: validation.stdout, error: validation.stderr });
-  }
-
-  const isRepo = await run('git', ['rev-parse', '--is-inside-work-tree']);
-  if (isRepo.code !== 0) {
-    return res.status(422).json({ ok: false, step: 'git', error: 'This folder is not a Git repository yet. Run git init and connect it to GitHub first.' });
-  }
-
-  await run('git', ['add', 'public/data', 'public/assets']);
-  const status = await run('git', ['status', '--short']);
-  if (!status.stdout.trim()) {
-    return res.json({ ok: true, step: 'nothing-to-publish', output: 'No changes to commit.' });
-  }
-
-  const commit = await run('git', ['commit', '-m', message]);
-  if (commit.code !== 0) {
-    return res.status(422).json({ ok: false, step: 'commit', output: commit.stdout, error: commit.stderr });
-  }
-
-  const push = await run('git', ['push', 'origin', branch]);
-  if (push.code !== 0) {
-    return res.status(422).json({ ok: false, step: 'push', output: push.stdout, error: push.stderr });
-  }
-
-  res.json({ ok: true, step: 'published', output: `${commit.stdout}\n${push.stdout}`, error: push.stderr });
-});
-
-app.use((_req, res) => {
-  res.sendFile(path.join(adminDir, 'index.html'));
-});
-
-if (!existsSync(dataDir)) {
-  console.error(`Data directory not found: ${dataDir}`);
-  process.exit(1);
+  return walk(publicRoot);
 }
 
-app.listen(port, '127.0.0.1', () => {
-  console.log(`Resort Operations Desk running at http://127.0.0.1:${port}`);
-  console.log('This admin tool is local-only. It edits JSON files in public/data.');
+const server = http.createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/api/data') return json(res, 200, await readAllData());
+    if (url.pathname === '/api/assets') return json(res, 200, { assets: await listAssets() });
+    if (url.pathname === '/api/boxart/status') {
+      const missing = await listMissingBoxArt();
+      return json(res, 200, {
+        ...getLibretroStatus(),
+        missingCount: missing.length,
+        missing: missing.map((game) => ({ id: game.id, title: game.title, boxArt: game.boxArt, platform: game.platform })),
+      });
+    }
+    if (url.pathname === '/api/boxart/search') {
+      const gameId = url.searchParams.get('gameId');
+      if (!gameId) return json(res, 400, { ok: false, error: 'gameId query parameter is required.' });
+      try {
+        const result = await boxartSearch(gameId);
+        return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/boxart/options') {
+      const gameId = url.searchParams.get('gameId');
+      const filename = url.searchParams.get('filename');
+      if (!gameId || !filename) {
+        return json(res, 400, { ok: false, error: 'gameId and filename are required.' });
+      }
+      try {
+        const result = await boxartOptions(gameId, filename);
+        return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/boxart/apply' && req.method === 'POST') {
+      const payload = JSON.parse(await readBody(req));
+      try {
+        const result = await applyBoxArt(payload);
+        const assets = await listAssets();
+        return json(res, 200, { ok: true, ...result, assets });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/boxart/proxy') {
+      const imageUrl = url.searchParams.get('url');
+      if (!imageUrl?.startsWith(LIBRETRO_BASE)) {
+        return json(res, 400, { ok: false, error: 'Only Libretro Thumbnails URLs are allowed.' });
+      }
+      const response = await fetch(imageUrl);
+      if (!response.ok) return json(res, 502, { ok: false, error: `Upstream HTTP ${response.status}` });
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const type = response.headers.get('content-type') || 'image/png';
+      res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'private, max-age=3600' });
+      res.end(buffer);
+      return;
+    }
+    if (url.pathname === '/api/boxart/fetch' && req.method === 'POST') {
+      const payload = JSON.parse(await readBody(req));
+      try {
+        const summary = await fetchBoxArtForGames({
+          gameIds: payload.gameIds || null,
+          force: Boolean(payload.force),
+        });
+        const assets = await listAssets();
+        return json(res, 200, {
+          ok: summary.fetched > 0 || summary.total === 0,
+          ...summary,
+          assets,
+        });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/github/status') {
+      return json(res, 200, { ok: true, ...(await getGitHubStatus()) });
+    }
+    if (url.pathname === '/api/github/issues') {
+      const state = url.searchParams.get('state') || 'open';
+      try {
+        const result = await listGitHubIssues({ state, perPage: Number(url.searchParams.get('limit') || 40) });
+        return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 500, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/status') {
+      const status = await run('git', ['status', '--short']);
+      return json(res, 200, { ok: status.code === 0, output: status.out || status.err });
+    }
+    if (url.pathname === '/api/save' && req.method === 'POST') {
+      const payload = JSON.parse(await readBody(req));
+      if (!allowedData.has(payload.file)) return json(res, 400, { ok: false, error: 'File is not editable by this tool.' });
+      await writeFile(join(dataRoot, payload.file), JSON.stringify(payload.data, null, 2) + '\n');
+      const validation = await run('node', ['tools/validate-data.mjs']);
+      return json(res, validation.code === 0 ? 200 : 422, { ok: validation.code === 0, validation: validation.out || validation.err });
+    }
+    if (url.pathname === '/api/publish' && req.method === 'POST') {
+      const payload = JSON.parse(await readBody(req));
+      const message = payload.message || 'Update resort data';
+      const validation = await run('node', ['tools/validate-data.mjs']);
+      if (validation.code !== 0) return json(res, 422, { ok: false, step: 'validate', output: validation.out || validation.err });
+      const add = await run('git', ['add', 'public/data', 'public/assets', 'public/media']);
+      const commit = await run('git', ['commit', '-m', message]);
+      const commitOutput = commit.out || commit.err;
+      const noChanges = /nothing to commit|no changes added/i.test(commitOutput);
+      const push = noChanges ? { code: 0, out: 'No changes to push.', err: '' } : await run('git', ['push', 'origin', 'main']);
+      return json(res, push.code === 0 ? 200 : 500, { ok: push.code === 0, validation: validation.out, add: add.out || add.err, commit: commitOutput, push: push.out || push.err });
+    }
+
+    let filePath;
+    if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/media/')) filePath = join(publicRoot, url.pathname.replace(/^\//, ''));
+    else filePath = url.pathname === '/' ? join(adminRoot, 'index.html') : join(adminRoot, url.pathname.replace(/^\//, ''));
+    const allowedRoot = (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/media/')) ? publicRoot : adminRoot;
+    if (!filePath.startsWith(allowedRoot) || !existsSync(filePath)) return json(res, 404, { error: 'Not found' });
+    const type = mime[extname(filePath)] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': type });
+    createReadStream(filePath).pipe(res);
+  } catch (error) {
+    json(res, 500, { ok: false, error: error.message });
+  }
+});
+
+const port = Number(process.env.PORT || 8787);
+server.listen(port, '127.0.0.1', () => {
+  console.log(`Resort Operations Desk: http://127.0.0.1:${port}`);
 });

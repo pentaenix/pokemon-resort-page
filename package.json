@@ -1,14 +1,11 @@
 {
-  "name": "pokemon-resort-fan-project-site",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1",
     "admin": "node tools/admin/server.mjs",
-    "validate": "node tools/validate-data.mjs",
+    "fetch:boxart": "node tools/fetch-boxart.mjs",
+    "validate:data": "node tools/validate-data.mjs",
     "publish": "node tools/publish.mjs"
   },
   "dependencies": {
@@ -16,9 +13,7 @@
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "three": "latest",
-    "express": "latest",
-    "dotenv": "latest"
+    "three": "latest"
   },
   "devDependencies": {}
 }

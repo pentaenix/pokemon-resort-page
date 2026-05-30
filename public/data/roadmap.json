@@ -1,0 +1,72 @@
+{
+  "currentMilestoneId": "milestone-3d-map-render-pipeline",
+  "milestones": [
+    {
+      "id": "milestone-initial-idea",
+      "title": "Initial idea planning",
+      "status": "past",
+      "summary": "The original fan-game concept, resort framing, and early scope boundaries were defined."
+    },
+    {
+      "id": "milestone-title-screen-demo",
+      "title": "Title screen demo",
+      "status": "past",
+      "summary": "A first playable-facing presentation test proved the tone and project identity."
+    },
+    {
+      "id": "milestone-moving-pokemon-mvp",
+      "title": "MVP: moving Pok\u00e9mon around",
+      "status": "past",
+      "summary": "Core movement and Pok\u00e9mon handling experiments established the first gameplay loop."
+    },
+    {
+      "id": "milestone-public-web-page",
+      "title": "Create public web page",
+      "status": "past",
+      "summary": "The project gained a static public home for research, compatibility, and operations tracking."
+    },
+    {
+      "id": "milestone-3d-map-render-pipeline",
+      "title": "3D map and render pipeline started",
+      "status": "current",
+      "summary": "Current focus: rebuild the island, prepare submodels, and connect the 3D map to public research data."
+    },
+    {
+      "id": "milestone-3d-map-website",
+      "title": "Implement 3D map into the web page",
+      "status": "next",
+      "summary": "Replace the temporary island viewport with the real GLB model and attach stable POI markers."
+    },
+    {
+      "id": "milestone-poi-evidence",
+      "title": "Add POI evidence system",
+      "status": "future",
+      "summary": "Connect frame crops, map crops, diagrams, needed assets, and linked features to each point of interest."
+    },
+    {
+      "id": "milestone-character-sprite-showcase",
+      "title": "Add character and sprite showcase",
+      "status": "future",
+      "summary": "Show planned resort staff and visitors with animated GIF/WebP previews and animation requirements."
+    },
+    {
+      "id": "milestone-playable-resort-walkthrough",
+      "title": "Playable resort walkthrough",
+      "status": "future",
+      "summary": "Ship a navigable internal walkthrough that proves scale, pathing, transport, and activity zones."
+    },
+    {
+      "id": "milestone-compatibility-stabilization",
+      "title": "Compatibility system stabilization",
+      "status": "future",
+      "summary": "Turn untested ontology routes into documented test cases with bugs and route outcomes."
+    },
+    {
+      "id": "milestone-public-demo-build",
+      "title": "Public demo build",
+      "status": "future",
+      "summary": "Prepare a careful public-facing demo when the legal, technical, and scope conditions are ready."
+    }
+  ],
+  "horizons": []
+}

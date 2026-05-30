@@ -1,0 +1,20 @@
+{
+  "mainModel": {
+    "name": "Island master model",
+    "status": "resource-needed",
+    "file": "media/models/island/island-main.glb",
+    "preview": "media/models/island/island-preview.webp",
+    "summary": "Primary 3D island model used by the research atlas."
+  },
+  "submodels": [],
+  "categories": [
+    "terrain",
+    "transport",
+    "buildings",
+    "paths",
+    "props",
+    "vegetation",
+    "characters",
+    "service-areas"
+  ]
+}

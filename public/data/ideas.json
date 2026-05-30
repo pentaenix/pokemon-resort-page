@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "id": "idea-ferry-arrival",
+      "title": "Ferry arrival presentation",
+      "status": "promising",
+      "summary": "Use the ferry and dock as the player-facing arrival ritual for the resort."
+    },
+    {
+      "id": "idea-visitor-passport",
+      "title": "Visitor passport index",
+      "status": "spark",
+      "summary": "A collectible-feeling index for planned resort visitors and their preferred activities."
+    },
+    {
+      "id": "idea-poi-detective-mode",
+      "title": "POI detective mode",
+      "status": "spark",
+      "summary": "Let users toggle between clean island view and evidence-heavy reconstruction view."
+    }
+  ]
+}

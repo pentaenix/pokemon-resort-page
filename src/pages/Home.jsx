@@ -1,0 +1,136 @@
+import React from 'react';
+import { assetUrl } from '../lib/data.js';
+import { StatusPill } from '../components/StatusPill.jsx';
+
+function computeDigest(data) {
+  const routes = data.compatibility?.routes || [];
+  const bugs = data.bugs?.bugs || [];
+  const features = data.features?.features || [];
+  const redRoutes = routes.filter((r) => r.status === 'red').length;
+  const blueRoutes = routes.filter((r) => r.status === 'blue').length;
+  const grayRoutes = routes.filter((r) => r.status === 'gray').length;
+  const activeFeatures = features.filter((f) => ['On-Flight', 'Testing'].includes(f.stage)).length;
+  const openBugs = bugs.filter((b) => ['Open', 'Blocked'].includes(b.status)).length;
+  return { redRoutes, blueRoutes, grayRoutes, activeFeatures, openBugs, routeCount: routes.length };
+}
+
+
+function HomeCarousel({ items = [] }) {
+  if (!items.length) return null;
+  return (
+    <section className="home-carousel-section" aria-label="Pokémon Resort overview media">
+      <div className="section-intro compact">
+        <p className="eyebrow">Resort Preview</p>
+        <h2>See the shape of the experience.</h2>
+        <p>A quick look at the resort fantasy: care, transfer, play, and a growing island built around the Pokémon you bring with you.</p>
+      </div>
+      <div className="media-carousel home-media-carousel">
+        {items.map((item) => (
+          <figure key={item.id || item.src} className="carousel-card home-carousel-card">
+            {item.type === 'video' ? (
+              <video src={assetUrl(item.src)} muted loop playsInline controls={false} aria-label={item.title || item.caption} />
+            ) : (
+              <img src={assetUrl(item.src)} alt={item.title || item.caption || 'Pokémon Resort media'} />
+            )}
+            <figcaption>
+              <strong>{item.title}</strong>
+              <span>{item.caption}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default function Home({ data }) {
+  const { site, homepage } = data;
+  const digest = computeDigest(data);
+  const hero = homepage.hero;
+  return (
+    <main className="home-page">
+      <section className="hero-shell">
+        <div className="hero-bg-orb one" />
+        <div className="hero-bg-orb two" />
+        <div className="hero-copy">
+          <p className="eyebrow">{hero.eyebrow}</p>
+          <img className="hero-logo" src={assetUrl(site.logo)} alt="Pokémon Resort logo" />
+          <h1>{hero.headline}</h1>
+          <p>{hero.subheadline}</p>
+          <div className="hero-actions">
+            <a className="button primary" href={hero.primaryCta.href}>{hero.primaryCta.label}</a>
+            <a className="button ghost" href={hero.secondaryCta.href}>{hero.secondaryCta.label}</a>
+          </div>
+        </div>
+        <div className="hero-media" aria-label="Project planning images">
+          {(hero.featuredMedia || []).map((media, index) => (
+            <figure key={media.src} className={`media-card card-${index + 1}`}>
+              <img src={assetUrl(media.src)} alt={media.caption} />
+              <figcaption>{media.caption}</figcaption>
+            </figure>
+          ))}
+          <div className="floating-status-card">
+            <span>Resort Status</span>
+            <strong>{digest.activeFeatures} operations active</strong>
+            <small>{digest.routeCount} compatibility routes · {digest.openBugs} open/blocking issues</small>
+          </div>
+        </div>
+      </section>
+
+      {homepage.about && (
+        <section className="about-resort-section">
+          <div>
+            <p className="eyebrow">{homepage.about.eyebrow}</p>
+            <h2>{homepage.about.title}</h2>
+          </div>
+          <div className="about-resort-copy">
+            {homepage.about.body?.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+          </div>
+        </section>
+      )}
+
+      <HomeCarousel items={homepage.carousel || []} />
+
+      <section className="status-strip" aria-label="Project status">
+        {(homepage.statusCards || []).map((card) => (
+          <article key={card.label}>
+            <span>{card.label}</span>
+            <strong>{card.value}</strong>
+            <p>{card.detail}</p>
+          </article>
+        ))}
+      </section>
+
+      <section className="lobby-grid">
+        <div className="section-intro">
+          <p className="eyebrow">Front Desk</p>
+          <h2>Choose where you want to check in.</h2>
+          <p>The public pages are split into clear destinations so the project stays browsable as the atlas, route ontology, issues, and operations board grow.</p>
+        </div>
+        <div className="nav-card-grid">
+          {(homepage.navCards || []).map((card) => (
+            <a key={card.href} className="nav-card" href={card.href}>
+              <span className="nav-card-icon">{card.icon}</span>
+              <strong>{card.title}</strong>
+              <p>{card.description}</p>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section className="digest-panel">
+        <div>
+          <p className="eyebrow">This week at the resort</p>
+          <h2>Automatically generated from project data.</h2>
+          <p>This section stays fresh without becoming a blog. Update features, routes, issues, or research data in the local Operations Desk and the homepage reflects the current state.</p>
+        </div>
+        <div className="digest-cards">
+          <article><StatusPill status="red" label="Needs care" /><strong>{digest.redRoutes}</strong><span>known failing routes</span></article>
+          <article><StatusPill status="gray" label="Untested" /><strong>{digest.grayRoutes}</strong><span>cross-routes awaiting tests</span></article>
+          <article><StatusPill status="on-flight" label="On-Flight" /><strong>{digest.activeFeatures}</strong><span>active features</span></article>
+          <article><StatusPill status="open" label="Issue Desk" /><strong>{digest.openBugs}</strong><span>open or blocked issues</span></article>
+        </div>
+      </section>
+    </main>
+  );
+}

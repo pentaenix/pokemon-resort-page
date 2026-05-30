@@ -1,103 +1,79 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
-import { loadResortData, assetUrl } from './lib/data.js';
-import { LegalBanner } from './components/LegalBanner.jsx';
-import { Hero } from './components/Hero.jsx';
-import { FrontDesk } from './components/FrontDesk.jsx';
-import { IslandAtlas } from './components/IslandAtlas.jsx';
-import { CompatibilityLab } from './components/CompatibilityLab.jsx';
-import { FlightBoard } from './components/FlightBoard.jsx';
-import { IssueDesk } from './components/IssueDesk.jsx';
-import { SourceGuide } from './components/SourceGuide.jsx';
-import { Footer } from './components/Footer.jsx';
+import { getHashRoute, loadSiteData } from './lib/data.js';
+import { Footer, Header, LegalBanner } from './components/Layout.jsx';
+import Home from './pages/Home.jsx';
+import Atlas from './pages/Atlas.jsx';
+import Ontology from './pages/Ontology.jsx';
+import Board from './pages/Board.jsx';
+import Milestones from './pages/Milestones.jsx';
+import SourceGuide from './pages/SourceGuide.jsx';
+import Legal from './pages/Legal.jsx';
 
-function applyTheme(theme) {
-  if (!theme?.customProperties) return;
-  Object.entries(theme.customProperties).forEach(([key, value]) => {
-    document.documentElement.style.setProperty(key, value);
-  });
-  document.documentElement.dataset.motion = theme.motion || 'gentle';
-  document.documentElement.dataset.hero = theme.heroStyle || 'cinematic';
-  document.documentElement.dataset.density = theme.cardDensity || 'comfortable';
+const pages = {
+  '/': Home,
+  '/atlas': Atlas,
+  '/ontology': Ontology,
+  '/board': Board,
+  '/milestones': Milestones,
+  '/source': SourceGuide,
+  '/legal': Legal,
+};
+
+function normalizeRoute(route) {
+  const aliases = {
+    '/issues': '/board',
+    '/roadmap': '/milestones',
+    '/ideas': '/board',
+    '/gallery': '/atlas',
+    '/models': '/atlas',
+    '/characters': '/atlas',
+  };
+  return { ...route, path: aliases[route.path] || route.path };
 }
 
 function App() {
+  const [route, setRoute] = useState(normalizeRoute(getHashRoute()));
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    loadResortData()
-      .then((payload) => {
-        setData(payload);
-        applyTheme(payload.theme);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError(err.message || 'Unable to load resort data.');
-      });
+    const onHashChange = () => setRoute(normalizeRoute(getHashRoute()));
+    window.addEventListener('hashchange', onHashChange);
+    if (!window.location.hash) window.history.replaceState(null, '', '#/');
+    return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
-  const pulse = useMemo(() => {
-    if (!data) return [];
-    const openBugs = data.bugs.items.filter((bug) => ['open', 'blocked'].includes(bug.status)).length;
-    const onFlight = data.features.items.filter((item) => item.stage === 'on-flight').length;
-    const testingRoutes = data.compatibility.routes.filter((route) => route.status === 'testing').length;
-    return [
-      `${openBugs} open or blocked issues at the Issue Desk.`,
-      `${onFlight} features currently on-flight.`,
-      `${testingRoutes} transfer routes need more tests.`,
-      ...(data.homepage.weeklyPulse || [])
-    ];
-  }, [data]);
+  useEffect(() => {
+    let cancelled = false;
+    const reload = () => {
+      loadSiteData()
+        .then((payload) => { if (!cancelled) setData(payload); })
+        .catch((err) => { if (!cancelled) setError(err.message); });
+    };
+    reload();
+    if (import.meta.env.DEV) {
+      const onFocus = () => reload();
+      window.addEventListener('focus', onFocus);
+      return () => {
+        cancelled = true;
+        window.removeEventListener('focus', onFocus);
+      };
+    }
+    return () => { cancelled = true; };
+  }, []);
 
-  if (error) {
-    return (
-      <main className="load-shell">
-        <div className="load-card">
-          <h1>Resort data could not load.</h1>
-          <p>{error}</p>
-          <p>Check that the JSON files in <code>public/data</code> are valid.</p>
-        </div>
-      </main>
-    );
-  }
+  if (error) return <div className="boot-state error"><h1>Unable to load resort data</h1><p>{error}</p></div>;
+  if (!data) return <div className="boot-state"><span className="loader" /><p>Preparing the resort…</p></div>;
 
-  if (!data) {
-    return (
-      <main className="load-shell">
-        <div className="load-card shimmer-card">
-          <span className="loader-orb" />
-          <h1>Preparing the resort...</h1>
-          <p>Loading research, features, and compatibility data.</p>
-        </div>
-      </main>
-    );
-  }
-
+  const Page = pages[route.path] || Home;
   return (
     <>
-      <LegalBanner legal={data.site.legal} />
-      <header className="site-header">
-        <a href="#top" className="brand-link" aria-label="Pokémon Resort home">
-          <img src={assetUrl(data.homepage.hero.logo)} alt="Pokémon Resort" />
-        </a>
-        <nav className="site-nav" aria-label="Primary navigation">
-          {data.site.navigation.map((item) => (
-            <a key={item.href} href={item.href}>{item.label}</a>
-          ))}
-        </nav>
-      </header>
-      <main id="top">
-        <Hero site={data.site} homepage={data.homepage} pulse={pulse} />
-        <FrontDesk data={data} />
-        <IslandAtlas atlas={data.atlas} features={data.features} bugs={data.bugs} />
-        <CompatibilityLab compatibility={data.compatibility} bugs={data.bugs} />
-        <FlightBoard features={data.features} bugs={data.bugs} atlas={data.atlas} />
-        <IssueDesk bugs={data.bugs} features={data.features} compatibility={data.compatibility} />
-        <SourceGuide site={data.site} />
-      </main>
-      <Footer legal={data.site.legal} site={data.site} />
+      <LegalBanner site={data.site} />
+      <Header site={data.site} route={route.path} />
+      <Page data={data} query={route.query} />
+      <Footer site={data.site} />
     </>
   );
 }

@@ -1,0 +1,57 @@
+{
+  "items": [
+    {
+      "id": "gallery-compatibility-planning",
+      "title": "Compatibility planning map",
+      "category": "diagrams",
+      "src": "assets/reference/compatibility-planning-map.png",
+      "alt": "Hand drawn compatibility planning chart",
+      "caption": "Original planning sketch for round-trip compatibility routes.",
+      "linkedTo": "ontology"
+    },
+    {
+      "id": "gallery-on-flight-board",
+      "title": "On-flight planning board",
+      "category": "diagrams",
+      "src": "assets/reference/on-flight-planning-board.png",
+      "alt": "Hand drawn feature planning board",
+      "caption": "Original planning sketch for active features, subtasks, and issue tracking.",
+      "linkedTo": "operations"
+    }
+  ],
+  "carousel": [
+    {
+      "id": "carousel-compatibility-planning",
+      "title": "Route planning sketch",
+      "type": "image",
+      "src": "assets/reference/compatibility-planning-map.png",
+      "caption": "Early thinking for generation route testing and self-loop failures.",
+      "tags": [
+        "compatibility",
+        "planning"
+      ]
+    },
+    {
+      "id": "carousel-on-flight-planning",
+      "title": "Feature board sketch",
+      "type": "image",
+      "src": "assets/reference/on-flight-planning-board.png",
+      "caption": "The seed for the On-Flight board, bug tracker, and project operations view.",
+      "tags": [
+        "operations",
+        "planning"
+      ]
+    }
+  ],
+  "categories": [
+    "screenshots",
+    "renders",
+    "frame-research",
+    "diagrams",
+    "sprites",
+    "animations",
+    "characters",
+    "models",
+    "compatibility"
+  ]
+}

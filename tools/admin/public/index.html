@@ -1,54 +1,27 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Resort Operations Desk</title>
-    <link rel="stylesheet" href="admin.css" />
-  </head>
-  <body>
-    <aside class="top-notice">
-      Local-only admin tool. It edits JSON files and publishes through your local Git setup. No secrets are shipped to GitHub Pages.
-    </aside>
-    <main class="app-shell">
-      <header class="admin-hero">
-        <div>
-          <p class="eyebrow">Private Operations Desk</p>
-          <h1>Make the resort evolve without hand-editing JSON.</h1>
-          <p class="lead">Update bugs, features, transfer routes, POIs, homepage text, and theme settings. Validate before publishing.</p>
-        </div>
-        <div class="hero-actions">
-          <button id="refreshBtn">Refresh</button>
-          <button id="validateBtn">Validate</button>
-          <button id="saveBtn" class="primary">Save File</button>
-          <button id="publishBtn" class="danger">Publish</button>
-        </div>
-      </header>
-
-      <section class="dashboard" id="dashboard"></section>
-
-      <section class="workspace">
-        <nav class="file-tabs" id="fileTabs" aria-label="Data files"></nav>
-        <section class="editor-panel">
-          <div class="editor-header">
-            <div>
-              <p class="eyebrow">Editing</p>
-              <h2 id="editorTitle">Loading…</h2>
-            </div>
-            <div class="editor-tools" id="editorTools"></div>
-          </div>
-          <div id="editor"></div>
-        </section>
-      </section>
-
-      <section class="console" aria-live="polite">
-        <div class="console-header">
-          <strong>Operations Log</strong>
-          <button id="clearLogBtn">Clear</button>
-        </div>
-        <pre id="log"></pre>
-      </section>
-    </main>
-    <script type="module" src="admin.js"></script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Resort Operations Desk</title>
+  <link rel="stylesheet" href="/admin.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div><span>Local-only</span><h1>Resort Operations Desk</h1></div>
+    <nav id="tabs"></nav>
+  </header>
+  <main id="app"><p class="loading">Loading resort data…</p></main>
+  <aside id="logDock" class="log-dock" aria-label="Activity log">
+    <header class="log-dock-head">
+      <div><strong>Activity log</strong><span id="logStatus" class="log-status">Ready</span></div>
+      <div class="log-dock-actions">
+        <button type="button" class="log-dock-toggle" id="toggleLogDock" aria-expanded="true" aria-controls="deskLog" title="Hide activity log">▼</button>
+        <button type="button" class="btn ghost small log-dock-clear" id="clearLog">Clear</button>
+      </div>
+    </header>
+    <pre id="deskLog" class="desk-log">Resort Operations Desk loaded.\n</pre>
+  </aside>
+  <script type="module" src="/admin.js"></script>
+</body>
 </html>

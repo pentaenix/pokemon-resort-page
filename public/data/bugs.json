@@ -1,71 +1,146 @@
 {
-  "statuses": ["open", "on-flight", "blocked", "testing", "fixed", "archived"],
-  "severities": ["minor", "major", "critical"],
-  "items": [
+  "bugs": [
     {
-      "id": "BUG-TRANSFER-GEN2-001",
-      "title": "Gen 2 round-trip self travel fails",
-      "status": "open",
-      "severity": "major",
-      "area": "Game Transfer",
-      "summary": "Gen 2 Pokémon can be represented in the resort path, but the return-to-source flow needs a clean fix.",
-      "linkedFeature": "feature-transfer-compatibility",
-      "linkedRoutes": ["route-gen2-resort-roundtrip"],
+      "id": "BUG-TRANSFER-GEN2-SELF",
+      "title": "Generation II self round-trip fails",
+      "status": "Open",
+      "severity": "Major",
+      "area": "Compatibility",
+      "summary": "Generation II can be represented in the compatibility lab, but the self round-trip is currently marked as not working and needs failure-mode documentation.",
+      "linkedFeature": "feature-ontology",
       "checklist": [
-        { "label": "Reproduce with Gold/Silver", "done": false },
-        { "label": "Reproduce with Crystal", "done": false },
-        { "label": "Document failure point", "done": false }
+        {
+          "done": true,
+          "label": "Keep ontology self-loop marked red"
+        },
+        {
+          "done": false,
+          "label": "Document exact failure mode"
+        },
+        {
+          "done": false,
+          "label": "Add regression test steps"
+        },
+        {
+          "done": false,
+          "label": "Validate fixed return path"
+        }
       ],
-      "lastUpdated": "2026-05-25"
+      "lastUpdated": "2026-05-25",
+      "linkedRoutes": [
+        "gen2-gen2"
+      ],
+      "images": [
+        {
+          "path": "media/games/box-art/gen-02/crystal.webp",
+          "caption": ""
+        }
+      ]
     },
     {
-      "id": "BUG-TRANSFER-GEN7-001",
-      "title": "Gen 7 round-trip self travel fails",
-      "status": "open",
-      "severity": "major",
-      "area": "Game Transfer",
-      "summary": "Gen 7 self travel is currently blocked during the return path from resort back to the original game source.",
-      "linkedFeature": "feature-transfer-compatibility",
-      "linkedRoutes": ["route-gen7-resort-roundtrip"],
+      "id": "BUG-TRANSFER-GEN7-SELF",
+      "title": "Generation VII self round-trip fails",
+      "status": "Open",
+      "severity": "Major",
+      "area": "Compatibility",
+      "summary": "Generation VII self round-trip is currently marked as not working and needs repair and validation across the Alola and Let’s Go family.",
+      "linkedFeature": "feature-ontology",
       "checklist": [
-        { "label": "Reproduce with Sun", "done": true },
-        { "label": "Reproduce with Moon", "done": false },
-        { "label": "Test Ultra Sun / Ultra Moon", "done": false },
-        { "label": "Compare package data before and after resort travel", "done": false }
+        {
+          "done": true,
+          "label": "Keep ontology self-loop marked red"
+        },
+        {
+          "done": false,
+          "label": "Test Alola games separately from Let’s Go games"
+        },
+        {
+          "done": false,
+          "label": "Document return-path assumptions"
+        },
+        {
+          "done": false,
+          "label": "Validate fixed return path"
+        }
       ],
-      "lastUpdated": "2026-05-25"
+      "lastUpdated": "2026-05-25",
+      "linkedRoutes": [
+        "gen7-gen7"
+      ]
     },
     {
-      "id": "BUG-RENDER-001",
-      "title": "rbmap render output needs validation pass",
-      "status": "testing",
-      "severity": "minor",
-      "area": "Rendering",
-      "summary": "Rendering output is visible, but needs a validation pass against expected map data and visual consistency.",
-      "linkedFeature": "feature-rendering",
-      "linkedRoutes": [],
+      "id": "BUG-UI-ONTOLOGY-HOVER-STUTTER",
+      "title": "Ontology hover and node interaction stutter",
+      "status": "Fixed",
+      "severity": "Major",
+      "area": "UI",
+      "summary": "Hover behavior should never trigger heavy graph recalculation. The graph now avoids React hover state and uses CSS-only highlighting; verify on desktop and phone.",
+      "linkedFeature": "feature-ontology",
+      "linkedRoute": "",
       "checklist": [
-        { "label": "Render sample rbmap", "done": true },
-        { "label": "Compare against expected dimensions", "done": false },
-        { "label": "Capture screenshot evidence", "done": false }
+        {
+          "done": true,
+          "label": "Remove hover-driven layout recalculation"
+        },
+        {
+          "done": true,
+          "label": "Use stable SVG positions"
+        },
+        {
+          "done": true,
+          "label": "Verify dragging does not stutter"
+        },
+        {
+          "done": true,
+          "label": "Verify touch interaction on phone"
+        }
       ],
-      "lastUpdated": "2026-05-25"
+      "lastUpdated": "2026-05-28",
+      "linkedRoutes": []
     },
     {
-      "id": "BUG-TRANSPORT-001",
-      "title": "Ferry arrival flow has no final dock anchor",
-      "status": "blocked",
-      "severity": "minor",
-      "area": "Transport",
-      "summary": "The ferry flow needs a confirmed or designed anchor point on the island before the arrival trigger can be finalized.",
-      "linkedFeature": "feature-transport",
-      "linkedRoutes": [],
+      "id": "BUG-UI-MOBILE-ONTOLOGY-READABILITY",
+      "title": "Ontology must remain readable on phones",
+      "status": "Archived",
+      "severity": "Major",
+      "area": "UI",
+      "summary": "The compatibility page needs a usable mobile path with a focused graph plus route-list fallback instead of a tiny desktop-only chart.",
+      "linkedFeature": "feature-ontology",
+      "linkedRoute": "",
       "checklist": [
-        { "label": "Pick temporary dock coordinate", "done": true },
-        { "label": "Tie ferry anchor to POI", "done": false },
-        { "label": "Add arrival animation placeholder", "done": false }
+        {
+          "done": true,
+          "label": "Add mobile route list fallback"
+        },
+        {
+          "done": true,
+          "label": "Keep controls reachable on narrow screens"
+        },
+        {
+          "done": false,
+          "label": "Verify generation focus on touch devices"
+        }
       ],
-      "lastUpdated": "2026-05-25"
+      "lastUpdated": "2026-05-28",
+      "linkedRoutes": []
     }
-  ]
+  ],
+  "statuses": [
+    "Open",
+    "Blocked",
+    "Testing",
+    "Fixed",
+    "Archived"
+  ],
+  "severities": [
+    "Critical",
+    "Major",
+    "Minor"
+  ],
+  "communityIssues": [],
+  "communityIssueSettings": {
+    "source": "GitHub Issues",
+    "mode": "manual-link",
+    "description": "Community issues are separate from curated internal bugs. Add public GitHub issue links here from the local Operations Desk when you want them shown."
+  }
 }

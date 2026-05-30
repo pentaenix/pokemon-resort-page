@@ -1,103 +1,315 @@
 {
   "stages": [
-    { "id": "boarding", "label": "Boarding Soon", "description": "Queued and ready to pick up." },
-    { "id": "on-flight", "label": "On-Flight", "description": "Actively being built." },
-    { "id": "testing", "label": "Testing", "description": "Implemented enough to verify." },
-    { "id": "landed", "label": "Landed", "description": "Completed for the current milestone." },
-    { "id": "blocked", "label": "Blocked", "description": "Waiting on a fix, asset, or decision." }
+    "Boarding Soon",
+    "On-Flight",
+    "Testing",
+    "Landed",
+    "Blocked"
   ],
-  "items": [
+  "features": [
     {
-      "id": "feature-transfer-compatibility",
-      "title": "Game Transfer Compatibility",
-      "category": "Compatibility Lab",
-      "stage": "on-flight",
-      "priority": "high",
-      "progress": 45,
-      "summary": "Round-trip testing for game → resort → game flows, with special focus on Gen 2 and Gen 7 self travel.",
-      "linkedBugs": ["BUG-TRANSFER-GEN2-001", "BUG-TRANSFER-GEN7-001"],
-      "linkedResearch": [],
+      "id": "feature-ontology",
+      "title": "Compatibility Ontology",
+      "stage": "Testing",
+      "priority": "High",
+      "progress": 78,
+      "summary": "Interactive generation-to-generation route lab with stable hover, draggable nodes, focus mode, outward self-loops, mobile fallback, and local layout saving. Cross routes and most self-routes are untested until recorded.",
+      "linkedBugs": [
+        "BUG-TRANSFER-GEN2-SELF",
+        "BUG-TRANSFER-GEN7-SELF",
+        "BUG-UI-ONTOLOGY-HOVER-STUTTER",
+        "BUG-UI-MOBILE-ONTOLOGY-READABILITY"
+      ],
       "tasks": [
-        { "id": "task-gen2-self-travel", "label": "Fix Gen 2 self travel", "done": false },
-        { "id": "task-gen7-self-travel", "label": "Fix Gen 7 self travel", "done": false },
-        { "id": "task-route-coloring", "label": "Route coloring in compatibility graph", "done": true }
-      ]
+        {
+          "done": true,
+          "label": "Replace single-scroll chart with dedicated page"
+        },
+        {
+          "done": true,
+          "label": "Mark all routes untested except documented Gen II and Gen VII self failures"
+        },
+        {
+          "done": true,
+          "label": "Point self-loops outward from each generation"
+        },
+        {
+          "done": true,
+          "label": "Add draggable node layout"
+        },
+        {
+          "done": false,
+          "label": "Curate real game box art resources"
+        },
+        {
+          "done": true,
+          "label": "Document RESOURCE-TO-ADD paths for curated game box art"
+        }
+      ],
+      "area": "Compatibility",
+      "linkedRoutes": [],
+      "images": [
+        {
+          "path": "assets/reference/compatibility-planning-map.png",
+          "caption": "Old Ontologhy"
+        }
+      ],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "poiId": "",
+          "label": "",
+          "note": "",
+          "position": [
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": [
+          {
+            "id": "section-20545",
+            "title": "New section",
+            "summary": "",
+            "blocks": [
+              {
+                "type": "compare",
+                "variant": "fixed",
+                "caption": "",
+                "items": [
+                  {
+                    "path": "media/games/box-art/gen-03/emerald.webp",
+                    "label": "Left",
+                    "caption": ""
+                  },
+                  {
+                    "path": "media/games/box-art/gen-03/leaf-green.webp",
+                    "label": "Right",
+                    "caption": ""
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
     },
     {
-      "id": "feature-character-app",
-      "title": "Character App",
-      "category": "Resort Systems",
-      "stage": "boarding",
-      "priority": "medium",
-      "progress": 15,
-      "summary": "Character data package, staff duties, routines, and role notes for game behavior.",
+      "id": "feature-media-library",
+      "title": "Gallery and media relationships",
+      "stage": "Boarding Soon",
+      "priority": "Medium",
+      "progress": 34,
+      "summary": "Connected visual archive for screenshots, renders, frame crops, diagrams, sprites, animations, models, and compatibility assets.",
       "linkedBugs": [],
-      "linkedResearch": [],
       "tasks": [
-        { "id": "task-character-data", "label": "Add character data to package", "done": false },
-        { "id": "task-staff-roles", "label": "Draft staff responsibility schema", "done": false }
-      ]
+        {
+          "label": "Add dedicated Gallery page",
+          "done": true
+        },
+        {
+          "label": "Define media folder contract",
+          "done": true
+        },
+        {
+          "label": "Add real screenshots and frame crops",
+          "done": false
+        },
+        {
+          "label": "Connect gallery items to POIs/routes/features",
+          "done": false
+        }
+      ],
+      "area": "Media",
+      "linkedRoutes": []
     },
     {
-      "id": "feature-map",
-      "title": "Island Map",
-      "category": "Research Atlas",
-      "stage": "on-flight",
-      "priority": "high",
+      "id": "feature-model-library",
+      "title": "3D model and submodel library",
+      "stage": "Boarding Soon",
+      "priority": "High",
+      "progress": 40,
+      "summary": "A place to track the master island model and submodels for dock, paths, buildings, props, and vegetation.",
+      "linkedBugs": [],
+      "tasks": [
+        {
+          "label": "Add Model Library page",
+          "done": true
+        },
+        {
+          "label": "Define main island model path",
+          "done": true
+        },
+        {
+          "label": "Add real island GLB model",
+          "done": false
+        },
+        {
+          "label": "Add first submodel records",
+          "done": false
+        }
+      ],
+      "area": "Models",
+      "linkedRoutes": []
+    },
+    {
+      "id": "feature-characters",
+      "title": "Characters and animated visitors",
+      "stage": "Boarding Soon",
+      "priority": "Medium",
       "progress": 38,
-      "summary": "2D/3D island reconstruction based on frame analysis, map references, inferred paths, and gameplay needs.",
+      "summary": "Directory for series characters, planned visitors, portraits, idle animations, walk cycles, and sprite sheets.",
       "linkedBugs": [],
-      "linkedResearch": ["ferry-dock", "main-lodge", "beach-path"],
       "tasks": [
-        { "id": "task-3d-model", "label": "3D model blockout", "done": false },
-        { "id": "task-2d-map", "label": "2D map reference pass", "done": true },
-        { "id": "task-poi-system", "label": "Clickable POI marker system", "done": true }
-      ]
+        {
+          "label": "Add Characters & Visitors page",
+          "done": true
+        },
+        {
+          "label": "Define sprite resource contract",
+          "done": true
+        },
+        {
+          "label": "Add real character entries",
+          "done": false
+        },
+        {
+          "label": "Add animated visitor previews",
+          "done": false
+        }
+      ],
+      "area": "Characters",
+      "linkedRoutes": []
     },
     {
-      "id": "feature-rendering",
-      "title": "Rendering",
-      "category": "Engine",
-      "stage": "testing",
-      "priority": "medium",
-      "progress": 65,
-      "summary": "Visual rendering tasks for PDSM and rbmap output.",
-      "linkedBugs": ["BUG-RENDER-001"],
-      "linkedResearch": [],
-      "tasks": [
-        { "id": "task-pdsm", "label": "PDSM support", "done": true },
-        { "id": "task-render-rbmap", "label": "Render rbmap", "done": false }
-      ]
-    },
-    {
-      "id": "feature-summary-screen",
-      "title": "Summary Screen",
-      "category": "UI",
-      "stage": "boarding",
-      "priority": "medium",
-      "progress": 20,
-      "summary": "Resort-ready summary UI using data from PKHeX-compatible package values.",
+      "id": "feature-admin",
+      "title": "Local Operations Desk",
+      "stage": "On-Flight",
+      "priority": "High",
+      "progress": 62,
+      "summary": "Local-only admin tool for editing data, validating relationships, previewing changes, and publishing through Git.",
       "linkedBugs": [],
-      "linkedResearch": ["main-lodge"],
       "tasks": [
-        { "id": "task-summary-ui", "label": "UI layout", "done": false },
-        { "id": "task-pkhex-data", "label": "Data from PKHeX", "done": true }
-      ]
+        {
+          "label": "Keep public site static",
+          "done": true
+        },
+        {
+          "label": "Validate data before publishing",
+          "done": true
+        },
+        {
+          "label": "Add editors for new data files",
+          "done": false
+        },
+        {
+          "label": "Add media usage warnings",
+          "done": false
+        }
+      ],
+      "area": "Admin",
+      "linkedRoutes": []
     },
     {
-      "id": "feature-transport",
-      "title": "Ferry and Transport Flow",
-      "category": "Island Systems",
-      "stage": "blocked",
-      "priority": "medium",
-      "progress": 10,
-      "summary": "Arrival, departure, and route logic for the island ferry and guest flow.",
-      "linkedBugs": ["BUG-TRANSPORT-001"],
-      "linkedResearch": ["ferry-dock"],
+      "id": "feature-contest-hall",
+      "title": "Pokémon Contest Hall",
+      "stage": "Boarding Soon",
+      "priority": "High",
+      "progress": 12,
+      "summary": "Research how contest halls work across generations — visuals, mechanics, map placement, and reference media for a future resort build.",
+      "linkedBugs": [],
+      "linkedRoutes": [],
+      "area": "Island Build",
       "tasks": [
-        { "id": "task-ferry-asset", "label": "Create ferry proxy model", "done": false },
-        { "id": "task-arrival-trigger", "label": "Arrival trigger prototype", "done": false }
-      ]
+        {
+          "label": "Document contest flow per generation",
+          "done": false
+        },
+        {
+          "label": "Collect reference screenshots and diagrams",
+          "done": false
+        },
+        {
+          "label": "Pick atlas POI placement",
+          "done": false
+        }
+      ],
+      "dossier": {
+        "overview": "Contest halls are a cross-generation research target. This dossier holds generation notes, UI references, comparisons, and map placement — separate from the quick task checklist on the card.",
+        "map": {
+          "poiId": "",
+          "label": "Lilycove Contest Hall (placeholder)",
+          "note": "Link to a real POI when the atlas entry exists.",
+          "position": [
+            "2.4",
+            "0.25",
+            "-1.8"
+          ]
+        },
+        "researchMilestones": [
+          {
+            "label": "Gen III mechanics captured",
+            "done": false
+          },
+          {
+            "label": "Gen IV–VI UI comparison sheet",
+            "done": false
+          },
+          {
+            "label": "Resort building mock approved",
+            "done": false
+          }
+        ],
+        "sections": [
+          {
+            "id": "gen-iii",
+            "title": "Generation III (RSE)",
+            "summary": "Original contest hall flow and rank structure.",
+            "blocks": [
+              {
+                "type": "text",
+                "body": "Note appeal rounds, battle-style moves, and rank progression. Add screenshots of the lobby, stage, and results screens."
+              },
+              {
+                "type": "text",
+                "body": "Add a gallery block in the admin when screenshots are ready."
+              }
+            ]
+          },
+          {
+            "id": "ui-mocks",
+            "title": "UI & layout mocks",
+            "summary": "Side-by-side comparisons and resort-specific mockups.",
+            "blocks": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "feature-roadmap-ideas",
+      "title": "Roadmap and idea board",
+      "stage": "Landed",
+      "priority": "Medium",
+      "progress": 100,
+      "summary": "Separate long-term project horizons from idea sparks so active work, future goals, and creative possibilities do not blur together.",
+      "linkedBugs": [],
+      "tasks": [
+        {
+          "label": "Add Roadmap page",
+          "done": true
+        },
+        {
+          "label": "Add Idea Board page",
+          "done": true
+        },
+        {
+          "label": "Seed with current project direction",
+          "done": true
+        }
+      ],
+      "area": "Planning",
+      "linkedRoutes": []
     }
   ]
 }

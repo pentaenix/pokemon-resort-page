@@ -1,0 +1,38 @@
+{
+  "seriesCharacters": [],
+  "plannedVisitors": [],
+  "spriteRequirements": [
+    {
+      "label": "Character portraits",
+      "path": "media/characters/<character-id>/portrait.webp",
+      "formats": [
+        "webp",
+        "png"
+      ]
+    },
+    {
+      "label": "Idle animations",
+      "path": "media/characters/<character-id>/idle.gif",
+      "formats": [
+        "gif",
+        "webp"
+      ]
+    },
+    {
+      "label": "Walk cycles",
+      "path": "media/characters/<character-id>/walk.gif",
+      "formats": [
+        "gif",
+        "webp"
+      ]
+    },
+    {
+      "label": "Sprite sheets",
+      "path": "media/characters/<character-id>/sprite-sheet.webp",
+      "formats": [
+        "webp",
+        "png"
+      ]
+    }
+  ]
+}

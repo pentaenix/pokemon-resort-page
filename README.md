@@ -1,38 +1,59 @@
-# Pokémon Resort — Unofficial Fan Project Site
+# Pokémon Resort — Fan Research & Development Atlas
 
-A static, data-driven GitHub Pages site for a fan-made resort project: public research atlas, compatibility graph, on-flight feature board, curated issue desk, and a local admin tool.
+A polished, data-driven, static GitHub Pages site for a non-commercial fan research/game-development project.
 
-This repository is designed to stay public and safe:
+The public site is static: no comments, no accounts, no hosted database, no public admin panel, and no backend. The local-only **Resort Operations Desk** edits JSON data, validates it, and can publish through your own local Git credentials.
 
-- The public site has no backend, comments, donations, or live submission forms.
-- Data lives in JSON files under `public/data`.
-- The local admin tool runs only on your computer.
-- Publishing uses your local Git credentials, not a token embedded in the website.
-- `.env.local` is ignored and should never be committed.
+## Public site structure
 
-## Legal / fan project notice
+The public app intentionally keeps navigation compact:
 
-This is a non-commercial fan project created for research, documentation, and game development practice. Pokémon, Pokémon Concierge, character names, official imagery, concepts, and related intellectual property belong to their original owners. This project is not affiliated with, endorsed by, sponsored by, or approved by Netflix, The Pokémon Company, Nintendo, Game Freak, Creatures, or any related rights holders.
+- **Home** — the resort lobby, project status, entry cards, and a clear “What is this?” about section.
+- **Island Atlas** — the 3D island viewport, confidence filters, media carousel, points of interest, submodels, character/sprite planning, and gallery resources.
+- **Compatibility** — the generation ontology with stable directional routes, focus mode, free-layout dragging, outward self-loops, large line hit boxes, and mobile route fallback.
+- **Operations** — On-Flight Board, internal bugs, and community issue links.
+- **Milestones** — a vertical scrollable project timeline centered on the current milestone.
+- **Source Guide** — repo structure and local update workflow.
+- **Legal** — full fan-project disclaimer and asset/credit stance.
 
-No donations, payments, crowdfunding, sponsorships, or financial support are accepted in any form. Original project-made code and development assets may be reused with appropriate credit unless otherwise stated. Official or reference material remains the property of its respective owners.
+Aliases such as `#/issues`, `#/gallery`, `#/models`, and `#/characters` are redirected into the integrated pages. `#/roadmap` now routes to the dedicated Milestones page.
 
-## Quick start
+## Current ontology data stance
+
+The compatibility ontology ships conservatively:
+
+- Cross-generation routes are **Untested**.
+- Most self-routes are **Untested** until you record checklist evidence.
+- Generation II self round-trip is marked **Not working**.
+- Generation VII self round-trip is marked **Not working**.
+
+Every route is stored in `public/data/compatibility.json` and can be edited from the Operations Desk.
+
+## Why box art is not bundled
+
+Official game box art is not included in the zip. The app is wired to use local box-art files, and `RESOURCE-TO-ADD.md` lists the exact paths. Add curated images that you have decided are appropriate for your public fan-research repo.
+
+The public app does not hotlink random external image results because those links are fragile and difficult to control.
+
+## Run the public site locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the local dev site shown by Vite, usually:
+Open the local URL printed by Vite.
 
-```text
-http://127.0.0.1:5173
-```
-
-## Local admin tool
+## Build the site
 
 ```bash
-cp .env.example .env.local
+npm run validate:data
+npm run build
+```
+
+## Run the local Operations Desk
+
+```bash
 npm run admin
 ```
 
@@ -42,93 +63,86 @@ Open:
 http://127.0.0.1:8787
 ```
 
-The admin tool lets you edit:
+The Operations Desk runs on your machine only. It edits files in `public/data`, validates them, shows Git status, and can commit/push through your existing Git setup.
 
-- Bugs and checklists
-- On-flight features and subtasks
-- Compatibility graph routes
-- Research Atlas points of interest
-- Homepage copy
-- Theme values
-- Legal/site data
+## Operations Desk UI
 
-The **Publish** button validates data, runs `git add public/data public/assets`, commits, and pushes to `origin main` using your machine's Git authentication.
+The local tool includes guided editors for:
+
+- Compatibility routes and route checklists
+- Bug/issue cards and issue checklists
+- Feature cards, progress, stages, and subtasks
+- Research POIs and 3D marker coordinates
+- Game library box-art paths (fetch from Libretro Thumbnails in the desk — not on the public site)
+- Main island model metadata
+- Roadmap / milestone timeline items
+- Idea board cards
+- Homepage/theme tuning
+- Publish validation and commit/push
+
+It also shows detected files under `public/media` so you can copy paths into gallery, model, character, and evidence records.
+
+### Fetch box art (Libretro Thumbnails)
+
+Uses the public [Libretro Thumbnails](https://thumbnails.libretro.com/) CDN — **no login or `.env` file**.
+
+1. `npm run admin` → **Game Library** tab.
+2. Select a game → **Find covers** → **Use this cover** (USA / USA+Europe preferred).
+3. Or batch CLI:
+
+```bash
+npm run fetch:boxart
+npm run fetch:boxart -- emerald legends-za
+npm run fetch:boxart -- --force
+```
+
+Switch-era games are not on Libretro yet; add those paths manually (see `RESOURCE-TO-ADD.md`).
+
+### Import community GitHub issues
+
+Uses the GitHub REST API from the local desk only — your token never ships with the public site.
+
+1. Copy `.env.example` → `.env.local` and set `GITHUB_TOKEN` (fine-grained or classic PAT with `repo` or `public_repo` read access to issues).
+2. Set `GITHUB_REPO=owner/repo` or fix `public/data/site.json` → `repoUrl`.
+3. Restart `npm run admin` → **Bugs** tab → **Community GitHub issues**.
+4. **Refresh from GitHub** → **Add to site** on the issues you want on the Operations page.
+5. Tweak summaries / linked internal bugs, then **Save bugs**.
+
+## Publishing safely
+
+Do not commit real secrets. This repo includes `.env.example` only. Real `.env.local` files are ignored.
+
+The safest publishing path is local Git authentication:
+
+```bash
+git add public/data public/assets public/media
+git commit -m "Resort update"
+git push origin main
+```
+
+or use the Operations Desk publish button after reviewing Git status.
 
 ## Data files
 
 ```text
-public/data/
-  site.json              legal copy, navigation, repo URL
-  homepage.json          hero, feature cards, media, weekly pulse
-  theme.json             CSS variables and theme tuning values
-  research-pois.json     3D atlas model URL and clickable POIs
-  compatibility.json     games, transfer routes, route statuses
-  features.json          on-flight board stages, features, subtasks
-  bugs.json              curated public issue desk data
+public/data/site.json              legal text, logo, project name
+public/data/homepage.json          homepage copy and media
+public/data/theme.json             design tuning controls
+public/data/research-pois.json     3D atlas markers and evidence
+public/data/compatibility.json     generations, games, routes, statuses, layout
+public/data/features.json          on-flight board
+public/data/bugs.json              internal bugs and community issue links
+public/data/gallery.json           connected visual archive and Atlas carousel
+public/data/models.json            main island model and submodels
+public/data/characters.json        characters, visitors, sprite requirements
+public/data/roadmap.json           vertical milestone roadmap
+public/data/ideas.json             idea board
 ```
 
-## Replace the island model
+## Media folders
 
-The atlas currently renders a procedural placeholder island. When your real model is ready:
+Real media lives under `public/media`. The site is already wired for box art, screenshots, renders, diagrams, GIFs, video, and GLB models. See `RESOURCE-TO-ADD.md` for the full list and exact target paths.
 
-1. Export it as `.glb` or `.gltf`.
-2. Put it in `public/assets/models/`.
-3. Edit `public/data/research-pois.json`:
+## Legal stance
 
-```json
-{
-  "modelUrl": "assets/models/island.glb"
-}
-```
-
-4. Tune each POI `position` array in the admin tool.
-
-POI positions are `[x, y, z]` coordinates in the Three.js scene.
-
-## Compatibility colors
-
-Routes use these statuses:
-
-```text
-broken   = red, not working
-edge     = yellow, edge cases failing
-testing  = blue, more tests needed
-working  = green, fully working
-```
-
-## GitHub Pages deployment
-
-This repo includes `.github/workflows/pages.yml`. After pushing to GitHub:
-
-1. Go to the repo settings.
-2. Open **Pages**.
-3. Set the source to **GitHub Actions**.
-4. Push to `main`.
-
-The workflow validates data, builds the site, and deploys the `dist` folder.
-
-## Recommended workflow
-
-```bash
-npm run admin
-# edit data in the local Operations Desk
-# click Validate
-# click Publish
-```
-
-Or from the terminal:
-
-```bash
-npm run validate
-npm run publish -- "Resort update: compatibility and bug tracker"
-```
-
-## Fine tuning without pain
-
-Use these files first before touching CSS:
-
-- `public/data/homepage.json` for hero, cards, featured media, and pulse text.
-- `public/data/theme.json` for color variables and theme settings.
-- `public/data/site.json` for legal text and navigation.
-
-For deeper styling, edit `src/styles.css`.
+The site repeats the non-commercial fan-project disclaimer at the top, footer, and legal page. Keep that visible as the project grows.

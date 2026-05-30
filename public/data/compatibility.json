@@ -1,130 +1,2866 @@
 {
-  "legend": [
-    { "status": "broken", "label": "Not working", "colorName": "Red" },
-    { "status": "edge", "label": "Edge cases failing", "colorName": "Yellow" },
-    { "status": "testing", "label": "More tests needed", "colorName": "Blue" },
-    { "status": "working", "label": "Fully working", "colorName": "Green" }
+  "statuses": {
+    "green": {
+      "label": "Fully working",
+      "description": "The documented round trip currently passes the public checklist."
+    },
+    "blue": {
+      "label": "More tests needed",
+      "description": "The route appears plausible but lacks enough test coverage."
+    },
+    "yellow": {
+      "label": "Edge cases failing",
+      "description": "The route has partial success with known edge-case failures."
+    },
+    "red": {
+      "label": "Not working",
+      "description": "The route currently fails the documented round-trip requirement."
+    },
+    "gray": {
+      "label": "Untested",
+      "description": "No public route result has been recorded yet."
+    }
+  },
+  "generations": [
+    {
+      "id": "gen1",
+      "label": "Generation I",
+      "shortLabel": "Gen I",
+      "number": 1,
+      "era": "Kanto / Game Boy",
+      "summary": "Kanto / Game Boy era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "accent": "#ef6461"
+    },
+    {
+      "id": "gen2",
+      "label": "Generation II",
+      "shortLabel": "Gen II",
+      "number": 2,
+      "era": "Johto / Game Boy Color",
+      "summary": "Johto / Game Boy Color era. The self round-trip is currently documented as not working; every other public route remains untested until the checklist is filled in.",
+      "accent": "#f6b85f"
+    },
+    {
+      "id": "gen3",
+      "label": "Generation III",
+      "shortLabel": "Gen III",
+      "number": 3,
+      "era": "Hoenn / Game Boy Advance",
+      "summary": "Hoenn / Game Boy Advance era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "accent": "#4fb286"
+    },
+    {
+      "id": "gen4",
+      "label": "Generation IV",
+      "shortLabel": "Gen IV",
+      "number": 4,
+      "era": "Sinnoh / Nintendo DS",
+      "summary": "Sinnoh / Nintendo DS era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "accent": "#5aa9e6"
+    },
+    {
+      "id": "gen5",
+      "label": "Generation V",
+      "shortLabel": "Gen V",
+      "number": 5,
+      "era": "Unova / Nintendo DS",
+      "summary": "Unova / Nintendo DS era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "accent": "#7d5fff"
+    },
+    {
+      "id": "gen6",
+      "label": "Generation VI",
+      "shortLabel": "Gen VI",
+      "number": 6,
+      "era": "Kalos / Nintendo 3DS",
+      "summary": "Kalos / Nintendo 3DS era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "accent": "#f2a7c6"
+    },
+    {
+      "id": "gen7",
+      "label": "Generation VII",
+      "shortLabel": "Gen VII",
+      "number": 7,
+      "era": "Alola / Nintendo 3DS + Switch",
+      "summary": "Alola / Nintendo 3DS + Switch era. The self round-trip is currently documented as not working; every other public route remains untested until the checklist is filled in.",
+      "accent": "#f7d95c"
+    },
+    {
+      "id": "gen8",
+      "label": "Generation VIII",
+      "shortLabel": "Gen VIII",
+      "number": 8,
+      "era": "Galar / Switch",
+      "summary": "Galar / Switch era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "accent": "#82c4c3"
+    },
+    {
+      "id": "gen9",
+      "label": "Generation IX",
+      "shortLabel": "Gen IX",
+      "number": 9,
+      "era": "Paldea / Switch",
+      "summary": "Paldea / Switch era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "accent": "#c084fc"
+    }
   ],
   "games": [
-    { "id": "gen1", "label": "Gen 1", "title": "Red / Blue / Yellow", "gen": 1, "x": 18, "y": 77, "platform": "Game Boy" },
-    { "id": "gen2", "label": "Gen 2", "title": "Gold / Silver / Crystal", "gen": 2, "x": 26, "y": 58, "platform": "Game Boy Color" },
-    { "id": "gen3", "label": "Gen 3", "title": "Ruby / Sapphire / Emerald / FireRed / LeafGreen", "gen": 3, "x": 18, "y": 38, "platform": "Game Boy Advance" },
-    { "id": "gen4", "label": "Gen 4", "title": "Diamond / Pearl / Platinum / HGSS", "gen": 4, "x": 35, "y": 22, "platform": "Nintendo DS" },
-    { "id": "gen5", "label": "Gen 5", "title": "Black / White / B2W2", "gen": 5, "x": 50, "y": 22, "platform": "Nintendo DS" },
-    { "id": "gen6", "label": "Gen 6", "title": "X / Y / ORAS", "gen": 6, "x": 65, "y": 22, "platform": "Nintendo 3DS" },
-    { "id": "gen7", "label": "Gen 7", "title": "Sun / Moon / USUM", "gen": 7, "x": 72, "y": 42, "platform": "Nintendo 3DS" },
-    { "id": "gen8", "label": "Gen 8", "title": "Sword / Shield / BDSP / Legends", "gen": 8, "x": 75, "y": 62, "platform": "Nintendo Switch" },
-    { "id": "gen9", "label": "Gen 9", "title": "Scarlet / Violet", "gen": 9, "x": 64, "y": 82, "platform": "Nintendo Switch" },
-    { "id": "resort", "label": "Resort", "title": "Pokémon Resort Save Package", "gen": 0, "x": 50, "y": 52, "platform": "Project Core" }
+    {
+      "id": "red",
+      "title": "Pokémon Red",
+      "generation": "gen1",
+      "shortTitle": "Red",
+      "platform": "Game Boy",
+      "releaseYear": 1996,
+      "boxArt": "media/games/box-art/gen-01/red.webp",
+      "family": "gen1"
+    },
+    {
+      "id": "blue",
+      "title": "Pokémon Blue",
+      "generation": "gen1",
+      "shortTitle": "Blue",
+      "platform": "Game Boy",
+      "releaseYear": 1996,
+      "boxArt": "media/games/box-art/gen-01/blue.webp",
+      "family": "gen1"
+    },
+    {
+      "id": "yellow",
+      "title": "Pokémon Yellow",
+      "generation": "gen1",
+      "shortTitle": "Yellow",
+      "platform": "Game Boy",
+      "releaseYear": 1998,
+      "boxArt": "media/games/box-art/gen-01/yellow.webp",
+      "family": "gen1"
+    },
+    {
+      "id": "gold",
+      "title": "Pokémon Gold",
+      "generation": "gen2",
+      "shortTitle": "Gold",
+      "platform": "Game Boy Color",
+      "releaseYear": 1999,
+      "boxArt": "media/games/box-art/gen-02/gold.webp",
+      "family": "gen2"
+    },
+    {
+      "id": "silver",
+      "title": "Pokémon Silver",
+      "generation": "gen2",
+      "shortTitle": "Silver",
+      "platform": "Game Boy Color",
+      "releaseYear": 1999,
+      "boxArt": "media/games/box-art/gen-02/silver.webp",
+      "family": "gen2"
+    },
+    {
+      "id": "crystal",
+      "title": "Pokémon Crystal",
+      "generation": "gen2",
+      "shortTitle": "Crystal",
+      "platform": "Game Boy Color",
+      "releaseYear": 2000,
+      "boxArt": "media/games/box-art/gen-02/crystal.webp",
+      "family": "gen2"
+    },
+    {
+      "id": "ruby",
+      "title": "Pokémon Ruby",
+      "generation": "gen3",
+      "shortTitle": "Ruby",
+      "platform": "Game Boy Advance",
+      "releaseYear": 2002,
+      "boxArt": "media/games/box-art/gen-03/ruby.webp",
+      "family": "gen3"
+    },
+    {
+      "id": "sapphire",
+      "title": "Pokémon Sapphire",
+      "generation": "gen3",
+      "shortTitle": "Sapphire",
+      "platform": "Game Boy Advance",
+      "releaseYear": 2002,
+      "boxArt": "media/games/box-art/gen-03/sapphire.webp",
+      "family": "gen3"
+    },
+    {
+      "id": "emerald",
+      "title": "Pokémon Emerald",
+      "generation": "gen3",
+      "shortTitle": "Emerald",
+      "platform": "Game Boy Advance",
+      "releaseYear": 2004,
+      "boxArt": "media/games/box-art/gen-03/emerald.webp",
+      "family": "gen3"
+    },
+    {
+      "id": "fire-red",
+      "title": "Pokémon FireRed",
+      "generation": "gen3",
+      "shortTitle": "FireRed",
+      "platform": "Game Boy Advance",
+      "releaseYear": 2004,
+      "boxArt": "media/games/box-art/gen-03/fire-red.webp",
+      "family": "gen3"
+    },
+    {
+      "id": "leaf-green",
+      "title": "Pokémon LeafGreen",
+      "generation": "gen3",
+      "shortTitle": "LeafGreen",
+      "platform": "Game Boy Advance",
+      "releaseYear": 2004,
+      "boxArt": "media/games/box-art/gen-03/leaf-green.webp",
+      "family": "gen3"
+    },
+    {
+      "id": "diamond",
+      "title": "Pokémon Diamond",
+      "generation": "gen4",
+      "shortTitle": "Diamond",
+      "platform": "Nintendo DS",
+      "releaseYear": 2006,
+      "boxArt": "media/games/box-art/gen-04/diamond.webp",
+      "family": "gen4"
+    },
+    {
+      "id": "pearl",
+      "title": "Pokémon Pearl",
+      "generation": "gen4",
+      "shortTitle": "Pearl",
+      "platform": "Nintendo DS",
+      "releaseYear": 2006,
+      "boxArt": "media/games/box-art/gen-04/pearl.webp",
+      "family": "gen4"
+    },
+    {
+      "id": "platinum",
+      "title": "Pokémon Platinum",
+      "generation": "gen4",
+      "shortTitle": "Platinum",
+      "platform": "Nintendo DS",
+      "releaseYear": 2008,
+      "boxArt": "media/games/box-art/gen-04/platinum.webp",
+      "family": "gen4"
+    },
+    {
+      "id": "heartgold",
+      "title": "Pokémon HeartGold",
+      "generation": "gen4",
+      "shortTitle": "HeartGold",
+      "platform": "Nintendo DS",
+      "releaseYear": 2009,
+      "boxArt": "media/games/box-art/gen-04/heartgold.webp",
+      "family": "gen4"
+    },
+    {
+      "id": "soulsilver",
+      "title": "Pokémon SoulSilver",
+      "generation": "gen4",
+      "shortTitle": "SoulSilver",
+      "platform": "Nintendo DS",
+      "releaseYear": 2009,
+      "boxArt": "media/games/box-art/gen-04/soulsilver.webp",
+      "family": "gen4"
+    },
+    {
+      "id": "black",
+      "title": "Pokémon Black",
+      "generation": "gen5",
+      "shortTitle": "Black",
+      "platform": "Nintendo DS",
+      "releaseYear": 2010,
+      "boxArt": "media/games/box-art/gen-05/black.webp",
+      "family": "gen5"
+    },
+    {
+      "id": "white",
+      "title": "Pokémon White",
+      "generation": "gen5",
+      "shortTitle": "White",
+      "platform": "Nintendo DS",
+      "releaseYear": 2010,
+      "boxArt": "media/games/box-art/gen-05/white.webp",
+      "family": "gen5"
+    },
+    {
+      "id": "black-2",
+      "title": "Pokémon Black 2",
+      "generation": "gen5",
+      "shortTitle": "Black 2",
+      "platform": "Nintendo DS",
+      "releaseYear": 2012,
+      "boxArt": "media/games/box-art/gen-05/black-2.webp",
+      "family": "gen5"
+    },
+    {
+      "id": "white-2",
+      "title": "Pokémon White 2",
+      "generation": "gen5",
+      "shortTitle": "White 2",
+      "platform": "Nintendo DS",
+      "releaseYear": 2012,
+      "boxArt": "media/games/box-art/gen-05/white-2.webp",
+      "family": "gen5"
+    },
+    {
+      "id": "x",
+      "title": "Pokémon X",
+      "generation": "gen6",
+      "shortTitle": "X",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2013,
+      "boxArt": "media/games/box-art/gen-06/x.webp",
+      "family": "gen6"
+    },
+    {
+      "id": "y",
+      "title": "Pokémon Y",
+      "generation": "gen6",
+      "shortTitle": "Y",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2013,
+      "boxArt": "media/games/box-art/gen-06/y.webp",
+      "family": "gen6"
+    },
+    {
+      "id": "omega-ruby",
+      "title": "Pokémon Omega Ruby",
+      "generation": "gen6",
+      "shortTitle": "Omega Ruby",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2014,
+      "boxArt": "media/games/box-art/gen-06/omega-ruby.webp",
+      "family": "gen6"
+    },
+    {
+      "id": "alpha-sapphire",
+      "title": "Pokémon Alpha Sapphire",
+      "generation": "gen6",
+      "shortTitle": "Alpha Sapphire",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2014,
+      "boxArt": "media/games/box-art/gen-06/alpha-sapphire.webp",
+      "family": "gen6"
+    },
+    {
+      "id": "sun",
+      "title": "Pokémon Sun",
+      "generation": "gen7",
+      "shortTitle": "Sun",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2016,
+      "boxArt": "media/games/box-art/gen-07/sun.webp",
+      "family": "gen7"
+    },
+    {
+      "id": "moon",
+      "title": "Pokémon Moon",
+      "generation": "gen7",
+      "shortTitle": "Moon",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2016,
+      "boxArt": "media/games/box-art/gen-07/moon.webp",
+      "family": "gen7"
+    },
+    {
+      "id": "ultra-sun",
+      "title": "Pokémon Ultra Sun",
+      "generation": "gen7",
+      "shortTitle": "Ultra Sun",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2017,
+      "boxArt": "media/games/box-art/gen-07/ultra-sun.webp",
+      "family": "gen7"
+    },
+    {
+      "id": "ultra-moon",
+      "title": "Pokémon Ultra Moon",
+      "generation": "gen7",
+      "shortTitle": "Ultra Moon",
+      "platform": "Nintendo 3DS",
+      "releaseYear": 2017,
+      "boxArt": "media/games/box-art/gen-07/ultra-moon.webp",
+      "family": "gen7"
+    },
+    {
+      "id": "lets-go-pikachu",
+      "title": "Pokémon: Let’s Go, Pikachu!",
+      "generation": "gen7",
+      "shortTitle": "Let’s Go Pikachu",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2018,
+      "boxArt": "media/games/box-art/gen-07/lets-go-pikachu.webp",
+      "family": "gen7"
+    },
+    {
+      "id": "lets-go-eevee",
+      "title": "Pokémon: Let’s Go, Eevee!",
+      "generation": "gen7",
+      "shortTitle": "Let’s Go Eevee",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2018,
+      "boxArt": "media/games/box-art/gen-07/lets-go-eevee.webp",
+      "family": "gen7"
+    },
+    {
+      "id": "sword",
+      "title": "Pokémon Sword",
+      "generation": "gen8",
+      "shortTitle": "Sword",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2019,
+      "boxArt": "media/games/box-art/gen-08/sword.webp",
+      "family": "gen8"
+    },
+    {
+      "id": "shield",
+      "title": "Pokémon Shield",
+      "generation": "gen8",
+      "shortTitle": "Shield",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2019,
+      "boxArt": "media/games/box-art/gen-08/shield.webp",
+      "family": "gen8"
+    },
+    {
+      "id": "brilliant-diamond",
+      "title": "Pokémon Brilliant Diamond",
+      "generation": "gen8",
+      "shortTitle": "Brilliant Diamond",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2021,
+      "boxArt": "media/games/box-art/gen-08/brilliant-diamond.webp",
+      "family": "gen8"
+    },
+    {
+      "id": "shining-pearl",
+      "title": "Pokémon Shining Pearl",
+      "generation": "gen8",
+      "shortTitle": "Shining Pearl",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2021,
+      "boxArt": "media/games/box-art/gen-08/shining-pearl.webp",
+      "family": "gen8"
+    },
+    {
+      "id": "legends-arceus",
+      "title": "Pokémon Legends: Arceus",
+      "generation": "gen8",
+      "shortTitle": "Legends Arceus",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2022,
+      "boxArt": "media/games/box-art/gen-08/legends-arceus.webp",
+      "family": "gen8"
+    },
+    {
+      "id": "scarlet",
+      "title": "Pokémon Scarlet",
+      "generation": "gen9",
+      "shortTitle": "Scarlet",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2022,
+      "boxArt": "media/games/box-art/gen-09/scarlet.webp",
+      "family": "gen9"
+    },
+    {
+      "id": "violet",
+      "title": "Pokémon Violet",
+      "generation": "gen9",
+      "shortTitle": "Violet",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2022,
+      "boxArt": "media/games/box-art/gen-09/violet.webp",
+      "family": "gen9"
+    },
+    {
+      "id": "legends-za",
+      "title": "Pokémon Legends: Z-A",
+      "generation": "gen9",
+      "shortTitle": "Legends Z-A",
+      "platform": "Nintendo Switch",
+      "releaseYear": 2025,
+      "boxArt": "media/games/box-art/gen-09/legends-za.webp",
+      "family": "gen9"
+    }
   ],
   "routes": [
     {
-      "id": "route-gen1-resort-roundtrip",
+      "id": "gen1-gen1",
       "from": "gen1",
-      "to": "resort",
-      "status": "working",
-      "roundTrip": true,
-      "summary": "Round-trip route is represented as fully working in the current planning state.",
-      "knownIssues": [],
-      "testCoverage": "Baseline tests complete",
+      "to": "gen1",
+      "status": "green",
+      "title": "Generation I → Resort → Generation I",
+      "summary": "Generation I self round-trip is documented as working.",
+      "lastUpdated": "2026-05-28",
+      "coverage": "Working",
       "relatedBugs": [],
-      "lastUpdated": "2026-05-25"
+      "tests": [
+        {
+          "label": "Document transfer into the resort",
+          "done": false
+        },
+        {
+          "label": "Document return to the same generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen2-resort-roundtrip",
+      "id": "gen1-gen2",
+      "from": "gen1",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen I → Gen II → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen1-gen3",
+      "from": "gen1",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen I → Gen III → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen1-gen4",
+      "from": "gen1",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen I → Gen IV → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen1-gen5",
+      "from": "gen1",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen I → Gen V → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen1-gen6",
+      "from": "gen1",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen I → Gen VI → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen1-gen7",
+      "from": "gen1",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen I → Gen VII → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen1-gen8",
+      "from": "gen1",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen I → Gen VIII → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen1-gen9",
+      "from": "gen1",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen I → Gen IX → Gen I",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen1",
       "from": "gen2",
-      "to": "resort",
-      "status": "broken",
-      "roundTrip": true,
-      "summary": "Gen 2 self travel currently does not complete a clean game → resort → game round trip.",
-      "knownIssues": ["Self travel return path fails"],
-      "testCoverage": "Needs reproduction matrix",
-      "relatedBugs": ["BUG-TRANSFER-GEN2-001"],
-      "lastUpdated": "2026-05-25"
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen II → Gen I → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen3-resort-roundtrip",
+      "id": "gen2-gen2",
+      "from": "gen2",
+      "to": "gen2",
+      "status": "red",
+      "title": "Generation II → Resort → Generation II",
+      "summary": "Generation II self round-trip is currently marked as not working based on the existing project compatibility notes.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Known failure",
+      "relatedBugs": [
+        "BUG-TRANSFER-GEN2-SELF"
+      ],
+      "tests": [
+        {
+          "label": "Route has been identified as failing round-trip behavior",
+          "done": true
+        },
+        {
+          "label": "Capture failure notes and reproduction details",
+          "done": false
+        },
+        {
+          "label": "Link the route to a dedicated bug entry",
+          "done": false
+        },
+        {
+          "label": "Retest after transfer-path fixes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen3",
+      "from": "gen2",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen II → Gen III → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen4",
+      "from": "gen2",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen II → Gen IV → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen5",
+      "from": "gen2",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen II → Gen V → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen6",
+      "from": "gen2",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen II → Gen VI → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen7",
+      "from": "gen2",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen II → Gen VII → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen8",
+      "from": "gen2",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen II → Gen VIII → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen2-gen9",
+      "from": "gen2",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen II → Gen IX → Gen II",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen1",
       "from": "gen3",
-      "to": "resort",
-      "status": "testing",
-      "roundTrip": true,
-      "summary": "The route is available in the ontology but needs more structured round-trip tests.",
-      "knownIssues": [],
-      "testCoverage": "Partial",
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen III → Gen I → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
       "relatedBugs": [],
-      "lastUpdated": "2026-05-25"
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen4-resort-roundtrip",
+      "id": "gen3-gen2",
+      "from": "gen3",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen III → Gen II → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen3",
+      "from": "gen3",
+      "to": "gen3",
+      "status": "green",
+      "title": "Generation III → Resort → Generation III",
+      "summary": "Generation III self round-trip is documented as working.",
+      "lastUpdated": "2026-05-28",
+      "coverage": "Working",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Document transfer into the resort",
+          "done": false
+        },
+        {
+          "label": "Document return to the same generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen4",
+      "from": "gen3",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen III → Gen IV → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen5",
+      "from": "gen3",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen III → Gen V → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen6",
+      "from": "gen3",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen III → Gen VI → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen7",
+      "from": "gen3",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen III → Gen VII → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen8",
+      "from": "gen3",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen III → Gen VIII → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen3-gen9",
+      "from": "gen3",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen III → Gen IX → Gen III",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen1",
       "from": "gen4",
-      "to": "resort",
-      "status": "working",
-      "roundTrip": true,
-      "summary": "Round-trip compatibility is considered stable in the current test notes.",
-      "knownIssues": [],
-      "testCoverage": "Core cases complete",
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen IV → Gen I → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
       "relatedBugs": [],
-      "lastUpdated": "2026-05-25"
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen5-resort-roundtrip",
+      "id": "gen4-gen2",
+      "from": "gen4",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen IV → Gen II → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen3",
+      "from": "gen4",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen IV → Gen III → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen4",
+      "from": "gen4",
+      "to": "gen4",
+      "status": "green",
+      "title": "Generation IV → Resort → Generation IV",
+      "summary": "Generation IV self round-trip is documented as working.",
+      "lastUpdated": "2026-05-28",
+      "coverage": "Working",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Document transfer into the resort",
+          "done": false
+        },
+        {
+          "label": "Document return to the same generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen5",
+      "from": "gen4",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen IV → Gen V → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen6",
+      "from": "gen4",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen IV → Gen VI → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen7",
+      "from": "gen4",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen IV → Gen VII → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen8",
+      "from": "gen4",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen IV → Gen VIII → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen4-gen9",
+      "from": "gen4",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen IV → Gen IX → Gen IV",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen1",
       "from": "gen5",
-      "to": "resort",
-      "status": "working",
-      "roundTrip": true,
-      "summary": "No active blockers listed for the Gen 5 round trip path.",
-      "knownIssues": [],
-      "testCoverage": "Core cases complete",
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen V → Gen I → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
       "relatedBugs": [],
-      "lastUpdated": "2026-05-25"
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen6-resort-roundtrip",
+      "id": "gen5-gen2",
+      "from": "gen5",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen V → Gen II → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen3",
+      "from": "gen5",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen V → Gen III → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen4",
+      "from": "gen5",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen V → Gen IV → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen5",
+      "from": "gen5",
+      "to": "gen5",
+      "status": "green",
+      "title": "Generation V → Resort → Generation V",
+      "summary": "Generation V self round-trip is documented as working.",
+      "lastUpdated": "2026-05-28",
+      "coverage": "Working",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Document transfer into the resort",
+          "done": false
+        },
+        {
+          "label": "Document return to the same generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen6",
+      "from": "gen5",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen V → Gen VI → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen7",
+      "from": "gen5",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen V → Gen VII → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen8",
+      "from": "gen5",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen V → Gen VIII → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen5-gen9",
+      "from": "gen5",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen V → Gen IX → Gen V",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen1",
       "from": "gen6",
-      "to": "resort",
-      "status": "working",
-      "roundTrip": true,
-      "summary": "Current route is green while test coverage continues expanding.",
-      "knownIssues": [],
-      "testCoverage": "Core cases complete",
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen VI → Gen I → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
       "relatedBugs": [],
-      "lastUpdated": "2026-05-25"
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen7-resort-roundtrip",
+      "id": "gen6-gen2",
+      "from": "gen6",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen VI → Gen II → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen3",
+      "from": "gen6",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen VI → Gen III → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen4",
+      "from": "gen6",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen VI → Gen IV → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen5",
+      "from": "gen6",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen VI → Gen V → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen6",
+      "from": "gen6",
+      "to": "gen6",
+      "status": "green",
+      "title": "Generation VI → Resort → Generation VI",
+      "summary": "Generation VI self round-trip is documented as working.",
+      "lastUpdated": "2026-05-28",
+      "coverage": "Working",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Document transfer into the resort",
+          "done": false
+        },
+        {
+          "label": "Document return to the same generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen7",
+      "from": "gen6",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen VI → Gen VII → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen8",
+      "from": "gen6",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen VI → Gen VIII → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen6-gen9",
+      "from": "gen6",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen VI → Gen IX → Gen VI",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen1",
       "from": "gen7",
-      "to": "resort",
-      "status": "broken",
-      "roundTrip": true,
-      "summary": "Gen 7 self travel has known round-trip failures and remains a priority bug area.",
-      "knownIssues": ["Return to source game fails in self-travel flow"],
-      "testCoverage": "Reproduction in progress",
-      "relatedBugs": ["BUG-TRANSFER-GEN7-001"],
-      "lastUpdated": "2026-05-25"
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen VII → Gen I → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen8-resort-roundtrip",
+      "id": "gen7-gen2",
+      "from": "gen7",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen VII → Gen II → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen3",
+      "from": "gen7",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen VII → Gen III → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen4",
+      "from": "gen7",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen VII → Gen IV → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen5",
+      "from": "gen7",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen VII → Gen V → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen6",
+      "from": "gen7",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen VII → Gen VI → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen7",
+      "from": "gen7",
+      "to": "gen7",
+      "status": "red",
+      "title": "Generation VII → Resort → Generation VII",
+      "summary": "Generation VII self round-trip is currently marked as not working based on the existing project compatibility notes.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Known failure",
+      "relatedBugs": [
+        "BUG-TRANSFER-GEN7-SELF"
+      ],
+      "tests": [
+        {
+          "label": "Route has been identified as failing round-trip behavior",
+          "done": true
+        },
+        {
+          "label": "Capture failure notes and reproduction details",
+          "done": false
+        },
+        {
+          "label": "Link the route to a dedicated bug entry",
+          "done": false
+        },
+        {
+          "label": "Retest after transfer-path fixes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen8",
+      "from": "gen7",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen VII → Gen VIII → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen7-gen9",
+      "from": "gen7",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen VII → Gen IX → Gen VII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen1",
       "from": "gen8",
-      "to": "resort",
-      "status": "working",
-      "roundTrip": true,
-      "summary": "Current Gen 8 round trip path is marked as working.",
-      "knownIssues": [],
-      "testCoverage": "Core cases complete",
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen VIII → Gen I → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
       "relatedBugs": [],
-      "lastUpdated": "2026-05-25"
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
     },
     {
-      "id": "route-gen9-resort-roundtrip",
-      "from": "gen9",
-      "to": "resort",
-      "status": "testing",
-      "roundTrip": true,
-      "summary": "Gen 9 needs a broader test matrix before it can move to fully working.",
-      "knownIssues": [],
-      "testCoverage": "More tests needed",
+      "id": "gen8-gen2",
+      "from": "gen8",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen VIII → Gen II → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
       "relatedBugs": [],
-      "lastUpdated": "2026-05-25"
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen3",
+      "from": "gen8",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen VIII → Gen III → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen4",
+      "from": "gen8",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen VIII → Gen IV → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen5",
+      "from": "gen8",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen VIII → Gen V → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen6",
+      "from": "gen8",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen VIII → Gen VI → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen7",
+      "from": "gen8",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen VIII → Gen VII → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen8",
+      "from": "gen8",
+      "to": "gen8",
+      "status": "green",
+      "title": "Generation VIII → Resort → Generation VIII",
+      "summary": "Generation VIII self round-trip is documented as working.",
+      "lastUpdated": "2026-05-28",
+      "coverage": "Working",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Document transfer into the resort",
+          "done": false
+        },
+        {
+          "label": "Document return to the same generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen8-gen9",
+      "from": "gen8",
+      "to": "gen9",
+      "status": "gray",
+      "title": "Gen VIII → Gen IX → Gen VIII",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen1",
+      "from": "gen9",
+      "to": "gen1",
+      "status": "gray",
+      "title": "Gen IX → Gen I → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen2",
+      "from": "gen9",
+      "to": "gen2",
+      "status": "gray",
+      "title": "Gen IX → Gen II → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen3",
+      "from": "gen9",
+      "to": "gen3",
+      "status": "gray",
+      "title": "Gen IX → Gen III → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen4",
+      "from": "gen9",
+      "to": "gen4",
+      "status": "gray",
+      "title": "Gen IX → Gen IV → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen5",
+      "from": "gen9",
+      "to": "gen5",
+      "status": "gray",
+      "title": "Gen IX → Gen V → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen6",
+      "from": "gen9",
+      "to": "gen6",
+      "status": "gray",
+      "title": "Gen IX → Gen VI → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen7",
+      "from": "gen9",
+      "to": "gen7",
+      "status": "gray",
+      "title": "Gen IX → Gen VII → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen8",
+      "from": "gen9",
+      "to": "gen8",
+      "status": "gray",
+      "title": "Gen IX → Gen VIII → Gen IX",
+      "summary": "Directional cross-generation route is untested. Status will be updated after round-trip evidence is recorded.",
+      "lastUpdated": "2026-05-25",
+      "coverage": "Untested",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Transfer origin generation into resort",
+          "done": false
+        },
+        {
+          "label": "Transfer from resort to target generation",
+          "done": false
+        },
+        {
+          "label": "Return route back to origin generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases and save-data notes",
+          "done": false
+        }
+      ]
+    },
+    {
+      "id": "gen9-gen9",
+      "from": "gen9",
+      "to": "gen9",
+      "status": "green",
+      "title": "Generation IX → Resort → Generation IX",
+      "summary": "Generation IX self round-trip is documented as working.",
+      "lastUpdated": "2026-05-28",
+      "coverage": "Working",
+      "relatedBugs": [],
+      "tests": [
+        {
+          "label": "Document transfer into the resort",
+          "done": false
+        },
+        {
+          "label": "Document return to the same generation",
+          "done": false
+        },
+        {
+          "label": "Record edge cases",
+          "done": false
+        }
+      ]
     }
-  ]
+  ],
+  "layout": {
+    "gen1": {
+      "x": 490,
+      "y": 100,
+      "angle": -1.5708
+    },
+    "gen2": {
+      "x": 647.48,
+      "y": 157.32,
+      "angle": -0.8727
+    },
+    "gen3": {
+      "x": 731.28,
+      "y": 302.46,
+      "angle": -0.1745
+    },
+    "gen4": {
+      "x": 702.18,
+      "y": 467.5,
+      "angle": 0.5236
+    },
+    "gen5": {
+      "x": 573.79,
+      "y": 575.22,
+      "angle": 1.2217
+    },
+    "gen6": {
+      "x": 406.21,
+      "y": 575.22,
+      "angle": 1.9199
+    },
+    "gen7": {
+      "x": 277.82,
+      "y": 467.5,
+      "angle": 2.618
+    },
+    "gen8": {
+      "x": 248.72,
+      "y": 302.46,
+      "angle": 3.3161
+    },
+    "gen9": {
+      "x": 332.52,
+      "y": 157.32,
+      "angle": 4.0143
+    }
+  },
+  "defaults": {
+    "routeFilter": "all"
+  }
 }

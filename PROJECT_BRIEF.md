@@ -1,68 +1,62 @@
-# Project Brief for AI Agents and Contributors
+# Project Brief for Future AI Agents
 
-## Product vision
+You are working on a static GitHub Pages app for an unofficial, non-commercial Pokémon Concierge-inspired fan research and game-development project.
 
-Build a public fan research and development hub that feels like a cozy resort landing page on the surface and a serious production atlas underneath.
+## Product intent
 
-The site should make visitors feel like they have arrived at a lovingly maintained resort operations desk:
+Build a beautiful resort-themed public portal that feels like a polished tropical resort website while functioning as a serious public research archive and development operations board.
 
-- Beautiful, calm, sunny, readable.
-- Public and transparent without comments or chaos.
-- Clearly unofficial and non-commercial.
-- Easy to update through local data files and the local admin tool.
+The public site is not a blog and not a comments platform. It is a curated, data-driven display of research, game progress, compatibility status, internal bugs, curated community issue links, milestone timeline items, models, sprites, and media.
 
-## Core experience
+## Core principles
 
-1. **Front Desk** gives the visitor the current project state at a glance.
-2. **Research Atlas** lets the visitor click places on the island model and understand evidence, confidence, asset needs, and linked work.
-3. **Compatibility Lab** shows transfer-route ontology as a colored graph.
-4. **On-Flight Board** shows current features, subtasks, progress, and status.
-5. **Issue Desk** shows curated bugs and checklists without comments or submissions.
-6. **Source Guide** explains the repo and data model without providing game download links.
+1. Keep the public app static and safe for GitHub Pages.
+2. Do not add a hosted backend unless explicitly requested.
+3. Treat Git + JSON files as the source of truth.
+4. Keep the navigation compact.
+5. Prefer integrated sections over many tiny public pages.
+6. Make the site beautiful, readable, and mobile-friendly.
+7. Keep legal notices visible and respectful.
+8. Never commit secrets.
+9. Do not hotlink random external media.
+10. Avoid placeholder public data; use empty states and resource instructions for missing media.
 
-## Design language
+## Current public pages
 
-Use resort language instead of generic dev language where it improves clarity:
+- Home
+- Island Atlas
+- Compatibility Ontology
+- Operations
+- Milestones
+- Source Guide
+- Legal
 
-- Front Desk = status overview
-- Research Atlas = island reconstruction research
-- Compatibility Lab = transfer testing
-- On-Flight Board = active feature work
-- Issue Desk = bug tracker
-- Landed = complete
-- Boarding Soon = queued
+## Most important interaction
 
-The UI should feel like a sunny resort brochure mixed with an operations board: soft cards, glass panels, water/sand colors, gentle motion, clear status labels.
+The Compatibility Ontology must remain stable and smooth:
 
-## Legal guardrails
+- Hover must not recalculate layout.
+- Nodes must not jump.
+- Routes must not reset positions.
+- Lines are directional and mostly straight; self-loops arc outward and use Resort as the middle point in labels.
+- Each visible line should have a larger invisible hit path for easy clicking.
+- Dragging must update only the moved node and its connected lines.
+- Focus mode should center the selected generation and arrange the rest around it.
+- Self-loops should arc outward from the node.
+- Mobile users need both graph and route-list fallback.
 
-Keep visible notices that this is:
+## Local tool intent
 
-- Unofficial.
-- Non-commercial.
-- Made by fans, for fans.
-- Not affiliated with rights holders.
-- Not accepting donations in any form.
-- Reusing only original project-made code/assets with credit.
-- Treating official/reference material as owned by its respective rights holders.
+The local Operations Desk is the private staff console. It should make updates feel inviting:
 
-Do not add donation links, download links, comments, or public upload forms.
+- edit route statuses
+- update bugs and checklists
+- update feature progress
+- update POIs and model coordinates
+- update game box-art paths
+- update milestones
+- update ideas
+- validate data
+- publish through local Git credentials
 
-## Technical architecture
-
-- Static frontend: Vite + React + Three.js.
-- Hosting: GitHub Pages.
-- Data source: JSON files in `public/data`.
-- Local admin: Node + Express server in `tools/admin`.
-- Publishing: local Git credentials, not frontend secrets.
-- Secrets: `.env.local` only, ignored by Git.
-
-## Fine-tuning rule
-
-Before editing `src/styles.css`, try changing:
-
-- `public/data/homepage.json`
-- `public/data/theme.json`
-- `public/data/site.json`
-
-The site should remain easy to evolve through data and small config changes.
+Do not turn this into a public admin panel.

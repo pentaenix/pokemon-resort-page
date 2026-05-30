@@ -1,128 +1,127 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const root = path.resolve(__dirname, '..');
-const dataDir = path.join(root, 'public/data');
-const asJson = process.argv.includes('--json');
-const errors = [];
-const warnings = [];
-
-async function read(name) {
-  try {
-    return JSON.parse(await fs.readFile(path.join(dataDir, `${name}.json`), 'utf8'));
-  } catch (error) {
-    errors.push(`Could not parse ${name}.json: ${error.message}`);
-    return null;
-  }
-}
-
-function uniqueIds(items = [], label) {
+const root = resolve(new URL('..', import.meta.url).pathname);
+const dataRoot = join(root, 'public/data');
+const load = async (file) => JSON.parse(await readFile(join(dataRoot, file), 'utf8'));
+const fail = (message) => { throw new Error(message); };
+const assert = (condition, message) => { if (!condition) fail(message); };
+const unique = (items, label) => {
   const seen = new Set();
   for (const item of items) {
-    if (!item.id) errors.push(`${label} is missing an id.`);
-    else if (seen.has(item.id)) errors.push(`Duplicate ${label} id: ${item.id}`);
+    assert(item.id, `${label} is missing id`);
+    assert(!seen.has(item.id), `Duplicate ${label} id: ${item.id}`);
     seen.add(item.id);
   }
-}
+  return seen;
+};
 
-function requireFields(item, fields, label) {
-  for (const field of fields) {
-    if (item[field] === undefined || item[field] === null || item[field] === '') {
-      errors.push(`${label} ${item.id || item.title || item.name || ''} is missing ${field}.`);
+try {
+  const [site, homepage, theme, research, compatibility, features, bugs, gallery, models, characters, roadmap, ideas] = await Promise.all([
+    'site.json','homepage.json','theme.json','research-pois.json','compatibility.json','features.json','bugs.json','gallery.json','models.json','characters.json','roadmap.json','ideas.json'
+  ].map(load));
+
+  assert(site.projectName && site.logo, 'site.json requires projectName and logo');
+  assert(Array.isArray(site.legalFull) && site.legalFull.length >= 4, 'site.json legalFull needs the full legal notice');
+  assert(homepage.hero?.headline && homepage.navCards?.length, 'homepage.json needs hero and navCards');
+  assert(theme.motion, 'theme.json requires motion');
+
+  const genIds = unique(compatibility.generations || [], 'generation');
+  unique(compatibility.games || [], 'game');
+  for (const game of compatibility.games) {
+    assert(genIds.has(game.generation), `Game ${game.id} points to unknown generation ${game.generation}`);
+    assert(game.boxArt, `Game ${game.id} needs a boxArt path`);
+  }
+  const routeIds = unique(compatibility.routes || [], 'route');
+  for (const route of compatibility.routes) {
+    assert(genIds.has(route.from), `Route ${route.id} has unknown from ${route.from}`);
+    assert(genIds.has(route.to), `Route ${route.id} has unknown to ${route.to}`);
+    assert(compatibility.statuses[route.status], `Route ${route.id} has unknown status ${route.status}`);
+    assert(Array.isArray(route.tests), `Route ${route.id} requires tests`);
+  }
+  for (const from of genIds) for (const to of genIds) assert(routeIds.has(`${from}-${to}`), `Missing route ${from}-${to}`);
+
+  const featureIds = unique(features.features || [], 'feature');
+  assert(Array.isArray(features.stages) && features.stages.length, 'features.json requires stages');
+  for (const feature of features.features) {
+    assert(features.stages.includes(feature.stage), `Feature ${feature.id} uses unknown stage ${feature.stage}`);
+    assert(Number.isFinite(Number(feature.progress)) && feature.progress >= 0 && feature.progress <= 100, `Feature ${feature.id} progress must be 0–100`);
+    assert(Array.isArray(feature.tasks), `Feature ${feature.id} requires tasks`);
+    for (const route of feature.linkedRoutes || []) assert(routeIds.has(route), `Feature ${feature.id} links to unknown route ${route}`);
+    if (feature.images) {
+      assert(Array.isArray(feature.images), `Feature ${feature.id} images must be an array`);
+      for (const image of feature.images) {
+        const path = typeof image === 'string' ? image : image?.path;
+        assert(path, `Feature ${feature.id} image entry needs a path`);
+      }
+    }
+    if (feature.dossier) {
+      assert(typeof feature.dossier === 'object', `Feature ${feature.id} dossier must be an object`);
+      for (const section of feature.dossier.sections || []) {
+        for (const block of section.blocks || []) {
+          const type = block?.type;
+          assert(type, `Feature ${feature.id} dossier block needs a type`);
+          if (type === 'image' || type === 'video') assert(block.path, `Feature ${feature.id} ${type} block needs path`);
+          if (type === 'compare') assert((block.items || []).length >= 2, `Feature ${feature.id} compare block needs 2+ items`);
+          if (type === 'carousel') assert((block.images || []).length >= 2, `Feature ${feature.id} carousel block needs 2+ images`);
+          if (type === 'gallery') assert((block.images || []).length, `Feature ${feature.id} gallery block needs images`);
+        }
+      }
     }
   }
-}
 
-const site = await read('site');
-const homepage = await read('homepage');
-const theme = await read('theme');
-const atlas = await read('research-pois');
-const compatibility = await read('compatibility');
-const features = await read('features');
-const bugs = await read('bugs');
-
-if (site) {
-  requireFields(site, ['projectName', 'tagline', 'legal'], 'site');
-  if (!site.legal?.fullNotice?.includes('No donations') && !site.legal?.noDonations) {
-    warnings.push('Legal copy should clearly say no donations are accepted.');
-  }
-}
-
-if (homepage) {
-  requireFields(homepage, ['hero', 'cards'], 'homepage');
-  if (!homepage.hero?.logo) errors.push('homepage.hero.logo is required.');
-}
-
-if (theme && !theme.customProperties) warnings.push('theme.json has no customProperties object.');
-
-if (atlas) {
-  uniqueIds(atlas.pois, 'POI');
-  for (const poi of atlas.pois || []) {
-    requireFields(poi, ['name', 'type', 'confidence', 'position', 'summary'], 'POI');
-    if (!Array.isArray(poi.position) || poi.position.length !== 3 || poi.position.some((n) => Number.isNaN(Number(n)))) {
-      errors.push(`POI ${poi.id} must have a numeric [x, y, z] position.`);
+  const bugIds = unique(bugs.bugs || [], 'bug');
+  assert(Array.isArray(bugs.statuses), 'bugs.json requires statuses');
+  assert(Array.isArray(bugs.severities), 'bugs.json requires severities');
+  for (const bug of bugs.bugs) {
+    assert(bugs.statuses.includes(bug.status), `Bug ${bug.id} uses unknown status ${bug.status}`);
+    assert(bugs.severities.includes(bug.severity), `Bug ${bug.id} uses unknown severity ${bug.severity}`);
+    if (bug.linkedFeature) assert(featureIds.has(bug.linkedFeature), `Bug ${bug.id} links to unknown feature ${bug.linkedFeature}`);
+    for (const route of bug.linkedRoutes || []) assert(routeIds.has(route), `Bug ${bug.id} links to unknown route ${route}`);
+    assert(Array.isArray(bug.checklist), `Bug ${bug.id} requires checklist`);
+    if (bug.images) {
+      assert(Array.isArray(bug.images), `Bug ${bug.id} images must be an array`);
+      for (const image of bug.images) {
+        const path = typeof image === 'string' ? image : image?.path;
+        assert(path, `Bug ${bug.id} image entry needs a path`);
+      }
     }
-    if (!Array.isArray(poi.assetNeeds)) warnings.push(`POI ${poi.id} should include assetNeeds.`);
   }
-}
 
-const featureIds = new Set(features?.items?.map((item) => item.id) || []);
-const bugIds = new Set(bugs?.items?.map((item) => item.id) || []);
-const poiIds = new Set(atlas?.pois?.map((item) => item.id) || []);
+  const poiIds = unique(research.pois || [], 'POI');
+  for (const feature of features.features) {
+    if (feature.dossier?.map?.poiId) assert(poiIds.has(feature.dossier.map.poiId), `Feature ${feature.id} dossier map links to unknown POI ${feature.dossier.map.poiId}`);
+  }
+  for (const poi of research.pois) {
+    assert(Array.isArray(poi.position) && poi.position.length === 3, `POI ${poi.id} position must be [x,y,z]`);
+    assert(Array.isArray(poi.assetNeeds), `POI ${poi.id} assetNeeds must be an array`);
+    for (const id of poi.linkedFeatures || []) assert(featureIds.has(id), `POI ${poi.id} links to unknown feature ${id}`);
+    for (const id of poi.relatedBugs || []) assert(bugIds.has(id), `POI ${poi.id} links to unknown bug ${id}`);
+  }
 
-if (features) {
-  uniqueIds(features.items, 'feature');
-  const stages = new Set(features.stages?.map((stage) => stage.id) || []);
-  for (const feature of features.items || []) {
-    requireFields(feature, ['title', 'stage', 'progress', 'tasks'], 'feature');
-    if (!stages.has(feature.stage)) errors.push(`Feature ${feature.id} uses unknown stage: ${feature.stage}`);
-    if (Number(feature.progress) < 0 || Number(feature.progress) > 100) errors.push(`Feature ${feature.id} progress must be 0-100.`);
-    for (const bugId of feature.linkedBugs || []) if (!bugIds.has(bugId)) warnings.push(`Feature ${feature.id} links to unknown bug ${bugId}.`);
-    for (const poiId of feature.linkedResearch || []) if (!poiIds.has(poiId)) warnings.push(`Feature ${feature.id} links to unknown POI ${poiId}.`);
+  unique(gallery.items || [], 'gallery item');
+  for (const item of gallery.items || []) {
+    assert(item.title && item.src, `Gallery item ${item.id} needs title and src`);
   }
-}
 
-if (compatibility) {
-  uniqueIds(compatibility.games, 'game');
-  uniqueIds(compatibility.routes, 'route');
-  const gameIds = new Set(compatibility.games.map((game) => game.id));
-  const statuses = new Set(compatibility.legend.map((item) => item.status));
-  for (const route of compatibility.routes || []) {
-    requireFields(route, ['from', 'to', 'status', 'summary'], 'route');
-    if (!gameIds.has(route.from)) errors.push(`Route ${route.id} points from unknown game ${route.from}.`);
-    if (!gameIds.has(route.to)) errors.push(`Route ${route.id} points to unknown game ${route.to}.`);
-    if (!statuses.has(route.status)) errors.push(`Route ${route.id} uses unknown status ${route.status}.`);
-    for (const bugId of route.relatedBugs || []) if (!bugIds.has(bugId)) warnings.push(`Route ${route.id} links to unknown bug ${bugId}.`);
+  assert(models.mainModel?.file, 'models.json requires mainModel.file');
+  unique(models.submodels || [], 'submodel');
+  for (const model of models.submodels || []) {
+    if (model.relatedPoi) assert(poiIds.has(model.relatedPoi), `Model ${model.id} links to unknown POI ${model.relatedPoi}`);
   }
-}
 
-if (bugs) {
-  uniqueIds(bugs.items, 'bug');
-  const statuses = new Set(bugs.statuses || []);
-  const severities = new Set(bugs.severities || []);
-  for (const bug of bugs.items || []) {
-    requireFields(bug, ['title', 'status', 'severity', 'area', 'summary', 'checklist'], 'bug');
-    if (!statuses.has(bug.status)) errors.push(`Bug ${bug.id} uses unknown status ${bug.status}.`);
-    if (!severities.has(bug.severity)) errors.push(`Bug ${bug.id} uses unknown severity ${bug.severity}.`);
-    if (bug.linkedFeature && !featureIds.has(bug.linkedFeature)) warnings.push(`Bug ${bug.id} links to unknown feature ${bug.linkedFeature}.`);
-  }
-}
+  unique(characters.seriesCharacters || [], 'series character');
+  unique(characters.plannedVisitors || [], 'planned visitor');
+  assert(Array.isArray(characters.spriteRequirements), 'characters.json requires spriteRequirements');
 
-const result = { ok: errors.length === 0, errors, warnings };
-if (asJson) {
-  console.log(JSON.stringify(result, null, 2));
-} else {
-  if (errors.length) {
-    console.error('Data validation failed:');
-    errors.forEach((error) => console.error(`- ${error}`));
-  }
-  if (warnings.length) {
-    console.warn('Warnings:');
-    warnings.forEach((warning) => console.warn(`- ${warning}`));
-  }
-  if (!errors.length) console.log('Data validation passed.');
+  const roadmapItems = Array.isArray(roadmap.milestones) ? roadmap.milestones : (roadmap.horizons || []).flatMap((horizon) => horizon.items || []);
+  assert(Array.isArray(roadmapItems), 'roadmap.json requires milestones or horizons');
+  const milestoneIds = unique(roadmapItems.map((item, index) => ({ ...item, id: item.id || `roadmap-${index}` })), 'roadmap milestone');
+  if (roadmap.currentMilestoneId) assert(milestoneIds.has(roadmap.currentMilestoneId), `currentMilestoneId points to unknown milestone ${roadmap.currentMilestoneId}`);
+  unique(ideas.items || [], 'idea');
+
+  console.log('Data validation passed.');
+} catch (error) {
+  console.error(`Data validation failed: ${error.message}`);
+  process.exit(1);
 }
-process.exit(errors.length ? 1 : 0);
