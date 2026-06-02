@@ -52,6 +52,9 @@ export function parseMultipart(buffer, contentType) {
 export function groupFolderUpload(parts) {
   const files = [];
   let modelId = '';
+  let displayName = '';
+  let defaultYawDeg = '';
+  let defaultScale = '';
   let archive = null;
   let glb = null;
   let glbName = '';
@@ -59,6 +62,18 @@ export function groupFolderUpload(parts) {
   for (const part of parts) {
     if (part.name === 'modelId' && part.bytes.length) {
       modelId = part.bytes.toString('utf8').trim();
+      continue;
+    }
+    if (part.name === 'displayName' && part.bytes.length) {
+      displayName = part.bytes.toString('utf8').trim();
+      continue;
+    }
+    if (part.name === 'defaultYawDeg' && part.bytes.length) {
+      defaultYawDeg = part.bytes.toString('utf8').trim();
+      continue;
+    }
+    if (part.name === 'defaultScale' && part.bytes.length) {
+      defaultScale = part.bytes.toString('utf8').trim();
       continue;
     }
     if (part.name === 'archive' || (part.filename && /\.zip$/i.test(part.filename))) {
@@ -76,5 +91,5 @@ export function groupFolderUpload(parts) {
     files.push({ relativePath, name: relativePath, bytes: Buffer.from(part.bytes) });
   }
 
-  return { modelId, files, archive, glb, glbName };
+  return { modelId, displayName, defaultYawDeg, defaultScale, files, archive, glb, glbName };
 }

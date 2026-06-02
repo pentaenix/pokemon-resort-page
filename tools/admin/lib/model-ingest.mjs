@@ -1,6 +1,9 @@
 import { basename } from 'node:path';
 import { unzipArchive } from './zip-assets.mjs';
 import { ingestGlbBuffer } from './glb-ingest.mjs';
+import { sanitizeModelId } from './model-id.mjs';
+
+export { sanitizeModelId } from './model-id.mjs';
 import { convertObjZipToGlb } from './obj-to-glb.mjs';
 import { findObjAndMtl, resolveTextureForMaterial } from './asset-resolve.mjs';
 
@@ -90,32 +93,42 @@ export function inspectUploadedFiles(files) {
   };
 }
 
-export async function ingestUploadedFiles(files, modelIdHint = '') {
+function ingestMeta(meta = {}) {
+  return {
+    displayName: meta.displayName,
+    defaultYawDeg: meta.defaultYawDeg,
+    defaultScale: meta.defaultScale,
+  };
+}
+
+export async function ingestUploadedFiles(files, modelIdHint = '', meta = {}) {
   const detected = detectArchiveFormat(files);
+  const im = ingestMeta(meta);
   if (detected.format === 'glb') {
     const result = ingestGlbBuffer(
       detected.file.bytes,
       modelIdHint,
       detected.file.relativePath,
+      im,
     );
     return { ...result, sourceFormat: 'glb' };
   }
   if (detected.format === 'obj') {
-    const result = await convertObjZipToGlb(files, modelIdHint);
+    const result = await convertObjZipToGlb(files, modelIdHint, im);
     return { ...result, sourceFormat: 'obj' };
   }
   throw new Error('Upload a .glb file, or a .zip with .glb or .obj+.mtl+textures.');
 }
 
 /** @param {Buffer} glbBytes */
-export function ingestGlbUpload(glbBytes, modelIdHint = '', sourceName = 'model.glb') {
-  const result = ingestGlbBuffer(glbBytes, modelIdHint, sourceName);
+export function ingestGlbUpload(glbBytes, modelIdHint = '', sourceName = 'model.glb', meta = {}) {
+  const result = ingestGlbBuffer(glbBytes, modelIdHint, sourceName, ingestMeta(meta));
   return { ...result, sourceFormat: 'glb' };
 }
 
-export async function ingestUploadArchive(buffer, modelIdHint = '') {
+export async function ingestUploadArchive(buffer, modelIdHint = '', meta = {}) {
   const files = unzipArchive(buffer);
-  return ingestUploadedFiles(files, modelIdHint);
+  return ingestUploadedFiles(files, modelIdHint, meta);
 }
 
 export function inspectUploadArchive(buffer) {

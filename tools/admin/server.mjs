@@ -9,7 +9,9 @@ import {
   ingestGlbUpload,
   inspectUploadArchive,
   inspectGlbUpload,
+  sanitizeModelId,
 } from './lib/model-ingest.mjs';
+import { isValidModelId } from './lib/model-id.mjs';
 import { readRawBody, parseMultipart, groupFolderUpload } from './lib/multipart.mjs';
 import { ingestGlbBuffer } from './lib/glb-ingest.mjs';
 import { reorientGlbBuffer } from './lib/reorient-glb.mjs';
@@ -134,6 +136,8 @@ async function listOverworldModels(settings) {
       triangleCount: manifest.triangleCount || 0,
       modelHash: manifest.modelHash || null,
       aabb: manifest.aabb || null,
+      defaultYawDeg: manifest.defaultYawDeg ?? 0,
+      defaultScale: manifest.defaultScale ?? 1,
     });
   }
   models.sort((a, b) => a.id.localeCompare(b.id));
@@ -142,8 +146,10 @@ async function listOverworldModels(settings) {
 
 async function writeIngestedModel(settings, ingestResult) {
   const { modelId, buffer, manifest } = ingestResult;
-  const safeId = modelId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  if (!safeId) throw new Error('Invalid model id.');
+  const safeId = sanitizeModelId(modelId);
+  if (!isValidModelId(safeId)) {
+    throw new Error('Invalid model id — use letters, numbers, underscore, or hyphen (e.g. pokemon_center).');
+  }
   const { target } = resolveModelsDirectory(settings, safeId);
   const { mkdir } = await import('node:fs/promises');
   await mkdir(target, { recursive: true });
@@ -513,6 +519,38 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { ok: false, error: error.message });
       }
     }
+    if (url.pathname === '/api/overworld-models/meta' && req.method === 'POST') {
+      const settings = await readMapSettings();
+      try {
+        const raw = await readBody(req);
+        const payload = raw?.trim() ? JSON.parse(raw) : {};
+        const id = payload?.id;
+        if (!id) return json(res, 400, { ok: false, error: 'id is required' });
+        const safe = sanitizeModelId(id);
+        if (!isValidModelId(safe)) return json(res, 400, { ok: false, error: 'Invalid model id.' });
+        const { target: dir } = resolveModelsDirectory(settings, safe);
+        if (!existsSync(dir)) return json(res, 404, { ok: false, error: 'Model not found' });
+        const manifestPath = join(dir, 'model.json');
+        let manifest = { id: safe, displayName: safe };
+        if (existsSync(manifestPath)) {
+          try { manifest = JSON.parse(await readFile(manifestPath, 'utf8')); } catch { /* keep */ }
+        }
+        if (typeof payload.displayName === 'string' && payload.displayName.trim()) {
+          manifest.displayName = payload.displayName.trim();
+        }
+        if (payload.defaultYawDeg !== undefined && payload.defaultYawDeg !== null) {
+          manifest.defaultYawDeg = ((Number(payload.defaultYawDeg) % 360) + 360) % 360;
+        }
+        if (payload.defaultScale !== undefined && payload.defaultScale !== null) {
+          manifest.defaultScale = Math.max(0.05, Math.min(20, Number(payload.defaultScale) || 1));
+        }
+        manifest.id = safe;
+        await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+        return json(res, 200, { ok: true, id: safe, manifest });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
     if (url.pathname === '/api/overworld-models/reorient' && req.method === 'POST') {
       const settings = await readMapSettings();
       try {
@@ -585,12 +623,28 @@ const server = http.createServer(async (req, res) => {
         }
         const raw = await readRawBody(req);
         const parts = parseMultipart(raw, contentType);
-        const { modelId, archive, glb, glbName } = groupFolderUpload(parts);
+        const {
+          modelId,
+          displayName,
+          defaultYawDeg,
+          defaultScale,
+          archive,
+          glb,
+          glbName,
+        } = groupFolderUpload(parts);
+        const safeId = sanitizeModelId(modelId);
+        if (!isValidModelId(safeId)) {
+          return json(res, 400, {
+            ok: false,
+            error: 'Model id is required — use letters, numbers, underscore, or hyphen (e.g. pokemon_center).',
+          });
+        }
+        const meta = { displayName, defaultYawDeg, defaultScale };
         let result;
         if (glb?.length) {
-          result = ingestGlbUpload(glb, modelId, glbName);
+          result = ingestGlbUpload(glb, safeId, glbName, meta);
         } else if (archive?.length) {
-          result = await ingestUploadArchive(archive, modelId);
+          result = await ingestUploadArchive(archive, safeId, meta);
         } else {
           return json(res, 400, { ok: false, error: 'Upload a .glb file or a .zip containing a .glb or OBJ+MTL+textures.' });
         }

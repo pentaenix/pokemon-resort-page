@@ -8,7 +8,7 @@ import { ingestGlbBuffer } from './glb-ingest.mjs';
  * @param {{ relativePath: string, bytes: Buffer }[]} uploadedFiles
  * @param {string} [modelIdHint]
  */
-export async function convertObjZipToGlb(uploadedFiles, modelIdHint = '') {
+export async function convertObjZipToGlb(uploadedFiles, modelIdHint = '', meta = {}) {
   const {
     modelId,
     mesh,
@@ -19,7 +19,7 @@ export async function convertObjZipToGlb(uploadedFiles, modelIdHint = '') {
 
   const glbBuffer = await exportMeshToGlb(mesh);
   const glbFile = `${modelId}.glb`;
-  const ingested = ingestGlbBuffer(glbBuffer, modelId, glbFile);
+  const ingested = ingestGlbBuffer(glbBuffer, modelId, glbFile, meta);
 
   ingested.manifest.sourceFormat = 'obj';
   ingested.manifest.convertedFromObj = true;

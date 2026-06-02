@@ -44,6 +44,93 @@ function brushLayer(brushId) {
   return BRUSHES.find((b) => b.id === brushId)?.layer;
 }
 
+function sanitizeModelId(raw) {
+  const id = String(raw || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  return id;
+}
+
+function isValidModelId(id) {
+  return Boolean(id) && id.length <= 64 && /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id);
+}
+
+function catalogEntry(editor, modelId) {
+  return (editor.modelCatalog || []).find((c) => c.id === modelId);
+}
+
+function catalogFiltered(editor) {
+  const q = (editor.modelSearch || '').trim().toLowerCase();
+  const list = editor.modelCatalog || [];
+  if (!q) return list;
+  return list.filter((m) => {
+    const name = (m.displayName || m.id).toLowerCase();
+    return name.includes(q) || m.id.toLowerCase().includes(q);
+  });
+}
+
+function placementDefaults(editor, modelOrId) {
+  const meta = typeof modelOrId === 'string' ? catalogEntry(editor, modelOrId) : modelOrId;
+  return {
+    yawDeg: Number(meta?.defaultYawDeg) || 0,
+    scale: Math.max(0.05, Math.min(20, Number(meta?.defaultScale) || 1)),
+  };
+}
+
+function findPlacementAt(editor, tx, ty) {
+  const models = editor.map?.models || [];
+  for (let i = models.length - 1; i >= 0; i -= 1) {
+    const fpc = placedModelFootprint(editor, models[i]);
+    if (tx >= fpc.tlx && tx < fpc.tlx + fpc.fw && ty >= fpc.tly && ty < fpc.tly + fpc.fd) return i;
+  }
+  return null;
+}
+
+function movePlacementToTile(editor, index, tx, ty) {
+  const mdl = editor.map?.models?.[index];
+  if (!mdl || !editor.map) return;
+  const ts = editor.map.grid?.tileSize || TILE_SIZE;
+  const hv = Math.max(0, editor.map.terrain?.height?.[ty]?.[tx] ?? 0);
+  mdl.position = [(tx + 0.5) * ts, hv * ts, (ty + 0.5) * ts];
+  editor.dirty = true;
+}
+
+function selectedPlacement(editor) {
+  const i = editor.selectedPlacementIndex;
+  if (i == null || i < 0 || !editor.map?.models?.[i]) return null;
+  return editor.map.models[i];
+}
+
+function propToolRailHtml(editor, esc) {
+  if (!editor.map) return '';
+  const sel = selectedPlacement(editor);
+  const selIdx = editor.selectedPlacementIndex;
+  const activeId = editor.placeModelId || '';
+  const meta = activeId ? catalogEntry(editor, activeId) : null;
+  const scale = sel ? (Number(sel.scale) || 1) : (meta?.defaultScale ?? 1);
+  const yaw = sel ? (Math.round(sel.yawDeg || 0)) : (Math.round(meta?.defaultYawDeg || 0));
+  return `<div class="tool-group map-prop-tools" role="group" aria-label="3D props">
+    <button type="button" class="tool-btn map-prop-tool ${!editor.propTool ? 'active' : ''}" data-prop-tool="terrain" title="Terrain brushes">🗺</button>
+    <button type="button" class="tool-btn map-prop-tool ${editor.propTool === 'select' ? 'active' : ''}" data-prop-tool="select" title="Select and drag placed props">◎</button>
+    <button type="button" class="tool-btn map-prop-tool ${editor.propTool === 'place' ? 'active' : ''}" data-prop-tool="place" title="Place props on the grid" ${activeId ? '' : 'disabled'}>＋</button>
+    ${editor.propTool === 'select' && selIdx != null ? `
+      <span class="map-prop-tool-sep"></span>
+      <button type="button" class="tool-btn map-prop-action" data-placement-rotate="-90" title="Rotate −90°">⟲</button>
+      <button type="button" class="tool-btn map-prop-action" data-placement-rotate="90" title="Rotate +90°">⟳</button>
+      <label class="map-prop-scale" title="Scale selected prop">
+        <span>Scale</span>
+        <input type="range" id="mapPlacementScale" min="0.25" max="4" step="0.05" value="${scale}">
+        <strong id="mapPlacementScaleLabel">${scale.toFixed(2)}×</strong>
+      </label>
+      <button type="button" class="tool-btn map-prop-action map-prop-action-del" data-placement-delete title="Remove selected prop">✕</button>
+    ` : ''}
+    ${editor.propTool === 'place' && activeId ? `<span class="map-prop-active-chip" title="Placing from catalog">${esc(meta?.displayName || activeId)}</span>` : ''}
+    ${editor.propTool === 'select' && sel ? `<span class="map-prop-active-chip">${esc(sel.id)} · ${yaw}° · ×${scale.toFixed(2)}</span>` : ''}
+  </div>`;
+}
+
 const PREVIEW_TOP_A = [116, 156, 190];
 const PREVIEW_TOP_B = [125, 166, 200];
 const PREVIEW_WALL_NS = [88, 117, 145];
@@ -826,9 +913,18 @@ export function ensureMapEditorState(state) {
       modelsApiHint: '',
       placeModelId: null,
       workspaceView: '2d',
+      propTool: null,
+      modelSearch: '',
+      selectedPlacementIndex: null,
+      compileDisplayName: '',
+      compileDefaultYaw: 0,
+      compileDefaultScale: 1,
     };
   }
   if (state.mapEditor.workspaceView !== '3d') state.mapEditor.workspaceView = '2d';
+  if (state.mapEditor.propTool === undefined) state.mapEditor.propTool = null;
+  if (state.mapEditor.modelSearch === undefined) state.mapEditor.modelSearch = '';
+  if (state.mapEditor.selectedPlacementIndex === undefined) state.mapEditor.selectedPlacementIndex = null;
   if (!state.mapEditor.modelCatalog) state.mapEditor.modelCatalog = [];
   if (state.mapEditor.placeModelId === undefined) state.mapEditor.placeModelId = null;
   if (!state.mapEditor.sidebarTab) state.mapEditor.sidebarTab = 'maps';
@@ -908,7 +1004,13 @@ export function mapEditorHtml(state, esc) {
         for (let xx = fpc.tlx; xx < fpc.tlx + fpc.fw; xx += 1) propFootprint.add(`${xx},${yy}`);
       }
     }
-    const placing = Boolean(editor.placeModelId);
+    const placing = editor.propTool === 'place' && Boolean(editor.placeModelId);
+    const selIdx = editor.selectedPlacementIndex;
+    let selFootprint = null;
+    if (selIdx != null && editor.propTool === 'select') {
+      const selMdl = map.models?.[selIdx];
+      if (selMdl) selFootprint = placedModelFootprint(editor, selMdl);
+    }
     const cells = [];
     for (let y = 0; y < h; y += 1) {
       for (let x = 0; x < w; x += 1) {
@@ -919,6 +1021,10 @@ export function mapEditorHtml(state, esc) {
         if (st.rampLabel) classes.push('has-ramp');
         const propCount = propTiles.get(`${x},${y}`) || 0;
         if (propFootprint.has(`${x},${y}`)) classes.push('has-prop-cell');
+        if (selFootprint && x >= selFootprint.tlx && x < selFootprint.tlx + selFootprint.fw
+          && y >= selFootprint.tly && y < selFootprint.tly + selFootprint.fd) {
+          classes.push('has-prop-selected');
+        }
         if (propCount) classes.push('has-prop');
         const val = st.showValues ? `<span class="cell-val">${st.hv}</span>` : '';
         const rampShort = RAMP_PRESETS.find((r) => r.id === st.special)?.short || '';
@@ -927,7 +1033,8 @@ export function mapEditorHtml(state, esc) {
         cells.push(`<button type="button" class="${classes.join(' ')}" data-cell="${x},${y}" style="background:${st.bg}" aria-label="cell ${x},${y}">${ramp}${prop}${val}</button>`);
       }
     }
-    gridHtml = `<div class="map-grid-wrap ${placing ? 'is-placing' : ''}" id="mapGridWrap"><div class="map-grid" id="mapPaintGrid" style="grid-template-columns:repeat(${w}, 28px)">${cells.join('')}<div class="map-prop-overlay" id="mapPropOverlay"></div></div><div class="map-drag-overlay" id="mapDragOverlay" hidden></div></div>`;
+    const gridModeCls = placing ? 'is-placing' : (editor.propTool === 'select' ? 'is-prop-select' : '');
+    gridHtml = `<div class="map-grid-wrap ${gridModeCls}" id="mapGridWrap"><div class="map-grid" id="mapPaintGrid" style="grid-template-columns:repeat(${w}, 28px)">${cells.join('')}<div class="map-prop-overlay" id="mapPropOverlay"></div></div><div class="map-drag-overlay" id="mapDragOverlay" hidden></div></div>`;
   } else {
     gridHtml = '<p class="hint">Load a map or create a new one to start painting.</p>';
   }
@@ -993,6 +1100,9 @@ export function mapEditorHtml(state, esc) {
           <h3>Prop library</h3>
           ${editor.modelsApiAvailable === false ? `<p class="map-api-warn">${esc(editor.modelsApiHint || 'Restart the Operations Desk to enable model import.')}</p>` : '<p class="hint">GLB models for map props.</p>'}
           <button type="button" class="btn small" id="mapOpenCompileWizard" style="width:100%;margin-bottom:10px" ${editor.modelsApiAvailable === false ? 'disabled' : ''}>Import GLB…</button>
+          <label class="map-model-search">Search models
+            <input type="search" id="mapModelSearch" placeholder="name or id…" value="${esc(editor.modelSearch || '')}" autocomplete="off">
+          </label>
           <div class="map-model-catalog" id="mapModelCatalog">${modelCatalogHtml(editor, esc)}</div>
           ${placedPropsHtml(editor, esc)}
         </div>
@@ -1008,6 +1118,7 @@ export function mapEditorHtml(state, esc) {
             </div>
             <label>Size <input id="mapBrushSize" type="range" min="1" max="5" value="${editor.brushSize}"> <strong id="mapBrushSizeLabel">${editor.brushSize}</strong></label>
             <label><input type="checkbox" id="mapShowValues" ${editor.showCellValues ? 'checked' : ''}> Heights</label>
+            ${propToolRailHtml(editor, esc)}
             <div class="tool-group map-workspace-view" role="group" aria-label="Workspace view" style="margin-left:auto">
               <button type="button" class="tool-btn ${editor.workspaceView === '3d' ? '' : 'active'}" data-workspace-view="2d" title="2D paint grid">2D</button>
               <button type="button" class="tool-btn ${editor.workspaceView === '3d' ? 'active' : ''}" data-workspace-view="3d" ${map ? '' : 'disabled'} title="View-only 3D scene with real models">3D</button>
@@ -1357,21 +1468,24 @@ export async function loadMapEditorListing(state, api) {
 let modelPreviewGen = 0;
 
 function modelCatalogHtml(editor, esc) {
-  const cards = (editor.modelCatalog || []).map((m) => {
+  const filtered = catalogFiltered(editor);
+  const cards = filtered.map((m) => {
     const fp = m.footprintTiles || { w: 1, d: 1, h: 1 };
-    const active = editor.selectedModelId === m.id ? 'active' : '';
-    const placing = editor.placeModelId === m.id ? 'active' : '';
-    return `<div class="map-model-card-wrap">
-      <button type="button" class="map-model-card ${active}" data-model-id="${esc(m.id)}" title="${esc(m.displayName || m.id)}">
+    const active = editor.placeModelId === m.id && editor.propTool === 'place' ? 'active' : '';
+    const previewActive = editor.selectedModelId === m.id && editor.modelViewportOpen ? 'previewing' : '';
+    return `<div class="map-model-card-wrap" draggable="true" data-drag-model="${esc(m.id)}">
+      <button type="button" class="map-model-card ${active} ${previewActive}" data-pick-model="${esc(m.id)}" title="${esc(m.displayName || m.id)} — click to place, drag onto map">
         <canvas class="model-thumb-canvas" data-model-thumb="${esc(m.id)}" width="120" height="72" aria-hidden="true"></canvas>
         <span class="map-model-card-name">${esc(m.displayName || m.id)}</span>
-        <span class="map-model-card-meta">${fp.w}×${fp.d}×${fp.h} · ${fp.w * fp.d} tiles · ${m.triangleCount || '?'} tris</span>
+        <span class="map-model-card-meta">${fp.w}×${fp.d} · ${Math.round(m.defaultYawDeg || 0)}° · ×${Number(m.defaultScale || 1).toFixed(2)}</span>
       </button>
-      <button type="button" class="map-model-place-btn ${placing}" data-place-model="${esc(m.id)}" title="Place this prop on the map" ${editor.map ? '' : 'disabled'}>${editor.placeModelId === m.id ? 'Placing…' : 'Place'}</button>
+      <button type="button" class="map-model-preview-btn" data-preview-model="${esc(m.id)}" title="3D preview">👁</button>
       <button type="button" class="map-model-delete-btn" data-delete-model="${esc(m.id)}" title="${editor.modelsDeleteAvailable === false ? 'Restart npm run admin to enable delete' : 'Delete model from disk'}" aria-label="Delete ${esc(m.displayName || m.id)}" ${editor.modelsDeleteAvailable === false ? 'disabled' : ''}>×</button>
     </div>`;
   }).join('');
-  return cards || '<p class="hint">No compiled models yet. Click <strong>Import GLB…</strong> above.</p>';
+  if (!editor.modelCatalog?.length) return '<p class="hint">No compiled models yet. Click <strong>Import GLB…</strong> above.</p>';
+  if (!filtered.length) return '<p class="hint">No models match your search.</p>';
+  return cards;
 }
 
 /** Models directory relative to the game project root (pokemon-resort), for owmap references. */
@@ -1390,21 +1504,17 @@ function placedPropsHtml(editor, esc) {
   if (!editor.map) return '';
   const models = Array.isArray(editor.map.models) ? editor.map.models : [];
   const ts = editor.map.grid?.tileSize || TILE_SIZE;
-  const status = editor.placeModelId
-    ? `<p class="map-place-active">Placing <strong>${esc(editor.placeModelId)}</strong> — click tiles on the grid. <button type="button" class="btn small" id="mapPlaceCancel">Done</button></p>`
-    : '<p class="hint">Pick a prop above, click <strong>Place</strong>, then click grid tiles.</p>';
+  const status = editor.propTool === 'place' && editor.placeModelId
+    ? `<p class="map-place-active">Placing <strong>${esc(catalogEntry(editor, editor.placeModelId)?.displayName || editor.placeModelId)}</strong> — click or drag onto the grid. Use <strong>◎</strong> in the toolbar to select/move.</p>`
+    : '<p class="hint">Click a prop to arm placement, or drag it onto the map. Use toolbar <strong>◎</strong> to select and drag placed props.</p>';
   const rows = models.map((m, i) => {
     const tx = Math.floor((m.position?.[0] ?? 0) / ts);
     const tz = Math.floor((m.position?.[2] ?? 0) / ts);
-    return `<li class="map-placement-row">
+    const selected = editor.selectedPlacementIndex === i ? ' selected' : '';
+    return `<li class="map-placement-row${selected}" data-select-placement="${i}">
       <span class="map-placement-id">${esc(m.id || '?')}</span>
       <span class="map-placement-meta">tile ${tx},${tz} · ${Math.round(m.yawDeg || 0)}° · ×${Number(m.scale || 1).toFixed(2)}</span>
-      <span class="map-placement-actions">
-        <button type="button" data-rotate-placement="${i}" title="Rotate 90°">⟳</button>
-        <button type="button" data-scale-placement="${i}" data-scale-dir="up" title="Scale up">+</button>
-        <button type="button" data-scale-placement="${i}" data-scale-dir="down" title="Scale down">−</button>
-        <button type="button" data-remove-placement="${i}" title="Remove" class="map-placement-del">×</button>
-      </span>
+      <button type="button" data-remove-placement="${i}" title="Remove" class="map-placement-del">×</button>
     </li>`;
   }).join('') || '<li class="hint">No props placed on this map yet.</li>';
   return `<div class="map-placed-props"><h3>Placed props (${models.length})</h3>${status}<ul class="map-placement-list">${rows}</ul></div>`;
@@ -1423,16 +1533,57 @@ function placeModelOnTile(state, deps, x, y) {
   const heightGrid = editor.map.terrain?.height;
   const hv = Math.max(0, heightGrid?.[y]?.[x] ?? 0);
   if (!Array.isArray(editor.map.models)) editor.map.models = [];
+  const defs = placementDefaults(editor, model);
   editor.map.models.push({
     id: model.id,
     glb: placementGlbPath(editor, model),
     position: [(x + 0.5) * ts, hv * ts, (y + 0.5) * ts],
-    yawDeg: 0,
-    scale: 1,
+    yawDeg: defs.yawDeg,
+    scale: defs.scale,
   });
+  editor.selectedPlacementIndex = editor.map.models.length - 1;
+  editor.propTool = 'select';
+  editor.placeModelId = null;
   editor.dirty = true;
   deps.log?.(`Placed ${model.id} at tile ${x},${y}`, 'ok');
   return true;
+}
+
+function compileMetaFieldsHtml(editor, esc, check) {
+  const id = editor.compileModelId || check?.modelId || '';
+  const disp = editor.compileDisplayName || check?.modelId || id;
+  const yaw = editor.compileDefaultYaw ?? 0;
+  const scale = editor.compileDefaultScale ?? 1;
+  return `<div class="map-compile-meta-fields">
+    <label>Model id (folder name)
+      <input id="mapCompileModelId" value="${esc(id)}" placeholder="pokemon_center" pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*">
+    </label>
+    <label>Display name
+      <input id="mapCompileDisplayName" value="${esc(disp)}" placeholder="Pokémon Center">
+    </label>
+    <label>Default rotation (degrees)
+      <input id="mapCompileDefaultYaw" type="number" step="90" value="${yaw}">
+    </label>
+    <label>Default scale
+      <input id="mapCompileDefaultScale" type="range" min="0.25" max="4" step="0.05" value="${scale}">
+      <strong id="mapCompileDefaultScaleLabel">${Number(scale).toFixed(2)}×</strong>
+    </label>
+  </div>`;
+}
+
+function readCompileMetaFromDom(editor) {
+  const rawId = document.querySelector('#mapCompileModelId')?.value?.trim()
+    || editor.compileModelId
+    || editor.compileCheck?.modelId
+    || '';
+  const modelId = sanitizeModelId(rawId);
+  editor.compileModelId = modelId;
+  editor.compileDisplayName = document.querySelector('#mapCompileDisplayName')?.value?.trim()
+    || editor.compileDisplayName
+    || modelId;
+  editor.compileDefaultYaw = Number(document.querySelector('#mapCompileDefaultYaw')?.value) || 0;
+  editor.compileDefaultScale = Number(document.querySelector('#mapCompileDefaultScale')?.value) || 1;
+  return { modelId, displayName: editor.compileDisplayName, defaultYawDeg: editor.compileDefaultYaw, defaultScale: editor.compileDefaultScale };
 }
 
 function compileWizardHtml(editor, esc) {
@@ -1466,10 +1617,8 @@ function compileWizardHtml(editor, esc) {
     if (check.format === 'glb') {
       body = `<div class="map-compile-review">
         <p><strong>Step 2 — GLB archive</strong></p>
-        <p class="hint">Stored as-is. Preview uses GLTFLoader with alpha cutout.</p>
-        <label>Model id (folder name in game assets)
-          <input id="mapCompileModelId" value="${esc(editor.compileModelId || check.modelId)}" placeholder="pokemon_center">
-        </label>
+        <p class="hint">Stored as-is. Set id, display name, and default placement rotation/scale.</p>
+        ${compileMetaFieldsHtml(editor, esc, check)}
         <ul class="map-compile-checklist">
           <li class="ok">✓ GLB: ${esc(check.sourceFile || 'found')}</li>
         </ul>
@@ -1490,9 +1639,7 @@ function compileWizardHtml(editor, esc) {
     body = `<div class="map-compile-review">
       <p><strong>Step 2 — Verify materials &amp; textures</strong></p>
       <p class="hint">Each <code>map_Kd</code> must resolve inside the zip. Server converts OBJ→GLB; PNG alpha channels are kept (no black cutouts).</p>
-      <label>Model id (folder name in game assets)
-        <input id="mapCompileModelId" value="${esc(editor.compileModelId || check.modelId)}" placeholder="bench_01">
-      </label>
+      ${compileMetaFieldsHtml(editor, esc, check)}
       <ul class="map-compile-checklist">
         <li class="${check.obj ? 'ok' : 'bad'}">${check.obj ? '✓' : '✗'} OBJ: ${esc(check.obj || 'not found')}</li>
         <li class="${check.mtl ? 'ok' : 'bad'}">${check.mtl ? '✓' : '✗'} MTL: ${esc(check.mtl || 'not found')}</li>
@@ -1567,14 +1714,21 @@ async function inspectModelUpload(file) {
   return payload;
 }
 
-async function importModelUpload(file, modelId) {
+async function importModelUpload(file, meta = {}) {
+  const modelId = sanitizeModelId(meta.modelId);
+  if (!isValidModelId(modelId)) {
+    throw new Error('Model id is required — use letters, numbers, underscore, or hyphen (e.g. pokemon_center).');
+  }
   const fd = new FormData();
   if (/\.glb$/i.test(file.name)) fd.append('glb', file, file.name);
   else fd.append('archive', file, file.name);
-  if (modelId) fd.append('modelId', modelId);
+  fd.append('modelId', modelId);
+  if (meta.displayName) fd.append('displayName', meta.displayName);
+  fd.append('defaultYawDeg', String(meta.defaultYawDeg ?? 0));
+  fd.append('defaultScale', String(meta.defaultScale ?? 1));
   const res = await fetch('/api/overworld-models/compile', { method: 'POST', body: fd });
-  const payload = await res.json();
-  if (!res.ok || !payload.ok) throw new Error(payload.error || 'Import failed');
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload.ok) throw new Error(payload.error || `Import failed (${res.status})`);
   return payload;
 }
 
@@ -1683,6 +1837,16 @@ function ensureModelModalHost() {
     <div class="map-model-modal-body">
       <div id="mapModelWebGLHost" class="map-model-webgl-host" aria-label="GLB preview"></div>
       <p class="map-model-status" id="mapModelStatus">Loading…</p>
+      <div class="map-model-defaults" id="mapModelDefaults">
+        <span class="map-model-orient-label">Catalog defaults</span>
+        <label>Display name <input type="text" id="mapModelDisplayName" placeholder="Friendly name"></label>
+        <label>Default yaw° <input type="number" id="mapModelDefaultYaw" step="90" value="0"></label>
+        <label>Default scale
+          <input type="range" id="mapModelDefaultScale" min="0.25" max="4" step="0.05" value="1">
+          <strong id="mapModelDefaultScaleLabel">1.00×</strong>
+        </label>
+        <button type="button" id="mapModelMetaSave" class="map-model-meta-save">Save defaults</button>
+      </div>
       <div class="map-model-orient" id="mapModelOrient">
         <span class="map-model-orient-label">Orient</span>
         <button type="button" data-orient="rx,-90" title="Pitch back (X −90°)">⤒ X−</button>
@@ -1722,6 +1886,21 @@ async function mountGlbPreview(editor, { modelId, manifest, host, status, debugE
   }
 
   const url = modelAssetUrl(modelId, manifest);
+  const probe = await fetch(url);
+  if (!probe.ok) {
+    let msg = `GLB load failed (${probe.status})`;
+    if (probe.status === 400) {
+      try {
+        const p = await probe.json();
+        msg = p.error || msg;
+      } catch {
+        msg = 'Invalid model id — check the catalog id matches the folder on disk.';
+      }
+    } else if (probe.status === 404) {
+      msg = 'GLB file missing on disk — try re-importing the model.';
+    }
+    throw new Error(msg);
+  }
   editor._modelViewportBind = await bindGlbWebGLViewport(webglHost, url);
   editor._previewRot = { rx: 0, ry: 0, rz: 0 };
   syncOrientUi(editor, host);
@@ -1755,6 +1934,51 @@ function applyPreviewOrientation(editor, host, axis, deltaDeg) {
   }
   editor._modelViewportBind?.setModelOrientation?.(rot.rx, rot.ry, rot.rz);
   syncOrientUi(editor, host);
+}
+
+function syncModelMetaUi(host, editor, modelId) {
+  const meta = catalogEntry(editor, modelId);
+  const disp = host.querySelector('#mapModelDisplayName');
+  const yaw = host.querySelector('#mapModelDefaultYaw');
+  const scale = host.querySelector('#mapModelDefaultScale');
+  const scaleLbl = host.querySelector('#mapModelDefaultScaleLabel');
+  if (disp) disp.value = meta?.displayName || modelId;
+  if (yaw) yaw.value = String(Math.round(meta?.defaultYawDeg || 0));
+  const sc = Number(meta?.defaultScale) || 1;
+  if (scale) scale.value = String(sc);
+  if (scaleLbl) scaleLbl.textContent = `${sc.toFixed(2)}×`;
+}
+
+async function saveModelMeta(state, { render, log, api }) {
+  const editor = ensureMapEditorState(state);
+  const modelId = editor.selectedModelId;
+  if (!modelId) return;
+  const host = ensureModelModalHost();
+  const btn = host.querySelector('#mapModelMetaSave');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const res = await fetch('/api/overworld-models/meta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: modelId,
+        displayName: host.querySelector('#mapModelDisplayName')?.value?.trim(),
+        defaultYawDeg: Number(host.querySelector('#mapModelDefaultYaw')?.value) || 0,
+        defaultScale: Number(host.querySelector('#mapModelDefaultScale')?.value) || 1,
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.ok) {
+      throw new Error(payload.error || `Save failed (${res.status})`);
+    }
+    await loadMapEditorListing(state, api);
+    syncModelMetaUi(host, editor, modelId);
+    log?.(`Updated defaults for ${modelId}`, 'ok');
+    render();
+  } catch (e) {
+    log?.(e.message || 'Save failed', 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = 'Save defaults'; }
 }
 
 async function saveModelOrientation(state, { render, log, api }) {
@@ -1862,6 +2086,7 @@ function openModelViewport(state, modelId, render, log) {
   const sel = editor.modelCatalog.find((m) => m.id === modelId);
   host.querySelector('#mapModelModalTitle').textContent = sel?.displayName || modelId;
   host.querySelector('#mapModelModalPath').textContent = `${editor.modelsResolvedPath || ''}/${modelId}/`;
+  syncModelMetaUi(host, editor, modelId);
   host.classList.remove('hidden');
 
   const status = host.querySelector('#mapModelStatus');
@@ -1907,6 +2132,13 @@ function initModelModalDelegates(state, { render, log, api }) {
     }
   });
 
+  document.addEventListener('input', (event) => {
+    if (event.target.id === 'mapModelDefaultScale') {
+      const lbl = document.querySelector('#mapModelDefaultScaleLabel');
+      if (lbl) lbl.textContent = `${Number(event.target.value).toFixed(2)}×`;
+    }
+  });
+
   document.addEventListener('click', async (event) => {
     if (event.target.closest('#mapModelModalClose')) {
       closeModelPreview(state, render);
@@ -1919,6 +2151,11 @@ function initModelModalDelegates(state, { render, log, api }) {
     if (event.target.id === 'mapModelOrientSave') {
       event.preventDefault();
       saveModelOrientation(state, { render, log, api });
+      return;
+    }
+    if (event.target.id === 'mapModelMetaSave') {
+      event.preventDefault();
+      saveModelMeta(state, { render, log, api });
       return;
     }
     const orientBtn = event.target.closest('[data-orient]');
@@ -1935,47 +2172,30 @@ function initModelModalDelegates(state, { render, log, api }) {
       deleteOverworldModel(state, delBtn.dataset.deleteModel, { render, log, api });
       return;
     }
-    const placeBtn = event.target.closest('[data-place-model]');
-    if (placeBtn && event.target.closest('#mapSidebarProps')) {
+    const pickBtn = event.target.closest('[data-pick-model]');
+    if (pickBtn && event.target.closest('#mapModelCatalog')) {
       event.preventDefault();
-      event.stopPropagation();
       if (!editor.map) {
         log?.('Load or create a map before placing props.', 'error');
         return;
       }
-      editor.placeModelId = editor.placeModelId === placeBtn.dataset.placeModel ? null : placeBtn.dataset.placeModel;
+      const id = pickBtn.dataset.pickModel;
+      if (editor.placeModelId === id && editor.propTool === 'place') {
+        editor.placeModelId = null;
+        editor.propTool = null;
+      } else {
+        editor.placeModelId = id;
+        editor.propTool = 'place';
+        editor.selectedPlacementIndex = null;
+      }
       render();
       return;
     }
-    if (event.target.id === 'mapPlaceCancel') {
+    const previewBtn = event.target.closest('[data-preview-model]');
+    if (previewBtn && event.target.closest('#mapModelCatalog')) {
       event.preventDefault();
-      editor.placeModelId = null;
-      render();
-      return;
-    }
-    const rotateBtn = event.target.closest('[data-rotate-placement]');
-    if (rotateBtn && editor.map?.models) {
-      event.preventDefault();
-      const mdl = editor.map.models[Number(rotateBtn.dataset.rotatePlacement)];
-      if (mdl) {
-        mdl.yawDeg = ((Math.round((mdl.yawDeg || 0) / 90) * 90) + 90) % 360;
-        editor.dirty = true;
-        refreshMapPreview(state);
-        render();
-      }
-      return;
-    }
-    const scaleBtn = event.target.closest('[data-scale-placement]');
-    if (scaleBtn && editor.map?.models) {
-      event.preventDefault();
-      const mdl = editor.map.models[Number(scaleBtn.dataset.scalePlacement)];
-      if (mdl) {
-        const factor = scaleBtn.dataset.scaleDir === 'up' ? 1.1 : 1 / 1.1;
-        mdl.scale = Math.max(0.05, Math.min(20, (Number(mdl.scale) || 1) * factor));
-        editor.dirty = true;
-        refreshMapPreview(state);
-        render();
-      }
+      event.stopPropagation();
+      openModelViewport(state, previewBtn.dataset.previewModel, render, log);
       return;
     }
     const removeBtn = event.target.closest('[data-remove-placement]');
@@ -1990,9 +2210,13 @@ function initModelModalDelegates(state, { render, log, api }) {
       }
       return;
     }
-    const card = event.target.closest('[data-model-id]');
-    if (card && event.target.closest('#mapModelCatalog')) {
-      openModelViewport(state, card.dataset.modelId, render, log);
+    const selectRow = event.target.closest('[data-select-placement]');
+    if (selectRow && event.target.closest('.map-placement-list')) {
+      event.preventDefault();
+      editor.propTool = 'select';
+      editor.placeModelId = null;
+      editor.selectedPlacementIndex = Number(selectRow.dataset.selectPlacement);
+      render();
     }
   });
 }
@@ -2060,11 +2284,22 @@ export function bindMapEditor(state, deps) {
       const pos = cellFromEvent(event);
       if (!pos) return;
       const [x, y] = pos;
-      if (editor.placeModelId) {
+      if (editor.propTool === 'place' && editor.placeModelId) {
         if (placeModelOnTile(state, { log }, x, y)) {
           refreshMapPreview(state);
           render();
         }
+        return;
+      }
+      if (editor.propTool === 'select' && editor.map?.models?.length) {
+        const hit = findPlacementAt(editor, x, y);
+        if (hit != null) {
+          editor.selectedPlacementIndex = hit;
+          editor._placementDrag = { index: hit, moved: false };
+          return;
+        }
+        editor.selectedPlacementIndex = null;
+        render();
         return;
       }
       if (editor.tool === 'area' || editor.tool === 'line') {
@@ -2081,7 +2316,15 @@ export function bindMapEditor(state, deps) {
       const pos = cellFromEvent(event);
       if (!pos) return;
       const [x, y] = pos;
-      if (editor.placeModelId) {
+      if (editor._placementDrag && editor.propTool === 'select') {
+        const drag = editor._placementDrag;
+        movePlacementToTile(editor, drag.index, x, y);
+        drag.moved = true;
+        refreshPropOverlays(editor);
+        refreshMapPreview(state);
+        return;
+      }
+      if (editor.propTool === 'place' && editor.placeModelId) {
         const prev = editor._ghostTile;
         if (!prev || prev[0] !== x || prev[1] !== y) {
           editor._ghostTile = [x, y];
@@ -2099,6 +2342,14 @@ export function bindMapEditor(state, deps) {
       stampPaint(x, y, { light: true });
     };
     window.addEventListener('mouseup', () => {
+      if (editor._placementDrag) {
+        if (editor._placementDrag.moved) {
+          editor.dirty = true;
+          render();
+        }
+        editor._placementDrag = null;
+        return;
+      }
       if ((editor.tool === 'area' || editor.tool === 'line') && editor.dragStart) {
         finishDrag();
         return;
@@ -2107,12 +2358,135 @@ export function bindMapEditor(state, deps) {
       editor.painting = false;
     }, { once: false });
     paintGrid.onmouseleave = () => {
-      if (editor.placeModelId && editor._ghostTile) {
+      if (editor.propTool === 'place' && editor._ghostTile) {
         editor._ghostTile = null;
         refreshPropOverlays(editor);
       }
     };
   }
+
+  if (!editor._gridDnDDocBound) {
+    editor._gridDnDDocBound = true;
+    document.addEventListener('dragover', (e) => {
+      if (!e.target.closest('#mapGridWrap')) return;
+      if ([...e.dataTransfer.types].includes('application/x-map-model')) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+    document.addEventListener('drop', (e) => {
+      if (!e.target.closest('#mapGridWrap')) return;
+      const modelId = e.dataTransfer.getData('application/x-map-model');
+      if (!modelId || !editor.map) return;
+      e.preventDefault();
+      const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-cell]');
+      if (!cell) return;
+      const [x, y] = cell.dataset.cell.split(',').map(Number);
+      editor.placeModelId = modelId;
+      editor.propTool = 'place';
+      if (placeModelOnTile(state, { log }, x, y)) {
+        refreshMapPreview(state);
+        render();
+      }
+    });
+    document.addEventListener('dragstart', (e) => {
+      const wrap = e.target.closest('#mapModelCatalog [data-drag-model]');
+      if (!wrap || !editor.map) return;
+      e.dataTransfer.setData('application/x-map-model', wrap.dataset.dragModel);
+      e.dataTransfer.effectAllowed = 'copy';
+      editor.placeModelId = wrap.dataset.dragModel;
+      editor.propTool = 'place';
+    });
+  }
+
+  document.querySelectorAll('[data-prop-tool]').forEach((btn) => {
+    btn.onclick = () => {
+      const mode = btn.dataset.propTool;
+      if (mode === 'terrain') {
+        editor.propTool = null;
+        editor.placeModelId = null;
+        editor._ghostTile = null;
+      } else if (mode === 'select') {
+        editor.propTool = 'select';
+        editor.placeModelId = null;
+        editor._ghostTile = null;
+      } else if (mode === 'place') {
+        if (!editor.placeModelId) {
+          log?.('Click a prop in the sidebar first.', 'warn');
+          return;
+        }
+        editor.propTool = 'place';
+        editor.selectedPlacementIndex = null;
+      }
+      render();
+    };
+  });
+
+  document.querySelectorAll('[data-placement-rotate]').forEach((btn) => {
+    btn.onclick = () => {
+      const mdl = selectedPlacement(editor);
+      if (!mdl) return;
+      const delta = Number(btn.dataset.placementRotate) || 90;
+      mdl.yawDeg = ((Math.round((mdl.yawDeg || 0) / 90) * 90) + delta + 360) % 360;
+      editor.dirty = true;
+      refreshMapPreview(state);
+      render();
+    };
+  });
+
+  const placementScale = document.querySelector('#mapPlacementScale');
+  if (placementScale) {
+    placementScale.oninput = () => {
+      const mdl = selectedPlacement(editor);
+      if (!mdl) return;
+      mdl.scale = Math.max(0.25, Math.min(4, Number(placementScale.value) || 1));
+      const lbl = document.querySelector('#mapPlacementScaleLabel');
+      if (lbl) lbl.textContent = `${mdl.scale.toFixed(2)}×`;
+      editor.dirty = true;
+      refreshMapPreview(state);
+    };
+  }
+
+  const placementDelete = document.querySelector('[data-placement-delete]');
+  if (placementDelete) {
+    placementDelete.onclick = () => {
+      const idx = editor.selectedPlacementIndex;
+      if (idx == null || !editor.map?.models) return;
+      editor.map.models.splice(idx, 1);
+      editor.selectedPlacementIndex = null;
+      editor.dirty = true;
+      refreshMapPreview(state);
+      render();
+    };
+  }
+
+  const modelSearch = document.querySelector('#mapModelSearch');
+  if (modelSearch) {
+    modelSearch.oninput = () => {
+      editor.modelSearch = modelSearch.value;
+      render();
+    };
+  }
+
+  const compileScale = document.querySelector('#mapCompileDefaultScale');
+  if (compileScale) {
+    compileScale.oninput = () => {
+      editor.compileDefaultScale = Number(compileScale.value) || 1;
+      const lbl = document.querySelector('#mapCompileDefaultScaleLabel');
+      if (lbl) lbl.textContent = `${editor.compileDefaultScale.toFixed(2)}×`;
+    };
+  }
+
+  document.querySelectorAll('.brush-btn, .map-tool').forEach((btn) => {
+    const prev = btn._propTerrainHook;
+    if (prev) return;
+    btn._propTerrainHook = true;
+    btn.addEventListener('click', () => {
+      editor.propTool = null;
+      editor.placeModelId = null;
+      editor._ghostTile = null;
+    });
+  });
 
   document.querySelectorAll('[data-workspace-view]').forEach((btn) => {
     btn.onclick = () => {
@@ -2247,14 +2621,16 @@ export function bindMapEditor(state, deps) {
       return;
     }
     editor.compileZipFile = file;
-    editor.compileWizardStep = 3;
     editor.compilingModel = true;
     render();
     try {
       const check = await inspectModelUpload(file);
       editor.compileCheck = check;
       editor.mtlInspect = check.mtlInspect;
-      editor.compileModelId = check.modelId;
+      editor.compileModelId = sanitizeModelId(check.modelId) || check.modelId;
+      editor.compileDisplayName = check.modelId || editor.compileModelId;
+      editor.compileDefaultYaw = 0;
+      editor.compileDefaultScale = 1;
       editor.compileWizardStep = 2;
     } catch (e) {
       log(e.message || 'Could not read file', 'error');
@@ -2266,15 +2642,17 @@ export function bindMapEditor(state, deps) {
 
   const runCompile = async () => {
     const file = editor.compileZipFile;
-    const modelId = document.querySelector('#mapCompileModelId')?.value?.trim()
-      || editor.compileModelId
-      || editor.compileCheck?.modelId;
-    if (!file || !modelId) return;
+    const meta = readCompileMetaFromDom(editor);
+    if (!file) return;
+    if (!isValidModelId(meta.modelId)) {
+      log('Enter a valid model id (letters, numbers, underscore, hyphen).', 'error');
+      return;
+    }
     editor.compileWizardStep = 3;
     editor.compilingModel = true;
     render();
     try {
-      const payload = await importModelUpload(file, modelId);
+      const payload = await importModelUpload(file, meta);
       editor.compileResult = payload;
       editor.compileWizardStep = 4;
       const glbName = payload.manifest?.glbFile || `${payload.modelId}.glb`;
