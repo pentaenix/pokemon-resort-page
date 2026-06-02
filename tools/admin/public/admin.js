@@ -1,9 +1,14 @@
 import { renderCompatGraphHtml, bindCompatGraph } from './ontology-picker.js';
+import { featureHasDossierContent } from './dossier-shared.js';
+import { mapEditorHtml, bindMapEditor, initMapEditorTab } from './map-editor.js';
+import { atlasMapEditorHtml, bindAtlasMapEditor, initAtlasMapEditorTab } from './atlas-map-editor.js';
 import {
+  bindDossierEditor,
   bindFeatureDossierEditor,
+  dossierEditorHtml,
   featureDossierEditorHtml,
-  featureHasDossierContent,
   normalizeFeatureDossierRaw,
+  readDossierFromDom,
   readFeatureDossierFromDom,
 } from './feature-dossier-editor.js';
 
@@ -11,7 +16,7 @@ const state = {
   data: null,
   assets: [],
   tab: 'Dashboard',
-  selected: { compatFromGen: null, compatToGen: null },
+  selected: { compatFromGen: null, compatToGen: null, doc: null },
   dirty: new Set(),
   boxart: null,
   boxartPicker: { candidates: [], options: [], selectedCandidateId: null, searchQuery: '' },
@@ -20,9 +25,12 @@ const state = {
   github: { status: null, issues: [], state: 'open', loading: false, error: '' },
   featureFilter: 'active',
   featureSearch: '',
+  workshopPanes: { features: true, research: false, ideas: false },
+  docArticles: {},
 };
-const files = { compatibility:'compatibility.json', bugs:'bugs.json', features:'features.json', research:'research-pois.json', theme:'theme.json', homepage:'homepage.json', gallery:'gallery.json', models:'models.json', characters:'characters.json', roadmap:'roadmap.json', ideas:'ideas.json' };
-const tabs = ['Dashboard','Compatibility','Bugs','Features','Research','Game Library','Media Library','Models','Characters','Milestones','Ideas','Design Lab','Publish'];
+const files = { compatibility:'compatibility.json', bugs:'bugs.json', features:'features.json', research:'research.json', atlasPins:'atlas-pins.json', theme:'theme.json', homepage:'homepage.json', gallery:'gallery.json', models:'models.json', characters:'characters.json', roadmap:'roadmap.json', ideas:'ideas.json', docs:'docs.json' };
+const tabs = ['Dashboard','Compatibility','Bugs','Workshop','Island Atlas','Map Editor','Milestones','Docs','Game Library','Media Library','Models','Characters','Design Lab','Publish'];
+const RESEARCH_CATEGORIES = ['Location', 'Character', 'Pokémon', 'Species', 'Mechanic', 'Region', 'Timeline', 'Asset', 'Other'];
 const $ = (sel) => document.querySelector(sel);
 const esc = (value='') => String(value).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const clone = (x) => JSON.parse(JSON.stringify(x));
@@ -99,7 +107,9 @@ function initLogDockToggle() {
 }
 async function boot() {
   initLogDockToggle();
-  state.data = await api('/api/data');
+  const payload = await api('/api/data');
+  state.data = payload.files || payload;
+  state.docArticles = payload.docArticles || {};
   state.assets = (await api('/api/assets')).assets;
   renderTabs();
   render();
@@ -179,33 +189,111 @@ function dashboard() {
   const routes = state.data['compatibility.json'].routes;
   const bugs = state.data['bugs.json'].bugs;
   const features = state.data['features.json'].features;
-  const pois = state.data['research-pois.json'].pois;
+  const pins = state.data['atlas-pins.json']?.pins || [];
+  const researchEntries = state.data['research.json'].entries || [];
   const cards = [
     ['Open/blocked bugs', bugs.filter(b => ['Open','Blocked'].includes(b.status)).length],
     ['Untested routes', routes.filter(r => r.status === 'gray').length],
     ['Known failing routes', routes.filter(r => r.status === 'red').length],
     ['On-flight features', features.filter(f => ['On-Flight','Testing'].includes(f.stage)).length],
-    ['POIs missing evidence', pois.filter(p => !p.evidence?.length).length],
+    ['Research entries', researchEntries.length],
+    ['Atlas cork pins', pins.length],
   ];
   return `<section class="grid dashboard">${cards.map(([label,val]) => `<article class="card"><span>${label}</span><strong>${val}</strong></article>`).join('')}</section>
   <section class="panel" style="margin-top:16px"><h2>Needs attention</h2><div class="grid">${attentionItems().map(item => `<p><span class="badge">${item.type}</span> ${item.text}</p>`).join('')}</div></section>
-  <section class="panel" style="margin-top:16px"><h2>Quick actions</h2><div class="actions"><button class="btn" data-go="Compatibility">Update Compatibility</button><button class="btn" data-go="Bugs">Add Bug</button><button class="btn" data-go="Features">Update Feature</button><button class="btn" data-go="Research">Add Research POI</button><button class="btn ghost" data-go="Game Library">Game library & box art</button><button class="btn ghost" data-go="Publish">Preview / Publish</button></div></section>`;
+  <section class="panel" style="margin-top:16px"><h2>Quick actions</h2><div class="actions"><button class="btn" data-go="Compatibility">Update Compatibility</button><button class="btn" data-go="Bugs">Add Bug</button><button class="btn" data-go="Workshop">Open Workshop</button><button class="btn ghost" data-go="Map Editor">Map editor</button><button class="btn ghost" data-go="Game Library">Game library & box art</button><button class="btn ghost" data-go="Publish">Preview / Publish</button></div></section>`;
 }
 function attentionItems() {
   const data = state.data;
   const games = data['compatibility.json'].games;
   const routes = data['compatibility.json'].routes;
   const bugs = data['bugs.json'].bugs;
-  const pois = data['research-pois.json'].pois;
+  const pins = data['atlas-pins.json']?.pins || [];
+  const researchEntries = data['research.json'].entries || [];
   const items = [];
   games.filter(g => !g.boxArt || !state.assets.includes(g.boxArt)).slice(0,6).forEach(g => items.push({ type:'Game Library', text:`${g.title} needs local box art at ${g.boxArt}.` }));
   routes.filter(r => r.status === 'red' && !r.relatedBugs?.length).slice(0,4).forEach(r => items.push({ type:'Compatibility', text:`${r.title} is red but has no linked bug.` }));
   bugs.filter(b => b.status === 'Fixed' && b.linkedRoutes?.length).slice(0,3).forEach(b => items.push({ type:'Issue Desk', text:`${b.id} is fixed; verify linked routes are updated.` }));
-  pois.filter(p => !p.evidence?.length).slice(0,5).forEach(p => items.push({ type:'Research', text:`${p.name} has no curated evidence images.` }));
+  pins.filter(p => !p.summary?.trim()).slice(0,3).forEach(p => items.push({ type:'Island Atlas', text:`Cork pin ${p.name} has no hover summary yet.` }));
+  researchEntries.filter((e) => !e.summary?.trim()).slice(0,3).forEach((e) => items.push({ type:'Research', text:`${e.title || e.id} needs a card summary.` }));
   return items.length ? items : [{ type:'Resort', text:'Everything has the minimum data needed. Nice.' }];
 }
 function list(items, selectedId, labelFn) {
   return `<div class="list">${items.map(item => `<button class="${selectedId===item.id?'active':''}" data-id="${item.id}"><strong>${esc(labelFn(item))}</strong><span>${esc(item.id)}</span></button>`).join('')}</div>`;
+}
+function workshopPickerList(kind, items, selectedId, labelFn, metaFn) {
+  return `<div class="list feature-list workshop-picker-list">${items.length ? items.map((item) => {
+    const meta = metaFn ? metaFn(item) : item.id;
+    return `<button type="button" class="workshop-picker-item${selectedId === item.id ? ' active' : ''}" data-workshop-kind="${kind}" data-id="${esc(item.id)}">
+      <strong>${esc(labelFn(item))}</strong>
+      <span class="feature-list-meta">${esc(meta)}</span>
+    </button>`;
+  }).join('') : '<p class="hint feature-list-empty">Nothing here yet.</p>'}</div>`;
+}
+function captureWorkshopPaneState() {
+  document.querySelectorAll('[data-workshop-pane]').forEach((el) => {
+    const key = el.dataset.workshopPane;
+    if (key && state.workshopPanes) state.workshopPanes[key] = el.open;
+  });
+}
+function workshopPaneBodyHtml(paneKey) {
+  if (paneKey === 'features') return workshopFeaturesPane();
+  if (paneKey === 'research') return workshopResearchPane();
+  if (paneKey === 'ideas') return workshopIdeasPane();
+  return '';
+}
+function renderWorkshopPaneBody(paneKey) {
+  const pane = document.querySelector(`[data-workshop-pane="${paneKey}"]`);
+  if (!pane) return;
+  let body = pane.querySelector('.workshop-pane-body');
+  if (!body) {
+    body = document.createElement('div');
+    body.className = 'workshop-pane-body';
+    pane.appendChild(body);
+  }
+  body.innerHTML = workshopPaneBodyHtml(paneKey);
+  bindWorkshopPaneSection(paneKey);
+}
+function unmountWorkshopPaneBody(paneKey) {
+  document.querySelector(`[data-workshop-pane="${paneKey}"]`)?.querySelector('.workshop-pane-body')?.remove();
+}
+function persistWorkshopPaneDraft(paneKey) {
+  if (paneKey === 'features') applyFeatureFromForm();
+  else if (paneKey === 'research') applyResearchFromForm();
+  else if (paneKey === 'ideas') applyIdeaFromForm();
+}
+function workshopPane(title, hint, bodyHtml, paneKey) {
+  const open = Boolean(state.workshopPanes?.[paneKey]);
+  return `<details class="workshop-pane" data-workshop-pane="${paneKey}"${open ? ' open' : ''}>
+    <summary class="workshop-pane-summary"><strong>${title}</strong>${hint ? `<span class="hint workshop-pane-hint">${hint}</span>` : ''}</summary>
+    ${open ? `<div class="workshop-pane-body">${bodyHtml}</div>` : ''}
+  </details>`;
+}
+function updateWorkshopSaveHints() {
+  const map = [
+    ['features', files.features, 'Save features'],
+    ['research', files.research, 'Save research'],
+    ['ideas', files.ideas, 'Save ideas'],
+  ];
+  map.forEach(([key, file, label]) => {
+    const pane = document.querySelector(`[data-workshop-pane="${key}"]`);
+    const hint = pane?.querySelector('.feature-save-hint');
+    if (!hint) return;
+    const dirty = state.dirty.has(file);
+    hint.textContent = dirty ? 'Unsaved' : 'Saved';
+    hint.classList.toggle('is-dirty', dirty);
+  });
+  const dirtyNote = [
+    state.dirty.has(files.features) && 'features',
+    state.dirty.has(files.research) && 'research',
+    state.dirty.has(files.ideas) && 'ideas',
+  ].filter(Boolean);
+  const toolbarHint = document.querySelector('.workshop-toolbar .feature-unsaved, .workshop-toolbar .feature-disk-ok');
+  if (toolbarHint) {
+    toolbarHint.outerHTML = dirtyNote.length
+      ? `<p class="hint feature-unsaved"><strong>Unsaved:</strong> ${dirtyNote.join(', ')}</p>`
+      : '<p class="hint feature-disk-ok">All workshop files in sync with disk.</p>';
+  }
 }
 function genLabel(data, genId) {
   return data.generations.find((g) => g.id === genId)?.label || genId.replace('gen', 'Gen ');
@@ -428,8 +516,15 @@ function normalizeRecordImages(images) {
       : { path: String(item?.path || '').trim(), caption: String(item?.caption || '').trim() }))
     .filter((item) => item.path);
 }
+const MEDIA_ASSET_RE = /\.(png|jpe?g|webp|gif|svg|mp4|webm)$/i;
 function imageAssetOptions() {
-  return (state.assets || []).filter((p) => /\.(png|jpe?g|webp|gif|svg|mp4|webm)$/i.test(p)).slice(0, 120);
+  return (state.assets || []).filter((p) => MEDIA_ASSET_RE.test(p));
+}
+function filterImageAssets(query = '', limit = 80) {
+  const q = String(query || '').trim().toLowerCase();
+  let list = imageAssetOptions();
+  if (q) list = list.filter((p) => p.toLowerCase().includes(q));
+  return list.slice(0, limit);
 }
 function featureDossierDeps() {
   return {
@@ -437,9 +532,119 @@ function featureDossierDeps() {
     $,
     adminAssetUrl,
     imageAssetOptions,
-    getPois: () => (state.data['research-pois.json']?.pois || []).map((poi) => ({ id: poi.id, name: poi.name })),
+    filterImageAssets,
+    getPins: () => (state.data['atlas-pins.json']?.pins || []).map((pin) => ({ id: pin.id, name: pin.name })),
     getMilestones: () => (state.data['roadmap.json']?.milestones || []),
   };
+}
+function pruneRecordDossier(record) {
+  if (!record?.dossier) return;
+  const pruned = normalizeFeatureDossierRaw(record);
+  if (featureHasDossierContent({ ...record, dossier: pruned }, normalizeFeatureDossierRaw)) {
+    record.dossier = pruned;
+  } else {
+    delete record.dossier;
+  }
+}
+function getSelectedPoi() {
+  const pois = state.data['pois.json']?.pois || [];
+  return pois.find((p) => p.id === state.selected.poi) || null;
+}
+function getSelectedResearch() {
+  const entries = state.data['research.json']?.entries || [];
+  return entries.find((e) => e.id === state.selected.research) || null;
+}
+function researchDossierConfig() {
+  return {
+    title: 'Research brief',
+    hint: 'Rich sections for Concierge Research — characters, Pokémon, locations, mechanics, and more.',
+    showMap: false,
+    showResearchMilestones: false,
+    open: true,
+  };
+}
+function getSelectedIdea() {
+  const items = state.data['ideas.json']?.items || [];
+  return items.find((i) => i.id === state.selected.idea) || null;
+}
+function getSelectedMilestone() {
+  const milestones = state.data['roadmap.json']?.milestones || [];
+  return milestones.find((m) => m.id === state.selected.milestone) || null;
+}
+function poiDossierConfig() {
+  return {
+    title: 'Atlas POI brief',
+    hint: 'Optional rich notes shown when visitors inspect this map pin (atlas panel).',
+    showMap: false,
+    showResearchMilestones: false,
+    open: true,
+  };
+}
+function ideaDossierConfig() {
+  return {
+    title: 'Idea brief',
+    hint: 'Extended write-up for the public Ideas section (Ideas & Milestones tab).',
+    showMap: false,
+    showResearchMilestones: false,
+    open: true,
+  };
+}
+function milestoneDossierConfig() {
+  return {
+    title: 'Milestone brief',
+    hint: 'Extra context visitors see when opening a milestone on the public plan page.',
+    showMap: false,
+    showResearchMilestones: false,
+    open: true,
+  };
+}
+function docDossierConfig() {
+  return {
+    title: 'Article body',
+    hint: 'Rich blocks for the public Docs article. Saved to public/docs/articles/{category}/{slug}.json.',
+    showMap: false,
+    showResearchMilestones: false,
+    open: true,
+  };
+}
+function getSelectedDocMeta() {
+  const articles = state.data['docs.json']?.articles || [];
+  const slug = state.selected.doc || articles[0]?.slug;
+  state.selected.doc = slug;
+  return articles.find((a) => a.slug === slug) || articles[0];
+}
+function getDocEditorRecord(meta) {
+  if (!meta) return null;
+  const stored = state.docArticles[meta.slug] || { dossier: { overview: '', sections: [] } };
+  return { ...meta, dossier: clone(stored.dossier || { overview: '', sections: [] }) };
+}
+function docListHtml(articles, selectedSlug) {
+  return `<div class="list feature-list">${articles.length ? articles.map((a) => `<button type="button" class="${selectedSlug === a.slug ? 'active' : ''}" data-doc-slug="${esc(a.slug)}"><strong>${esc(a.title)}</strong><span class="feature-list-meta">${esc(a.category)} · ${esc(a.slug)}</span></button>`).join('') : '<p class="hint feature-list-empty">No articles yet.</p>'}</div>`;
+}
+function applyDocFromForm() {
+  const meta = getSelectedDocMeta();
+  if (!meta) return null;
+  const d = formData('[data-form="doc"]');
+  const categories = state.data['docs.json'].categories || [];
+  Object.assign(meta, {
+    id: (d.id || meta.id).trim(),
+    slug: (d.slug || meta.slug).trim(),
+    title: d.title ?? meta.title,
+    category: categories.some((c) => c.id === d.category) ? d.category : meta.category,
+    summary: d.summary ?? meta.summary,
+    author: d.author ?? meta.author,
+    publishedAt: d.publishedAt ?? meta.publishedAt,
+    updatedAt: d.updatedAt ?? meta.updatedAt,
+    featured: d.featured === 'yes',
+    tags: csv(d.tags),
+    heroImage: {
+      path: (d.heroPath || meta.heroImage?.path || '').trim(),
+      caption: (d.heroCaption || meta.heroImage?.caption || '').trim(),
+    },
+  });
+  const dossier = readDossierFromDom($, { mountSelector: '#docDossierMount' });
+  state.docArticles[meta.slug] = { dossier: dossier || { overview: '', sections: [] } };
+  return meta;
 }
 function readRecordImagesFromDom(idPrefix) {
   const grid = $(`#${idPrefix}ImagesGrid`);
@@ -1250,7 +1455,7 @@ function featureListItemsHtml(features) {
   const selectedId = state.selected.feature;
   return `<div class="list feature-list">${visible.length ? visible.map((feature) => {
     const photos = recordImageCount(feature);
-    const dossier = featureHasDossierContent(feature);
+    const dossier = featureHasDossierContent(feature, normalizeFeatureDossierRaw);
     return `<button type="button" class="feature-list-item feature-stage-${featureStageSlug(feature.stage)}${selectedId === feature.id ? ' active' : ''}" data-feature-id="${esc(feature.id)}">
       <span class="feature-list-pill">${esc(feature.stage)}</span>
       <strong>${esc(feature.title)}</strong>
@@ -1268,7 +1473,7 @@ function featureDetailHtml(feature, data) {
         <span class="badge feature-badge-id">${esc(feature.id)}</span>
         <span class="badge feature-stage-badge feature-stage-${featureStageSlug(feature.stage)}">${esc(feature.stage)}</span>
         <span class="badge feature-priority-${esc(String(feature.priority).toLowerCase())}">${esc(feature.priority)}</span>
-        ${featureHasDossierContent(feature) ? '<span class="badge record-detail-dossier" title="Research dossier">Dossier</span>' : ''}
+        ${featureHasDossierContent(feature, normalizeFeatureDossierRaw) ? '<span class="badge record-detail-dossier" title="Research dossier">Dossier</span>' : ''}
         ${recordImageCount(feature) ? `<span class="badge record-detail-photos" title="Legacy quick images">${recordImageCount(feature)} img</span>` : ''}
         <span class="hint">Draft in memory — save when ready</span>
       </div>
@@ -1306,10 +1511,51 @@ function featureDetailHtml(feature, data) {
     </div>
   </div>`;
 }
+function refreshFeatureListChrome(feature) {
+  if (!feature) return;
+  const btn = document.querySelector(`[data-feature-id="${CSS.escape(feature.id)}"]`);
+  if (!btn) return;
+  const meta = btn.querySelector('.feature-list-meta');
+  if (!meta) return;
+  const dossier = featureHasDossierContent(feature, normalizeFeatureDossierRaw);
+  const photos = recordImageCount(feature);
+  const dossierMark = dossier ? '<span class="record-list-dossier" title="Research dossier">◇</span>' : '';
+  meta.innerHTML = `${dossierMark}${recordListPhotosBadge(photos)}${esc(feature.id)} · ${feature.progress}% · ${esc(feature.priority)}`;
+}
 function touchFeatureDraft() {
   markDirty(files.features);
   updateFeatureDirtyHint();
   bindSaveFeaturesButtons();
+  refreshFeatureListChrome(getSelectedFeature());
+  refreshFeatureDetailChrome(getSelectedFeature());
+}
+function refreshFeatureDetailChrome(feature) {
+  if (!feature) return;
+  const stageBadge = document.querySelector('.feature-detail .feature-stage-badge');
+  if (stageBadge) {
+    stageBadge.className = `badge feature-stage-badge feature-stage-${featureStageSlug(feature.stage)}`;
+    stageBadge.textContent = feature.stage;
+  }
+  document.querySelectorAll('.feature-detail [data-feature-stage]').forEach((btn) => {
+    btn.classList.toggle('is-current', btn.dataset.featureStage === feature.stage);
+  });
+  const stageSelect = document.querySelector('[data-form="feature"] select[name="stage"]');
+  if (stageSelect) stageSelect.value = feature.stage;
+  const progressLabel = document.querySelector('.feature-progress-label');
+  const progressRange = document.querySelector('.feature-progress-range');
+  const progressNum = document.querySelector('.feature-progress-num');
+  if (progressLabel) progressLabel.textContent = `${feature.progress}%`;
+  if (progressRange) progressRange.value = feature.progress;
+  if (progressNum) progressNum.value = feature.progress;
+  const dossierBadge = document.querySelector('.feature-detail-badges .record-detail-dossier');
+  const hasDossier = featureHasDossierContent(feature, normalizeFeatureDossierRaw);
+  if (hasDossier && !dossierBadge) {
+    document.querySelector('.feature-detail-badges')?.insertAdjacentHTML(
+      'beforeend',
+      '<span class="badge record-detail-dossier" title="Research dossier">Dossier</span>',
+    );
+  }
+  if (!hasDossier) dossierBadge?.remove();
 }
 function updateFeatureDirtyHint() {
   const dirty = state.dirty.has(files.features);
@@ -1359,7 +1605,7 @@ async function saveFeaturesToDisk() {
   (state.data['features.json'].features || []).forEach((feature) => {
     if (!feature.dossier) return;
     const pruned = normalizeFeatureDossierRaw(feature);
-    if (featureHasDossierContent({ ...feature, dossier: pruned })) {
+    if (featureHasDossierContent({ ...feature, dossier: pruned }, normalizeFeatureDossierRaw)) {
       feature.dossier = pruned;
     } else {
       delete feature.dossier;
@@ -1393,8 +1639,12 @@ function bindFeatureFilters() {
   }
 }
 function bindFeatureList() {
-  document.querySelectorAll('[data-feature-id]').forEach((btn) => {
-    btn.onclick = () => {
+  const root = document.querySelector('[data-workshop-pane="features"]');
+  if (!root) return;
+  root.querySelectorAll('[data-feature-id]').forEach((btn) => {
+    btn.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       applyFeatureFromForm();
       state.selected.feature = btn.dataset.featureId;
       syncFeatureUIFromState();
@@ -1404,8 +1654,10 @@ function bindFeatureList() {
 function bindFeatureDetail() {
   document.querySelectorAll('[data-feature-stage]').forEach((btn) => {
     btn.onclick = () => {
+      applyFeatureFromForm();
       patchSelectedFeature({ stage: btn.dataset.featureStage });
-      syncFeatureUIFromState();
+      refreshFeatureDetailChrome(getSelectedFeature());
+      syncFeatureUIFromState({ detailOnly: true });
       log(`Draft: ${state.selected.feature} → ${btn.dataset.featureStage}. Save features when ready.`, 'ok');
       flashEl(document.querySelector('.feature-detail'), 'feature-flash-ok');
     };
@@ -1419,11 +1671,11 @@ function bindFeatureDetail() {
   form.querySelectorAll('input, select, textarea').forEach((field) => {
     if (field.classList.contains('feature-progress-range')) {
       field.oninput = () => {
+        applyFeatureFromForm();
         const num = form.querySelector('.feature-progress-num');
         if (num) num.value = field.value;
         patchSelectedFeature({ progress: Number(field.value) });
-        const label = form.querySelector('.feature-progress-label');
-        if (label) label.textContent = `${field.value}%`;
+        refreshFeatureDetailChrome(getSelectedFeature());
         syncFeatureUIFromState({ detailOnly: true });
       };
       return;
@@ -1459,10 +1711,623 @@ function bindFeatureDetail() {
   bindRecordImagesEditor(getSelectedFeature, 'feature', files.features);
   bindFeatureDossierEditor({
     ...featureDossierDeps(),
+    renderEditorHtml: featureDossierEditorHtml,
     getRecord: getSelectedFeature,
     onDirty: touchFeatureDraft,
     rerender: () => syncFeatureUIFromState({ detailOnly: true }),
   });
+}
+function applyResearchFromForm() {
+  const entry = getSelectedResearch();
+  if (!entry) return null;
+  const d = formData('[data-form="research"]');
+  const dossier = readDossierFromDom($, { mountSelector: '#researchDossierMount' });
+  const categories = state.data['research.json'].categories || RESEARCH_CATEGORIES;
+  Object.assign(entry, {
+    id: (d.id || entry.id).trim(),
+    title: d.title ?? entry.title,
+    category: categories.includes(d.category) ? d.category : (entry.category || 'Other'),
+    subject: d.subject ?? entry.subject ?? '',
+    confidence: d.confidence ?? entry.confidence,
+    devStatus: d.devStatus ?? entry.devStatus,
+    canonStatus: d.canonStatus ?? entry.canonStatus,
+    summary: d.summary ?? entry.summary,
+    tags: csv(d.tags),
+    linkedPins: csv(d.linkedPins || d.linkedPois),
+    linkedPois: undefined,
+    linkedFeatures: csv(d.linkedFeatures),
+    relatedBugs: csv(d.relatedBugs),
+    evidence: d.evidenceImage ? [{ label: 'Curated evidence', image: d.evidenceImage, note: d.evidenceNote || '' }] : [],
+    ...(dossier !== null ? { dossier } : {}),
+  });
+  state.selected.research = entry.id;
+  markDirty(files.research);
+  return entry;
+}
+function bindResearchDetail() {
+  const form = document.querySelector('[data-form="research"]');
+  if (!form) return;
+  const onFieldChange = () => {
+    applyResearchFromForm();
+    updateWorkshopSaveHints();
+  };
+  form.querySelectorAll('input, select, textarea').forEach((field) => {
+    field.onchange = onFieldChange;
+  });
+  const mount = document.querySelector('#researchDossierMount');
+  if (mount) {
+    delete mount.dataset.dossierBound;
+    bindDossierEditor({
+      ...featureDossierDeps(),
+      mountSelector: '#researchDossierMount',
+      renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, researchDossierConfig()),
+      getRecord: getSelectedResearch,
+      onDirty: () => {
+        markDirty(files.research);
+        updateWorkshopSaveHints();
+      },
+    });
+  }
+}
+function syncWorkshopResearchUI({ detailOnly = false } = {}) {
+  const entries = state.data['research.json'].entries || [];
+  if (!state.selected.research || !entries.find((e) => e.id === state.selected.research)) {
+    state.selected.research = entries[0]?.id || null;
+  }
+  const entry = getSelectedResearch();
+  const listHost = $('#researchListHost');
+  if (listHost) {
+    listHost.innerHTML = workshopPickerList('research', entries, state.selected.research, (e) => e.title, (e) => `${e.category} · ${e.confidence}`);
+    bindWorkshopResearchList();
+  }
+  const detailHost = $('#researchDetailHost');
+  if (detailHost && !detailOnly) {
+    detailHost.innerHTML = entry ? researchDetailHtml(entry) : '<p class="hint">Select a research entry.</p>';
+    bindResearchDetail();
+  }
+  updateWorkshopSaveHints();
+}
+function bindResearchDesk() {
+  const saveBtn = $('#saveResearch');
+  if (saveBtn) saveBtn.onclick = async () => {
+    applyResearchFromForm();
+    (state.data['research.json'].entries || []).forEach(pruneRecordDossier);
+    await saveFile(files.research, state.data['research.json']);
+    log('Written to public/data/research.json.', 'ok');
+    updateWorkshopSaveHints();
+  };
+  const newBtn = $('#newResearch');
+  if (newBtn) newBtn.onclick = () => {
+    applyResearchFromForm();
+    const research = state.data['research.json'];
+    if (!research.entries) research.entries = [];
+    const entry = {
+      id: `research-${Date.now().toString().slice(-5)}`,
+      title: 'New research topic',
+      category: 'Other',
+      subject: '',
+      confidence: 'Possible',
+      canonStatus: '',
+      devStatus: 'Needed',
+      summary: '',
+      tags: [],
+      linkedPins: [],
+      linkedFeatures: [],
+      relatedBugs: [],
+      evidence: [],
+    };
+    research.entries.unshift(entry);
+    state.selected.research = entry.id;
+    state.workshopPanes.research = true;
+    markDirty(files.research);
+    openWorkshopPane('research');
+    syncWorkshopResearchUI();
+    log(`Created ${entry.id}. Save research when ready.`, 'ok');
+  };
+}
+function applyPoiFromForm() {
+  const poi = getSelectedPoi();
+  if (!poi) return null;
+  const d = formData('[data-form="poi"]');
+  const dossier = readDossierFromDom($, { mountSelector: '#poiDossierMount' });
+  Object.assign(poi, {
+    id: (d.id || poi.id).trim(),
+    name: d.name ?? poi.name,
+    type: d.type ?? poi.type,
+    confidence: d.confidence ?? poi.confidence,
+    devStatus: d.devStatus ?? poi.devStatus,
+    canonStatus: d.canonStatus ?? poi.canonStatus,
+    summary: d.summary ?? poi.summary,
+    position: [Number(d.x), Number(d.y), Number(d.z)],
+    assetNeeds: csv(d.assetNeeds),
+    linkedFeatures: csv(d.linkedFeatures),
+    relatedBugs: csv(d.relatedBugs),
+    evidence: d.evidenceImage ? [{ label: 'Curated evidence', image: d.evidenceImage, note: d.evidenceNote || '' }] : [],
+    ...(dossier !== null ? { dossier } : {}),
+  });
+  state.selected.poi = poi.id;
+  markDirty(files.pois);
+  return poi;
+}
+function bindPoiDetail() {
+  const form = document.querySelector('[data-form="poi"]');
+  if (!form) return;
+  const onFieldChange = () => {
+    applyPoiFromForm();
+    updateAtlasPoiDirtyHint();
+  };
+  form.querySelectorAll('input, select, textarea').forEach((field) => {
+    field.onchange = onFieldChange;
+  });
+  const mount = document.querySelector('#poiDossierMount');
+  if (mount) {
+    delete mount.dataset.dossierBound;
+    bindDossierEditor({
+      ...featureDossierDeps(),
+      mountSelector: '#poiDossierMount',
+      renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, poiDossierConfig()),
+      getRecord: getSelectedPoi,
+      onDirty: () => {
+        markDirty(files.pois);
+        updateAtlasPoiDirtyHint();
+      },
+    });
+  }
+}
+function updateAtlasPoiDirtyHint() {
+  const dirty = state.dirty.has(files.pois);
+  const hint = document.querySelector('.atlas-poi-save-hint');
+  if (hint) {
+    hint.textContent = dirty ? 'Unsaved' : 'Saved';
+    hint.classList.toggle('is-dirty', dirty);
+  }
+  const toolbarNote = document.querySelector('.atlas-poi-toolbar .feature-unsaved, .atlas-poi-toolbar .feature-disk-ok');
+  if (toolbarNote) {
+    toolbarNote.outerHTML = dirty
+      ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>'
+      : '<p class="hint feature-disk-ok">In sync with disk.</p>';
+  }
+}
+function syncAtlasPoisUI({ detailOnly = false } = {}) {
+  const pois = state.data['pois.json'].pois || [];
+  if (!state.selected.poi || !pois.find((p) => p.id === state.selected.poi)) {
+    state.selected.poi = pois[0]?.id || null;
+  }
+  const poi = getSelectedPoi();
+  const listHost = $('#atlasPoiListHost');
+  if (listHost) {
+    listHost.innerHTML = workshopPickerList('atlas-poi', pois, state.selected.poi, (p) => p.name, (p) => `${p.type} · ${p.confidence}`);
+    bindAtlasPoiList();
+  }
+  const detailHost = $('#atlasPoiDetailHost');
+  if (detailHost && !detailOnly) {
+    detailHost.innerHTML = poi ? poiDetailHtml(poi) : '<p class="hint">Select an atlas POI.</p>';
+    bindPoiDetail();
+  }
+  updateAtlasPoiDirtyHint();
+}
+function bindAtlasPoiList() {
+  const root = document.querySelector('.atlas-poi-desk');
+  if (!root) return;
+  root.querySelectorAll('[data-workshop-kind="atlas-poi"]').forEach((btn) => {
+    btn.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyPoiFromForm();
+      state.selected.poi = btn.dataset.id;
+      syncAtlasPoisUI();
+    };
+  });
+}
+function bindAtlasPoisDesk() {
+  const saveBtn = $('#savePois');
+  if (saveBtn) saveBtn.onclick = async () => {
+    applyPoiFromForm();
+    (state.data['pois.json'].pois || []).forEach(pruneRecordDossier);
+    await saveFile(files.pois, state.data['pois.json']);
+    log('Written to public/data/pois.json.', 'ok');
+    updateAtlasPoiDirtyHint();
+  };
+  bindAtlasPoiList();
+  bindPoiDetail();
+}
+function applyIdeaFromForm() {
+  const idea = getSelectedIdea();
+  if (!idea) return null;
+  const d = formData('[data-form="idea"]');
+  const dossier = readDossierFromDom($, { mountSelector: '#ideaDossierMount' });
+  Object.assign(idea, {
+    id: (d.id || idea.id).trim(),
+    title: d.title ?? idea.title,
+    status: d.status ?? idea.status,
+    summary: d.summary ?? idea.summary,
+    tags: csv(d.tags),
+    ...(dossier !== null ? { dossier } : {}),
+  });
+  state.selected.idea = idea.id;
+  markDirty(files.ideas);
+  return idea;
+}
+function bindIdeaDetail() {
+  const form = document.querySelector('[data-form="idea"]');
+  if (!form) return;
+  const onFieldChange = () => {
+    applyIdeaFromForm();
+    updateWorkshopSaveHints();
+  };
+  form.querySelectorAll('input, select, textarea').forEach((field) => {
+    field.onchange = onFieldChange;
+  });
+  const mount = document.querySelector('#ideaDossierMount');
+  if (mount) {
+    delete mount.dataset.dossierBound;
+    bindDossierEditor({
+      ...featureDossierDeps(),
+      mountSelector: '#ideaDossierMount',
+      renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, ideaDossierConfig()),
+      getRecord: getSelectedIdea,
+      onDirty: () => {
+        markDirty(files.ideas);
+        updateWorkshopSaveHints();
+      },
+    });
+  }
+}
+function syncWorkshopIdeasUI({ detailOnly = false } = {}) {
+  const items = state.data['ideas.json'].items || [];
+  if (!state.selected.idea || !items.find((i) => i.id === state.selected.idea)) {
+    state.selected.idea = items[0]?.id || null;
+  }
+  const idea = getSelectedIdea();
+  const listHost = $('#ideaListHost');
+  if (listHost) {
+    listHost.innerHTML = workshopPickerList('idea', items, state.selected.idea, (i) => i.title, (i) => `${i.status} · ${i.id}`);
+    bindWorkshopIdeaList();
+  }
+  const detailHost = $('#ideaDetailHost');
+  if (detailHost && !detailOnly) {
+    detailHost.innerHTML = idea ? ideaDetailHtml(idea) : '<p class="hint">Select an idea.</p>';
+    bindIdeaDetail();
+  }
+  updateWorkshopSaveHints();
+}
+function bindIdeasDesk() {
+  const saveBtn = $('#saveIdeas');
+  if (saveBtn) saveBtn.onclick = async () => {
+    applyIdeaFromForm();
+    (state.data['ideas.json'].items || []).forEach(pruneRecordDossier);
+    await saveFile(files.ideas, state.data['ideas.json']);
+    log('Written to public/data/ideas.json.', 'ok');
+    updateWorkshopSaveHints();
+  };
+  const newBtn = $('#newIdea');
+  if (newBtn) newBtn.onclick = () => {
+    applyIdeaFromForm();
+    const ideas = state.data['ideas.json'];
+    if (!ideas.items) ideas.items = [];
+    const item = {
+      id: `idea-${Date.now().toString().slice(-5)}`,
+      title: 'New idea',
+      status: 'spark',
+      summary: 'Describe the idea.',
+      tags: [],
+    };
+    ideas.items.unshift(item);
+    state.selected.idea = item.id;
+    state.workshopPanes.ideas = true;
+    markDirty(files.ideas);
+    openWorkshopPane('ideas');
+    syncWorkshopIdeasUI();
+    log(`Created ${item.id}. Save ideas when ready.`, 'ok');
+  };
+}
+function resolveSelectedMilestoneId(milestones, data) {
+  if (state.selected.milestone && milestones.find((m) => m.id === state.selected.milestone)) {
+    return state.selected.milestone;
+  }
+  if (data.currentMilestoneId && milestones.find((m) => m.id === data.currentMilestoneId)) {
+    return data.currentMilestoneId;
+  }
+  return milestones[0]?.id || null;
+}
+function applyMilestoneFromForm() {
+  const item = getSelectedMilestone();
+  if (!item) return null;
+  const d = formData('[data-form="milestone"]');
+  const dossier = readDossierFromDom($, { mountSelector: '#milestoneDossierMount' });
+  const roadmap = state.data['roadmap.json'];
+  const nextId = (d.id || item.id).trim();
+  Object.assign(item, {
+    id: nextId,
+    title: d.title ?? item.title,
+    status: d.status ?? item.status,
+    summary: d.summary ?? item.summary,
+    image: d.image || '',
+    ...(dossier !== null ? { dossier } : {}),
+  });
+  if (d.current === 'yes' || d.status === 'current') roadmap.currentMilestoneId = nextId;
+  else if (roadmap.currentMilestoneId === item.id && d.current === 'no') roadmap.currentMilestoneId = null;
+  state.selected.milestone = nextId;
+  markDirty(files.roadmap);
+  return item;
+}
+const MILESTONE_ERA_ORDER = [
+  { id: 'present', label: 'Now', statuses: ['current', 'next'], collapsible: false },
+  { id: 'past', label: 'Past', statuses: ['past'], collapsible: true, defaultOpen: false },
+  { id: 'future', label: 'Ahead', statuses: ['future', 'paused'], collapsible: true, defaultOpen: false },
+];
+function milestoneEraItems(milestones, statuses) {
+  const set = new Set(statuses);
+  const items = milestones.filter((m) => set.has(m.status));
+  const other = milestones.filter((m) => !MILESTONE_ERA_ORDER.some((e) => e.statuses.includes(m.status)));
+  if (statuses.includes('future') && other.length) items.push(...other);
+  return items;
+}
+function milestoneListButton(m, selectedId) {
+  return `<button type="button" class="milestone-list-item feature-list-item${selectedId === m.id ? ' active' : ''}" data-milestone-id="${esc(m.id)}">
+      <strong>${esc(m.title)}</strong>
+      <span class="feature-list-meta">${esc(m.status)} · ${esc(m.id)}</span>
+    </button>`;
+}
+function milestoneListItemsHtml(milestones, selectedId) {
+  if (!milestones.length) return '<p class="hint feature-list-empty">No milestones yet.</p>';
+  const blocks = MILESTONE_ERA_ORDER.map((era) => {
+    const items = milestoneEraItems(milestones, era.statuses);
+    if (!items.length) return '';
+    const list = `<div class="milestone-era-list">${items.map((m) => milestoneListButton(m, selectedId)).join('')}</div>`;
+    if (!era.collapsible) {
+      return `<section class="milestone-era milestone-era--${era.id}">
+        <header class="milestone-era-head"><strong>${era.label}</strong><span class="milestone-era-count">${items.length}</span></header>
+        ${list}
+      </section>`;
+    }
+    return `<details class="milestone-era milestone-era--${era.id}"${era.defaultOpen ? ' open' : ''}>
+      <summary class="milestone-era-summary"><strong>${era.label}</strong><span class="milestone-era-count">${items.length}</span></summary>
+      ${list}
+    </details>`;
+  }).filter(Boolean);
+  return `<div class="milestone-era-groups">${blocks.join('')}</div>`;
+}
+function updateMilestoneDirtyHint() {
+  const dirty = state.dirty.has(files.roadmap);
+  const hint = document.querySelector('.milestone-save-hint');
+  if (hint) {
+    hint.textContent = dirty ? 'Unsaved' : 'Saved';
+    hint.classList.toggle('is-dirty', dirty);
+  }
+  const toolbarNote = document.querySelector('.milestone-toolbar .feature-unsaved, .milestone-toolbar .feature-disk-ok');
+  if (toolbarNote) {
+    toolbarNote.outerHTML = dirty
+      ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>'
+      : '<p class="hint feature-disk-ok">In sync with disk.</p>';
+  }
+}
+function syncMilestonesUI({ detailOnly = false } = {}) {
+  const data = state.data['roadmap.json'];
+  const milestones = data.milestones || [];
+  const id = resolveSelectedMilestoneId(milestones, data);
+  state.selected.milestone = id;
+  const item = getSelectedMilestone();
+  const listHost = $('#milestoneListHost');
+  if (listHost) {
+    listHost.innerHTML = milestoneListItemsHtml(milestones, id);
+    bindMilestoneList();
+  }
+  const detailHost = $('#milestoneDetailHost');
+  if (detailHost && !detailOnly) {
+    detailHost.innerHTML = item ? milestoneDetailHtml(item, data) : '<p class="hint">Select a milestone.</p>';
+    bindMilestoneDetail();
+  }
+  updateMilestoneDirtyHint();
+}
+function bindMilestoneList() {
+  const root = document.querySelector('.milestone-desk');
+  if (!root) return;
+  root.querySelectorAll('[data-milestone-id]').forEach((btn) => {
+    btn.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyMilestoneFromForm();
+      state.selected.milestone = btn.dataset.milestoneId;
+      syncMilestonesUI();
+    };
+  });
+}
+function bindMilestoneDetail() {
+  const form = document.querySelector('[data-form="milestone"]');
+  if (!form) return;
+  const onFieldChange = () => {
+    applyMilestoneFromForm();
+    syncMilestonesUI({ detailOnly: true });
+  };
+  form.querySelectorAll('input, select, textarea').forEach((field) => {
+    field.onchange = onFieldChange;
+  });
+  const mount = document.querySelector('#milestoneDossierMount');
+  if (mount) {
+    delete mount.dataset.dossierBound;
+    bindDossierEditor({
+      ...featureDossierDeps(),
+      mountSelector: '#milestoneDossierMount',
+      renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, milestoneDossierConfig()),
+      getRecord: getSelectedMilestone,
+      onDirty: () => {
+        markDirty(files.roadmap);
+        updateMilestoneDirtyHint();
+      },
+    });
+  }
+}
+function syncDocsUI({ detailOnly = false } = {}) {
+  const articles = state.data['docs.json']?.articles || [];
+  const meta = getSelectedDocMeta();
+  const record = getDocEditorRecord(meta);
+  const listHost = $('#docListHost');
+  if (listHost) {
+    listHost.innerHTML = docListHtml(articles, meta?.slug);
+    bindDocList();
+  }
+  const detailHost = $('#docDetailHost');
+  if (detailHost && !detailOnly) {
+    const categories = state.data['docs.json']?.categories || [];
+    detailHost.innerHTML = record ? docDetailHtml(record, categories) : '<p class="hint">Select or create an article.</p>';
+    bindDocDetail();
+  }
+}
+function bindDocList() {
+  $('#docListHost')?.querySelectorAll('[data-doc-slug]').forEach((btn) => {
+    btn.onclick = () => {
+      applyDocFromForm();
+      state.selected.doc = btn.dataset.docSlug;
+      syncDocsUI();
+    };
+  });
+}
+function bindDocDetail() {
+  const mount = $('#docDossierMount');
+  if (mount) {
+    delete mount.dataset.dossierBound;
+    bindDossierEditor({
+      ...featureDossierDeps(),
+      mountSelector: '#docDossierMount',
+      renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, docDossierConfig()),
+      getRecord: () => getDocEditorRecord(getSelectedDocMeta()),
+      onDirty: () => markDirty(files.docs),
+    });
+  }
+}
+async function saveDocsToDisk() {
+  applyDocFromForm();
+  const articles = state.data['docs.json']?.articles || [];
+  for (const article of articles) {
+    const body = state.docArticles[article.slug];
+    if (!body) continue;
+    await api('/api/docs/save-article', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: article.slug, data: body }),
+    });
+  }
+  await saveFile(files.docs, state.data['docs.json']);
+  log('Written docs.json and article files.', 'ok');
+  syncDocsUI({ detailOnly: true });
+}
+function bindDocsDesk() {
+  bindDocList();
+  bindDocDetail();
+  const saveBtn = $('#saveDocs');
+  if (saveBtn) saveBtn.onclick = () => saveDocsToDisk().catch((e) => log(e.message, 'error'));
+  const newBtn = $('#newDoc');
+  if (newBtn) newBtn.onclick = () => {
+    applyDocFromForm();
+    const slug = `doc-${Date.now().toString().slice(-5)}`;
+    const today = new Date().toISOString().slice(0, 10);
+    const article = {
+      id: slug,
+      slug,
+      title: 'New documentation article',
+      category: (state.data['docs.json'].categories || [])[0]?.id || 'formats',
+      tags: [],
+      summary: 'One-line summary for the docs hub card.',
+      publishedAt: today,
+      updatedAt: today,
+      featured: false,
+      author: 'Resort Operations',
+      heroImage: { path: 'assets/docs/article-placeholder.svg', caption: 'Replace with hero art.' },
+    };
+    state.data['docs.json'].articles.unshift(article);
+    state.docArticles[slug] = { dossier: { overview: '', sections: [] } };
+    state.selected.doc = slug;
+    markDirty(files.docs);
+    syncDocsUI();
+    log(`Created ${slug}. Save docs when ready.`, 'ok');
+  };
+}
+function openWorkshopPane(paneKey) {
+  state.workshopPanes[paneKey] = true;
+  const pane = document.querySelector(`[data-workshop-pane="${paneKey}"]`);
+  if (!pane) return;
+  pane.open = true;
+  if (!pane.querySelector('.workshop-pane-body')) renderWorkshopPaneBody(paneKey);
+}
+function bindWorkshopResearchList() {
+  const root = document.querySelector('[data-workshop-pane="research"]');
+  if (!root) return;
+  root.querySelectorAll('[data-workshop-kind="research"]').forEach((btn) => {
+    btn.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyResearchFromForm();
+      state.selected.research = btn.dataset.id;
+      openWorkshopPane('research');
+      syncWorkshopResearchUI();
+      document.querySelector('[data-workshop-pane="research"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+  });
+}
+function bindWorkshopIdeaList() {
+  const root = document.querySelector('[data-workshop-pane="ideas"]');
+  if (!root) return;
+  root.querySelectorAll('[data-workshop-kind="idea"]').forEach((btn) => {
+    btn.onclick = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyIdeaFromForm();
+      state.selected.idea = btn.dataset.id;
+      openWorkshopPane('ideas');
+      syncWorkshopIdeasUI();
+      document.querySelector('[data-workshop-pane="ideas"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+  });
+}
+function bindWorkshopPaneToggles() {
+  document.querySelectorAll('[data-workshop-pane]').forEach((el) => {
+    if (el.dataset.workshopPaneBound === '1') return;
+    el.dataset.workshopPaneBound = '1';
+    el.addEventListener('toggle', () => {
+      const key = el.dataset.workshopPane;
+      if (!key) return;
+      if (!el.open) {
+        persistWorkshopPaneDraft(key);
+        state.workshopPanes[key] = false;
+        unmountWorkshopPaneBody(key);
+        return;
+      }
+      state.workshopPanes[key] = true;
+      if (!el.querySelector('.workshop-pane-body')) renderWorkshopPaneBody(key);
+    });
+  });
+}
+function bindWorkshopPaneSection(paneKey) {
+  if (paneKey === 'features') bindFeatureDesk();
+  else if (paneKey === 'research') {
+    bindResearchDesk();
+    bindResearchDetail();
+    bindWorkshopResearchList();
+  } else if (paneKey === 'ideas') {
+    bindIdeasDesk();
+    bindIdeaDetail();
+    bindWorkshopIdeaList();
+  }
+}
+function bindWorkshopDesk() {
+  bindWorkshopPaneToggles();
+  ['features', 'research', 'ideas'].forEach((paneKey) => {
+    const pane = document.querySelector(`[data-workshop-pane="${paneKey}"]`);
+    if (pane?.open && pane.querySelector('.workshop-pane-body')) bindWorkshopPaneSection(paneKey);
+  });
+}
+function bindMilestonesDesk() {
+  const saveBtn = $('#saveRoadmap');
+  if (saveBtn) saveBtn.onclick = async () => {
+    applyMilestoneFromForm();
+    (state.data['roadmap.json'].milestones || []).forEach(pruneRecordDossier);
+    await saveFile(files.roadmap, state.data['roadmap.json']);
+    log('Written to public/data/roadmap.json.', 'ok');
+    updateMilestoneDirtyHint();
+  };
+  bindMilestoneList();
+  bindMilestoneDetail();
 }
 function syncFeatureUIFromState({ detailOnly = false } = {}) {
   const data = state.data['features.json'];
@@ -1485,7 +2350,7 @@ function syncFeatureUIFromState({ detailOnly = false } = {}) {
     }
   }
   const detailHost = $('#featureDetailHost');
-  if (detailHost) {
+  if (detailHost && !detailOnly) {
     detailHost.innerHTML = featureDetailHtml(feature, data);
     bindFeatureDetail();
   }
@@ -1519,54 +2384,152 @@ function bindFeatureDesk() {
     log(`Created ${item.id}. Save features when ready.`, 'ok');
   };
 }
-function features() {
+function workshopFeaturesPane() {
   const data = state.data['features.json'];
   const features = data.features;
   if (!state.selected.feature) {
     state.selected.feature = filteredFeatures(features, { filter: state.featureFilter })[0]?.id || features[0]?.id;
   }
   const dirty = state.dirty.has(files.features);
-  return `<section class="toolbar feature-toolbar">
-    <div><h2>On-Flight Board</h2><p>Pick a feature, use quick stage buttons, and edit tasks. Changes stay in memory until you click <strong>Save features</strong>.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong> — save when you are done editing.</p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
-  </section>
-  <section class="panel feature-desk">
-    <div class="feature-action-bar">
+  return `<div class="workshop-pane-inner feature-desk">
+    <div class="feature-action-bar workshop-action-bar">
       <div class="feature-action-buttons">
         <button type="button" class="btn js-save-features">Save features</button>
         <button type="button" class="btn ghost" id="newFeature">New feature</button>
       </div>
-      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved draft — click Save' : 'Saved to disk'}</span>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
     </div>
-    <div class="feature-layout">
-      <aside class="panel feature-sidebar">
+    <div class="feature-layout workshop-layout">
+      <aside class="panel feature-sidebar workshop-sidebar">
         <div id="featureFiltersHost">${featureFiltersHtml(features, data.stages)}</div>
         <div id="featureListHost">${featureListItemsHtml(features)}</div>
       </aside>
-      <article class="panel feature-main" id="featureDetailHost">${featureDetailHtml(getSelectedFeature(), data)}</article>
+      <article class="panel feature-main workshop-main" id="featureDetailHost">${featureDetailHtml(getSelectedFeature(), data)}</article>
     </div>
-  </section>`;
+  </div>`;
 }
-function research() {
-  const data = state.data['research-pois.json'];
-  const pois = data.pois;
+function researchDetailHtml(entry) {
+  const data = state.data['research.json'];
+  const categories = data.categories || RESEARCH_CATEGORIES;
+  const legend = data.confidenceLegend || ['Confirmed', 'Likely', 'Possible', 'Speculative', 'Original for gameplay'];
+  const hasDossier = featureHasDossierContent(entry, normalizeFeatureDossierRaw);
+  const pinOptions = (state.data['atlas-pins.json']?.pins || []).map((p) => p.id).join(', ');
+  return `<div class="feature-detail">
+    <div class="feature-detail-head">
+      <div class="feature-detail-badges">
+        <span class="badge">${esc(entry.id)}</span>
+        <span class="badge">${esc(entry.category)}</span>
+        <span class="badge">${esc(entry.confidence)}</span>
+        ${hasDossier ? '<span class="badge record-detail-dossier" title="Research brief">Brief</span>' : ''}
+      </div>
+    </div>
+    <div class="form" data-form="research">
+      <label class="feature-title-field">Title<input name="title" value="${esc(entry.title)}"></label>
+      <div class="row"><label>ID<input name="id" value="${esc(entry.id)}"></label><label>Category<select name="category">${categories.map((c) => `<option ${entry.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></label></div>
+      <label>Subject / focus<input name="subject" value="${esc(entry.subject || '')}" placeholder="e.g. Nurse Joy, Pikachu line, Route 101…"></label>
+      <div class="row three"><label>Confidence<select name="confidence">${legend.map((s) => `<option ${entry.confidence === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label><label>Dev status<input name="devStatus" value="${esc(entry.devStatus)}"></label><label>Canon status<input name="canonStatus" value="${esc(entry.canonStatus)}"></label></div>
+      <label>Card summary<textarea name="summary" rows="3">${esc(entry.summary)}</textarea></label>
+      <label>Tags<input name="tags" value="${esc((entry.tags || []).join(', '))}" placeholder="comma-separated"></label>
+      <details class="feature-advanced"><summary>Links &amp; evidence</summary>
+        <label>Linked atlas pin ids<input name="linkedPins" value="${esc((entry.linkedPins || entry.linkedPois || []).join(', '))}" placeholder="${esc(pinOptions || 'ferry-dock')}"></label>
+        <p class="hint">Optional cork pins — edit under <strong>Island Atlas</strong> tab.</p>
+        <label>Linked features<input name="linkedFeatures" value="${esc((entry.linkedFeatures || []).join(', '))}"></label>
+        <label>Related bugs<input name="relatedBugs" value="${esc((entry.relatedBugs || []).join(', '))}"></label>
+        <label>Legacy evidence image<input name="evidenceImage" list="researchAssets" value="${esc(entry.evidence?.[0]?.image || '')}"></label>
+        <label>Evidence note<textarea name="evidenceNote" rows="2">${esc(entry.evidence?.[0]?.note || '')}</textarea></label>
+        <datalist id="researchAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
+      </details>
+      <div id="researchDossierMount">${dossierEditorHtml(entry, featureDossierDeps(), researchDossierConfig())}</div>
+    </div>
+  </div>`;
+}
+function workshopResearchPane() {
+  const entries = state.data['research.json'].entries || [];
+  const id = state.selected.research || entries[0]?.id;
+  state.selected.research = id;
+  const entry = entries.find((e) => e.id === id);
+  const dirty = state.dirty.has(files.research);
+  return `<div class="workshop-pane-inner feature-desk">
+    <div class="feature-action-bar workshop-action-bar">
+      <div class="feature-action-buttons">
+        <button type="button" class="btn" id="saveResearch">Save research</button>
+        <button type="button" class="btn ghost" id="newResearch">New entry</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <div class="feature-layout workshop-layout">
+      <aside class="panel feature-sidebar workshop-sidebar"><div id="researchListHost">${workshopPickerList('research', entries, id, (e) => e.title, (e) => `${e.category} · ${e.confidence}`)}</div></aside>
+      <article class="panel feature-main workshop-main" id="researchDetailHost">${entry ? researchDetailHtml(entry) : '<p class="hint">Select a research entry.</p>'}</article>
+    </div>
+  </div>`;
+}
+function atlasPoisEditor() {
+  const pois = state.data['pois.json'].pois || [];
   const id = state.selected.poi || pois[0]?.id;
   state.selected.poi = id;
-  const poi = pois.find(p => p.id === id);
-  return `<section class="toolbar"><div><h2>Research POIs</h2><p>Edit 3D island markers, evidence, asset needs, and linked work.</p></div><div class="actions"><button class="btn ghost" id="newPoi">New POI</button><button class="btn" id="saveResearch">Save research</button></div></section>
-  <section class="editor-grid"><aside class="panel">${list(pois, id, p => `${p.name} · ${p.confidence}`)}</aside><article class="panel">${poiForm(poi)}</article></section><pre id="output" class="output" style="margin-top:16px"></pre>`;
+  const poi = pois.find((p) => p.id === id);
+  const dirty = state.dirty.has(files.pois);
+  return `<section class="toolbar feature-toolbar atlas-poi-toolbar">
+    <div><h2>Atlas POIs</h2><p>3D island map markers only — characters, Pokémon, and lore live under Workshop → Research.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
+  </section>
+  <section class="panel atlas-poi-desk">
+    <div class="feature-action-bar milestone-action-bar">
+      <div class="feature-action-buttons">
+        <button type="button" class="btn" id="savePois">Save atlas POIs</button>
+        <button type="button" class="btn ghost" id="newAtlasPoi">New map POI</button>
+      </div>
+      <span class="feature-save-hint atlas-poi-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <div class="feature-layout milestone-layout">
+      <aside class="panel feature-sidebar milestone-sidebar"><div id="atlasPoiListHost">${workshopPickerList('atlas-poi', pois, id, (p) => p.name, (p) => `${p.type} · ${p.confidence}`)}</div></aside>
+      <article class="panel feature-main milestone-main" id="atlasPoiDetailHost">${poi ? poiDetailHtml(poi) : '<p class="hint">Select a map POI.</p>'}</article>
+    </div>
+  </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
 }
-function poiForm(poi) {
-  return `<h2>${esc(poi.name)}</h2><div class="form" data-form="poi">
-    <div class="row"><label>ID<input name="id" value="${esc(poi.id)}"></label><label>Name<input name="name" value="${esc(poi.name)}"></label></div>
-    <div class="row three"><label>Type<input name="type" value="${esc(poi.type)}"></label><label>Confidence<select name="confidence">${['Confirmed','Likely','Possible','Speculative','Original for gameplay'].map(s => `<option ${poi.confidence===s?'selected':''}>${s}</option>`).join('')}</select></label><label>Dev status<input name="devStatus" value="${esc(poi.devStatus)}"></label></div>
-    <label>Canon status<input name="canonStatus" value="${esc(poi.canonStatus)}"></label>
-    <label>Summary<textarea name="summary">${esc(poi.summary)}</textarea></label>
-    <div class="row three"><label>X<input name="x" type="number" step="0.05" value="${poi.position[0]}"></label><label>Y<input name="y" type="number" step="0.05" value="${poi.position[1]}"></label><label>Z<input name="z" type="number" step="0.05" value="${poi.position[2]}"></label></div>
-    <label>Asset needs, comma separated<input name="assetNeeds" value="${esc((poi.assetNeeds||[]).join(', '))}"></label>
-    <label>Linked features<input name="linkedFeatures" value="${esc((poi.linkedFeatures||[]).join(', '))}"></label>
-    <label>Related bugs<input name="relatedBugs" value="${esc((poi.relatedBugs||[]).join(', '))}"></label>
-    <label>Evidence image path<input name="evidenceImage" list="assets" value="${esc(poi.evidence?.[0]?.image || '')}"></label><datalist id="assets">${state.assets.map(a => `<option value="${esc(a)}"></option>`).join('')}</datalist>
-    <label>Evidence note<textarea name="evidenceNote">${esc(poi.evidence?.[0]?.note || '')}</textarea></label>
+function workshop() {
+  const featuresDirty = state.dirty.has(files.features);
+  const researchDirty = state.dirty.has(files.research);
+  const ideasDirty = state.dirty.has(files.ideas);
+  const dirtyNote = [featuresDirty && 'features', researchDirty && 'research', ideasDirty && 'ideas'].filter(Boolean);
+  return `<section class="toolbar feature-toolbar workshop-toolbar">
+    <div><h2>Workshop</h2><p>Features, concierge research entries (any topic), and ideas. Cork map pins are edited under <strong>Island Atlas</strong>.</p>
+    ${dirtyNote.length ? `<p class="hint feature-unsaved"><strong>Unsaved:</strong> ${dirtyNote.join(', ')}</p>` : '<p class="hint feature-disk-ok">All workshop files in sync with disk.</p>'}</div>
+  </section>
+  <section class="panel workshop-page">
+    ${workshopPane('Features', 'On-flight board cards + dossier modals', workshopFeaturesPane(), 'features')}
+    ${workshopPane('Research', 'Characters, Pokémon, locations, mechanics — Concierge Research', workshopResearchPane(), 'research')}
+    ${workshopPane('Ideas', 'Sparks for Ideas &amp; Milestones on the public site', workshopIdeasPane(), 'ideas')}
+  </section>`;
+}
+function poiDetailHtml(poi) {
+  const hasDossier = featureHasDossierContent(poi, normalizeFeatureDossierRaw);
+  return `<div class="feature-detail">
+    <div class="feature-detail-head">
+      <div class="feature-detail-badges">
+        <span class="badge">${esc(poi.id)}</span>
+        <span class="badge">${esc(poi.confidence)}</span>
+        ${hasDossier ? '<span class="badge record-detail-dossier" title="Research brief">Brief</span>' : ''}
+      </div>
+    </div>
+    <div class="form" data-form="poi">
+      <label class="feature-title-field">Name<input name="name" value="${esc(poi.name)}"></label>
+      <div class="row"><label>ID<input name="id" value="${esc(poi.id)}"></label><label>Type<input name="type" value="${esc(poi.type)}"></label></div>
+      <div class="row three"><label>Confidence<select name="confidence">${['Confirmed','Likely','Possible','Speculative','Original for gameplay'].map((s) => `<option ${poi.confidence === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label><label>Dev status<input name="devStatus" value="${esc(poi.devStatus)}"></label><label>Canon status<input name="canonStatus" value="${esc(poi.canonStatus)}"></label></div>
+      <label>Card summary<textarea name="summary" rows="3">${esc(poi.summary)}</textarea></label>
+      <details class="feature-advanced"><summary>Atlas map position <span class="hint">(optional)</span></summary>
+        <p class="hint">Only needed when this POI should appear on the 3D island map. Leave at 0,0,0 if unsure.</p>
+        <div class="row three"><label>X<input name="x" type="number" step="0.05" value="${poi.position[0]}"></label><label>Y<input name="y" type="number" step="0.05" value="${poi.position[1]}"></label><label>Z<input name="z" type="number" step="0.05" value="${poi.position[2]}"></label></div>
+      </details>
+      <details class="feature-advanced"><summary>Links &amp; legacy evidence</summary>
+        <label>Asset needs<input name="assetNeeds" value="${esc((poi.assetNeeds || []).join(', '))}"></label>
+        <label>Linked features<input name="linkedFeatures" value="${esc((poi.linkedFeatures || []).join(', '))}"></label>
+        <label>Related bugs<input name="relatedBugs" value="${esc((poi.relatedBugs || []).join(', '))}"></label>
+        <label>Legacy evidence image<input name="evidenceImage" list="poiAssets" value="${esc(poi.evidence?.[0]?.image || '')}"></label>
+        <label>Evidence note<textarea name="evidenceNote" rows="2">${esc(poi.evidence?.[0]?.note || '')}</textarea></label>
+        <datalist id="poiAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
+      </details>
+      <div id="poiDossierMount">${dossierEditorHtml(poi, featureDossierDeps(), poiDossierConfig())}</div>
+    </div>
   </div>`;
 }
 function boxartStatusLine() {
@@ -1649,26 +2612,129 @@ function charactersEditor() {
 function milestonesEditor() {
   const data = state.data['roadmap.json'];
   const milestones = data.milestones || [];
-  const id = state.selected.milestone || data.currentMilestoneId || milestones[0]?.id;
+  const id = resolveSelectedMilestoneId(milestones, data);
   state.selected.milestone = id;
-  const item = milestones.find(m => m.id === id) || milestones[0];
-  return `<section class="toolbar"><div><h2>Milestone Timeline</h2><p>Edit the dedicated vertical Milestones page. Mark one item as current; no dates required.</p></div><div class="actions"><button class="btn ghost" id="newMilestone">New milestone</button><button class="btn" id="saveRoadmap">Save milestones</button></div></section>
-  <section class="editor-grid"><aside class="panel">${list(milestones, id, m => `${m.title} · ${m.status}`)}</aside><article class="panel">${item ? milestoneForm(item, data) : '<p>No milestone selected.</p>'}</article></section><pre id="output" class="output" style="margin-top:16px"></pre>`;
+  const item = getSelectedMilestone();
+  const dirty = state.dirty.has(files.roadmap);
+  return `<section class="toolbar feature-toolbar milestone-toolbar">
+    <div><h2>Milestones</h2><p>Timeline for the public <strong>Ideas &amp; Milestones</strong> tab. Mark one item as current.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
+  </section>
+  <section class="panel milestone-desk">
+    <div class="feature-action-bar milestone-action-bar">
+      <div class="feature-action-buttons">
+        <button type="button" class="btn" id="saveRoadmap">Save milestones</button>
+        <button type="button" class="btn ghost" id="newMilestone">New milestone</button>
+      </div>
+      <span class="feature-save-hint milestone-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <div class="feature-layout milestone-layout">
+      <aside class="panel feature-sidebar milestone-sidebar"><div id="milestoneListHost">${milestoneListItemsHtml(milestones, id)}</div></aside>
+      <article class="panel feature-main milestone-main" id="milestoneDetailHost">${item ? milestoneDetailHtml(item, data) : '<p class="hint">Select a milestone.</p>'}</article>
+    </div>
+  </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
 }
-function milestoneForm(item, data) {
-  return `<h2>${esc(item.title)}</h2><div class="form" data-form="milestone"><div class="row"><label>ID<input name="id" value="${esc(item.id)}"></label><label>Title<input name="title" value="${esc(item.title)}"></label></div><div class="row three"><label>Status<select name="status">${['past','current','next','future','paused'].map(s => `<option ${item.status===s?'selected':''}>${s}</option>`).join('')}</select></label><label>Current milestone<select name="current">${['no','yes'].map(v => `<option ${((data.currentMilestoneId===item.id && v==='yes') || (data.currentMilestoneId!==item.id && v==='no'))?'selected':''}>${v}</option>`).join('')}</select></label><label>Image path<input name="image" value="${esc(item.image || '')}"></label></div><label>Summary<textarea name="summary">${esc(item.summary)}</textarea></label></div>`;
+function milestoneDetailHtml(item, data) {
+  const hasDossier = featureHasDossierContent(item, normalizeFeatureDossierRaw);
+  return `<div class="feature-detail">
+    <div class="feature-detail-badges">
+      <span class="badge">${esc(item.id)}</span>
+      <span class="badge">${esc(item.status)}</span>
+      ${hasDossier ? '<span class="badge record-detail-dossier">Brief</span>' : ''}
+    </div>
+    <div class="form" data-form="milestone">
+      <label class="feature-title-field">Title<input name="title" value="${esc(item.title)}"></label>
+      <div class="row"><label>ID<input name="id" value="${esc(item.id)}"></label><label>Status<select name="status">${['past', 'current', 'next', 'future', 'paused'].map((s) => `<option ${item.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
+      <div class="row"><label>Current milestone<select name="current">${['no', 'yes'].map((v) => `<option ${((data.currentMilestoneId === item.id && v === 'yes') || (data.currentMilestoneId !== item.id && v === 'no')) ? 'selected' : ''}>${v}</option>`).join('')}</select></label><label>Hero image path<input name="image" value="${esc(item.image || '')}" list="milestoneAssets"></label></div>
+      <label>Card summary<textarea name="summary" rows="3">${esc(item.summary)}</textarea></label>
+      <datalist id="milestoneAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
+      <div id="milestoneDossierMount">${dossierEditorHtml(item, featureDossierDeps(), milestoneDossierConfig())}</div>
+    </div>
+  </div>`;
 }
-function ideasEditor() {
-  const data = state.data['ideas.json'];
-  const items = data.items || [];
+function workshopIdeasPane() {
+  const items = state.data['ideas.json'].items || [];
   const id = state.selected.idea || items[0]?.id;
   state.selected.idea = id;
-  const item = items.find(i => i.id === id) || items[0];
-  return `<section class="toolbar"><div><h2>Idea Board</h2><p>Keep sparks visible until they graduate into features, POIs, or roadmap milestones.</p></div><div class="actions"><button class="btn ghost" id="newIdea">New idea</button><button class="btn" id="saveIdeas">Save ideas</button></div></section>
-  <section class="editor-grid"><aside class="panel">${list(items, id, i => `${i.title} · ${i.status}`)}</aside><article class="panel">${item ? ideaForm(item) : '<p>No idea selected.</p>'}</article></section><pre id="output" class="output" style="margin-top:16px"></pre>`;
+  const item = items.find((i) => i.id === id) || items[0];
+  const dirty = state.dirty.has(files.ideas);
+  return `<div class="workshop-pane-inner feature-desk">
+    <div class="feature-action-bar workshop-action-bar">
+      <div class="feature-action-buttons">
+        <button type="button" class="btn" id="saveIdeas">Save ideas</button>
+        <button type="button" class="btn ghost" id="newIdea">New idea</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <div class="feature-layout workshop-layout">
+      <aside class="panel feature-sidebar workshop-sidebar"><div id="ideaListHost">${workshopPickerList('idea', items, id, (i) => i.title, (i) => `${i.status} · ${i.id}`)}</div></aside>
+      <article class="panel feature-main workshop-main" id="ideaDetailHost">${item ? ideaDetailHtml(item) : '<p class="hint">Select an idea.</p>'}</article>
+    </div>
+  </div>`;
 }
-function ideaForm(item) {
-  return `<h2>${esc(item.title)}</h2><div class="form" data-form="idea"><div class="row"><label>ID<input name="id" value="${esc(item.id)}"></label><label>Title<input name="title" value="${esc(item.title)}"></label></div><div class="row"><label>Status<input name="status" value="${esc(item.status)}"></label><label>Tags, comma separated<input name="tags" value="${esc((item.tags||[]).join(', '))}"></label></div><label>Summary<textarea name="summary">${esc(item.summary)}</textarea></label></div>`;
+function ideaDetailHtml(item) {
+  const hasDossier = featureHasDossierContent(item, normalizeFeatureDossierRaw);
+  return `<div class="feature-detail">
+    <div class="feature-detail-badges">
+      <span class="badge">${esc(item.id)}</span>
+      <span class="badge">${esc(item.status)}</span>
+      ${hasDossier ? '<span class="badge record-detail-dossier">Brief</span>' : ''}
+    </div>
+    <div class="form" data-form="idea">
+      <label class="feature-title-field">Title<input name="title" value="${esc(item.title)}"></label>
+      <div class="row"><label>ID<input name="id" value="${esc(item.id)}"></label><label>Status<input name="status" value="${esc(item.status)}"></label></div>
+      <label>Tags<input name="tags" value="${esc((item.tags || []).join(', '))}"></label>
+      <label>Card summary<textarea name="summary" rows="3">${esc(item.summary)}</textarea></label>
+      <div id="ideaDossierMount">${dossierEditorHtml(item, featureDossierDeps(), ideaDossierConfig())}</div>
+    </div>
+  </div>`;
+}
+function docsEditor() {
+  const manifest = state.data['docs.json'] || { categories: [], articles: [] };
+  const articles = manifest.articles || [];
+  const meta = getSelectedDocMeta();
+  const record = getDocEditorRecord(meta);
+  const dirty = state.dirty.has(files.docs);
+  const categories = manifest.categories || [];
+  return `<section class="toolbar feature-toolbar">
+    <div><h2>Docs</h2><p>Technical &amp; design articles for <strong>#/docs</strong>. Index in <code>docs.json</code>; bodies in <code>public/docs/articles/{category}/</code>. See <code>docs/AUTHORING.md</code>.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
+  </section>
+  <section class="panel feature-desk">
+    <div class="feature-action-bar">
+      <div class="feature-action-buttons">
+        <button type="button" class="btn" id="saveDocs">Save docs</button>
+        <button type="button" class="btn ghost" id="newDoc">New article</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <div class="feature-layout">
+      <aside class="panel feature-sidebar"><div id="docListHost">${docListHtml(articles, meta?.slug)}</div></aside>
+      <article class="panel feature-main" id="docDetailHost">${record ? docDetailHtml(record, categories) : '<p class="hint">Select or create an article.</p>'}</article>
+    </div>
+  </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
+}
+function docDetailHtml(record, categories) {
+  const hasDossier = featureHasDossierContent(record, normalizeFeatureDossierRaw);
+  const hero = record.heroImage || {};
+  return `<div class="feature-detail">
+    <div class="feature-detail-badges">
+      <span class="badge">${esc(record.slug)}</span>
+      <span class="badge">${esc(record.category)}</span>
+      ${record.featured ? '<span class="badge">Featured</span>' : ''}
+      ${hasDossier ? '<span class="badge record-detail-dossier">Body</span>' : ''}
+    </div>
+    <div class="form" data-form="doc">
+      <label class="feature-title-field">Title<input name="title" value="${esc(record.title)}"></label>
+      <div class="row"><label>ID<input name="id" value="${esc(record.id)}"></label><label>Slug<input name="slug" value="${esc(record.slug)}"></label></div>
+      <div class="row"><label>Category<select name="category">${categories.map((c) => `<option value="${esc(c.id)}" ${record.category === c.id ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label><label>Featured<select name="featured"><option value="no" ${record.featured ? '' : 'selected'}>No</option><option value="yes" ${record.featured ? 'selected' : ''}>Yes</option></select></label></div>
+      <label>Tags<input name="tags" value="${esc((record.tags || []).join(', '))}"></label>
+      <label>Card summary<textarea name="summary" rows="3">${esc(record.summary)}</textarea></label>
+      <div class="row"><label>Author<input name="author" value="${esc(record.author || '')}"></label><label>Published<input name="publishedAt" value="${esc(record.publishedAt || '')}" placeholder="2026-05-27"></label><label>Updated<input name="updatedAt" value="${esc(record.updatedAt || '')}"></label></div>
+      <div class="row"><label>Hero image path<input name="heroPath" value="${esc(hero.path || '')}" list="docAssets"></label><label>Hero caption<input name="heroCaption" value="${esc(hero.caption || '')}"></label></div>
+      <datalist id="docAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
+      <p class="hint">Public URL: <code>#/docs?article=${esc(record.slug)}</code></p>
+      <div id="docDossierMount">${dossierEditorHtml(record, featureDossierDeps(), docDossierConfig())}</div>
+    </div>
+  </div>`;
 }
 function jsonEditorInner(file) { return `<textarea id="jsonEditor" style="min-height:420px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(JSON.stringify(state.data[file], null, 2))}</textarea>`; }
 function designLab() {
@@ -1691,13 +2757,28 @@ async function render() {
   const app = $('#app');
   if (state.tab === 'Box Art') state.tab = 'Game Library';
   if (state.tab === 'Community Issues') state.tab = 'Bugs';
+  if (['Features', 'Research', 'Ideas'].includes(state.tab)) state.tab = 'Workshop';
+  if (document.querySelector('[data-workshop-pane]')) captureWorkshopPaneState();
   if (state.tab === 'Game Library' && !state.boxart) {
     try { await refreshBoxartStatus(); } catch (e) {
       state.boxart = { configured: false, missingCount: 0, missing: [], error: e.message };
       log(`Box art status failed: ${e.message}`, 'error');
     }
   }
-  app.innerHTML = ({ Dashboard:dashboard, Compatibility:compatibility, Bugs:bugsEditor, Features:features, Research:research, 'Game Library':gameLibrary, 'Media Library':mediaLibrary, Models:modelsEditor, Characters:charactersEditor, Milestones:milestonesEditor, Ideas:ideasEditor, 'Design Lab':designLab, Publish:publish }[state.tab] || dashboard)();
+  if (state.tab === 'Map Editor') {
+    document.body.classList.add('map-editor-active');
+    document.body.classList.remove('atlas-map-active');
+    try { await initMapEditorTab(state, api); } catch (e) {
+      log(`Map editor init failed: ${e.message}`, 'error');
+    }
+  } else if (state.tab === 'Island Atlas') {
+    document.body.classList.add('atlas-map-active');
+    document.body.classList.remove('map-editor-active');
+  } else {
+    document.body.classList.remove('map-editor-active');
+    document.body.classList.remove('atlas-map-active');
+  }
+  app.innerHTML = ({ Dashboard:dashboard, Compatibility:compatibility, Bugs:bugsEditor, Workshop:workshop, 'Island Atlas':() => atlasMapEditorHtml(state, esc, featureDossierDeps()), 'Map Editor':() => mapEditorHtml(state, esc), Milestones:milestonesEditor, Docs:docsEditor, 'Game Library':gameLibrary, 'Media Library':mediaLibrary, Models:modelsEditor, Characters:charactersEditor, 'Design Lab':designLab, Publish:publish }[state.tab] || dashboard)();
   bind();
 }
 async function runBatchBoxartFetch({ force = false, label = 'Batch fetch' } = {}) {
@@ -1740,8 +2821,8 @@ async function applyCoverByUrl(imageUrl, label = '') {
 }
 function bind() {
   document.querySelectorAll('[data-go]').forEach(btn => btn.onclick = () => { state.tab = btn.dataset.go; renderTabs(); render(); });
-  document.querySelectorAll('.list button[data-id]').forEach(btn => btn.onclick = () => {
-    const keyMap = { Compatibility:'route', Bugs:'bug', Features:'feature', Research:'poi', 'Game Library':'game', Milestones:'milestone', Ideas:'idea' };
+  document.querySelectorAll('.list button[data-id]:not([data-workshop-kind]):not([data-milestone-id])').forEach(btn => btn.onclick = () => {
+    const keyMap = { Compatibility:'route', Bugs:'bug', 'Game Library':'game' };
     const key = keyMap[state.tab] || 'game';
     state.selected[key] = btn.dataset.id;
     if (state.tab === 'Compatibility') {
@@ -1758,12 +2839,6 @@ function bind() {
       applyBugFromForm();
       state.selected.bug = btn.dataset.id;
       syncBugUIFromState();
-      return;
-    }
-    if (state.tab === 'Features' && btn.dataset.id) {
-      applyFeatureFromForm();
-      state.selected.feature = btn.dataset.id;
-      syncFeatureUIFromState();
       return;
     }
     if (state.tab === 'Game Library') resetBoxartPicker();
@@ -1801,17 +2876,31 @@ function bind() {
   };
   if (state.tab === 'Compatibility') syncCompatUIFromState();
   if (state.tab === 'Bugs') bindBugDesk();
-  if (state.tab === 'Features') bindFeatureDesk();
-  const saveResearch = $('#saveResearch'); if (saveResearch) saveResearch.onclick = () => { updatePoi(); saveFile(files.research, state.data['research-pois.json']); };
+  if (state.tab === 'Workshop') bindWorkshopDesk();
+  if (state.tab === 'Island Atlas') {
+    initAtlasMapEditorTab(state, {
+      ...featureDossierDeps(),
+      markDirty: (file) => markDirty(files.atlasPins),
+      saveFile,
+      log,
+    });
+  }
+  if (state.tab === 'Map Editor') bindMapEditor(state, { api, log, esc, render });
+  if (state.tab === 'Milestones') bindMilestonesDesk();
+  if (state.tab === 'Docs') bindDocsDesk();
   const saveGames = $('#saveGames'); if (saveGames) saveGames.onclick = () => { updateGame(); saveFile(files.compatibility, state.data['compatibility.json']); };
   const saveDesign = $('#saveDesign'); if (saveDesign) saveDesign.onclick = () => { updateDesign(); Promise.all([saveFile(files.theme, state.data['theme.json']), saveFile(files.homepage, state.data['homepage.json'])]); };
   const saveJsonEditor = $('#saveJsonEditor'); if (saveJsonEditor) saveJsonEditor.onclick = () => { const fileMap = { 'Media Library':files.gallery, Models:files.models, Characters:files.characters, Milestones:files.roadmap, Ideas:files.ideas }; const file = fileMap[state.tab]; try { state.data[file] = JSON.parse($('#jsonEditor').value); markDirty(file); saveFile(file, state.data[file]); } catch(e) { toast('Invalid JSON: ' + e.message); } };
   const saveModels = $('#saveModels'); if (saveModels) saveModels.onclick = () => { updateModels(); saveFile(files.models, state.data['models.json']); };
-  const saveRoadmap = $('#saveRoadmap'); if (saveRoadmap) saveRoadmap.onclick = () => { updateMilestone(); saveFile(files.roadmap, state.data['roadmap.json']); };
-  const saveIdeas = $('#saveIdeas'); if (saveIdeas) saveIdeas.onclick = () => { updateIdea(); saveFile(files.ideas, state.data['ideas.json']); };
-  const newPoi = $('#newPoi'); if (newPoi) newPoi.onclick = () => { const poi = { id:`poi-${Date.now().toString().slice(-5)}`, name:'New POI', type:'Research', confidence:'Possible', canonStatus:'Speculative', devStatus:'Needed', position:[0,.25,0], summary:'Describe the location.', evidence:[], assetNeeds:[], linkedFeatures:[], relatedBugs:[] }; state.data['research-pois.json'].pois.unshift(poi); state.selected.poi=poi.id; markDirty(files.research); render(); };
-  const newMilestone = $('#newMilestone'); if (newMilestone) newMilestone.onclick = () => { const item = { id:`milestone-${Date.now().toString().slice(-5)}`, title:'New milestone', status:'future', summary:'Describe the milestone.' }; state.data['roadmap.json'].milestones.push(item); state.selected.milestone=item.id; markDirty(files.roadmap); render(); };
-  const newIdea = $('#newIdea'); if (newIdea) newIdea.onclick = () => { const item = { id:`idea-${Date.now().toString().slice(-5)}`, title:'New idea', status:'spark', summary:'Describe the idea.', tags:[] }; state.data['ideas.json'].items.unshift(item); state.selected.idea=item.id; markDirty(files.ideas); render(); };
+  const newMilestone = $('#newMilestone'); if (newMilestone) newMilestone.onclick = () => {
+    applyMilestoneFromForm();
+    const item = { id:`milestone-${Date.now().toString().slice(-5)}`, title:'New milestone', status:'future', summary:'Describe the milestone.' };
+    state.data['roadmap.json'].milestones.push(item);
+    state.selected.milestone = item.id;
+    markDirty(files.roadmap);
+    syncMilestonesUI();
+    log(`Created ${item.id}. Save milestones when ready.`, 'ok');
+  };
   ['RouteTest','BugCheck','FeatureTask'].forEach(kind => { const btn = $(`#add${kind}`); if (btn) btn.onclick = () => addCheck(kind); });
   document.querySelectorAll('[data-remove]').forEach(btn => btn.onclick = () => btn.closest('.check-row')?.remove());
   const gitStatus = $('#gitStatus'); if (gitStatus) gitStatus.onclick = async () => { const res = await api('/api/status'); toast(res.output || 'Clean working tree'); };
@@ -1877,12 +2966,12 @@ function updateRouteFromForm() {
   });
   markDirty(files.compatibility);
 }
-function updatePoi() { const d = formData(); const poi = state.data['research-pois.json'].pois.find(p => p.id === state.selected.poi); Object.assign(poi, { id:d.id, name:d.name, type:d.type, confidence:d.confidence, devStatus:d.devStatus, canonStatus:d.canonStatus, summary:d.summary, position:[Number(d.x),Number(d.y),Number(d.z)], assetNeeds:csv(d.assetNeeds), linkedFeatures:csv(d.linkedFeatures), relatedBugs:csv(d.relatedBugs), evidence:d.evidenceImage ? [{ label:'Curated evidence', image:d.evidenceImage, note:d.evidenceNote || '' }] : [] }); state.selected.poi=d.id; markDirty(files.research); }
+function updatePoi() { applyPoiFromForm(); }
 function updateGame() { const d = formData(); const game = state.data['compatibility.json'].games.find(g => g.id === state.selected.game); Object.assign(game, { id:d.id, title:d.title, generation:d.generation, shortTitle:d.shortTitle, platform:d.platform, releaseYear:Number(d.releaseYear), family:d.family, boxArt:d.boxArt }); state.selected.game=d.id; markDirty(files.compatibility); }
 
 function updateModels() { const d = formData(); const models = state.data['models.json']; Object.assign(models.mainModel, { name:d.mainName, status:d.mainStatus, file:d.mainFile, preview:d.mainPreview, summary:d.mainSummary }); markDirty(files.models); }
-function updateMilestone() { const d = formData(); const roadmap = state.data['roadmap.json']; const item = (roadmap.milestones || []).find(m => m.id === state.selected.milestone); if (!item) return; Object.assign(item, { id:d.id, title:d.title, status:d.status, summary:d.summary, image:d.image || '' }); if (d.current === 'yes' || d.status === 'current') roadmap.currentMilestoneId = d.id; state.selected.milestone = d.id; markDirty(files.roadmap); }
-function updateIdea() { const d = formData(); const idea = state.data['ideas.json'].items.find(i => i.id === state.selected.idea); if (!idea) return; Object.assign(idea, { id:d.id, title:d.title, status:d.status, summary:d.summary, tags:csv(d.tags) }); state.selected.idea = d.id; markDirty(files.ideas); }
+function updateMilestone() { applyMilestoneFromForm(); }
+function updateIdea() { applyIdeaFromForm(); }
 function updateDesign() { const d = formData(); Object.assign(state.data['theme.json'], { motion:d.motion, heroStyle:d.heroStyle, cardDensity:d.cardDensity, ontologyDensity:d.ontologyDensity, graphLineStyle:d.graphLineStyle, legalBannerStyle:d.legalBannerStyle }); state.data['homepage.json'].hero.headline = d.headline; state.data['homepage.json'].hero.subheadline = d.subheadline; try { state.data['homepage.json'].carousel = JSON.parse(d.homeCarousel || '[]'); } catch(e) { throw new Error('Homepage carousel JSON is invalid: ' + e.message); } markDirty(files.theme); markDirty(files.homepage); }
 async function saveAllDirty() {
   const jobs = [...state.dirty].map(file => saveFile(file, state.data[file]));

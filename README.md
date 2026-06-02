@@ -42,7 +42,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite.
+Open the local URL printed by Vite (default **5174** — see [`../DEV-PORTS.md`](../DEV-PORTS.md) for the workspace port map).
 
 ## Build the site
 
@@ -60,8 +60,10 @@ npm run admin
 Open:
 
 ```text
-http://127.0.0.1:8787
+http://127.0.0.1:9477
 ```
+
+Port assignments for all apps in this workspace: [`../DEV-PORTS.md`](../DEV-PORTS.md).
 
 The Operations Desk runs on your machine only. It edits files in `public/data`, validates them, shows Git status, and can commit/push through your existing Git setup.
 

@@ -1,0 +1,37 @@
+{
+  "entries": [
+    {
+      "id": "research-ferry-dock",
+      "title": "Ferry Dock",
+      "category": "Location",
+      "subject": "Island arrival & transport",
+      "confidence": "Likely",
+      "canonStatus": "Inferred from resort transport and map reconstruction notes",
+      "devStatus": "Needed",
+      "summary": "Primary arrival and departure point for the island. Ferry transport, dock placement, and guest arrival logic are part of the project direction.",
+      "tags": ["transport", "arrival"],
+      "linkedPins": ["ferry-dock"],
+      "linkedFeatures": ["feature-model-library"],
+      "relatedBugs": [],
+      "evidence": []
+    }
+  ],
+  "categories": [
+    "Location",
+    "Character",
+    "Pokémon",
+    "Species",
+    "Mechanic",
+    "Region",
+    "Timeline",
+    "Asset",
+    "Other"
+  ],
+  "confidenceLegend": [
+    "Confirmed",
+    "Likely",
+    "Possible",
+    "Speculative",
+    "Original for gameplay"
+  ]
+}

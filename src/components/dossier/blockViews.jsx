@@ -1,18 +1,40 @@
 import React from 'react';
+import { isValidPublicHref } from '../../lib/linkUtils.js';
 import { assetUrl } from '../../lib/data.js';
+import { InlineMarkdown } from '../../lib/inlineMarkdown.jsx';
 import { DossierCarousel } from './DossierCarousel.jsx';
+import { DossierDiagram } from './DossierDiagram.jsx';
+import { DossierImage } from './DossierImage.jsx';
+import { DossierTabs } from './DossierTabs.jsx';
+
+const CODE_REPOS = {
+  'pokemon-resort': 'Pokémon Resort (game)',
+  'pokemon-resort-page': 'Resort site & admin',
+  spmk: 'SPMK tooling',
+  'island-dreamforge': 'Island Dreamforge',
+  'pokemon-ds-map-studio': 'Pokémon DS Map Studio',
+};
+
+function codeLocationLabel(block) {
+  const loc = `${block.repo}/${block.path}`;
+  return block.lines ? `${loc}:${block.lines}` : loc;
+}
 
 /** Map block type → React component. Add custom blocks here after registerDossierBlock(). */
 export const dossierBlockViews = {
   text({ block }) {
-    return <div className="dossier-block dossier-block-text"><p>{block.body}</p></div>;
+    return (
+      <div className="dossier-block dossier-block-text">
+        <p><InlineMarkdown>{block.body}</InlineMarkdown></p>
+      </div>
+    );
   },
 
   image({ block, onOpenGallery }) {
     return (
       <figure className="dossier-block dossier-block-image dossier-block--media">
         <button type="button" className="dossier-media-open" onClick={() => onOpenGallery([{ path: block.path, caption: block.caption }], 0)}>
-          <img src={assetUrl(block.path)} alt={block.caption || ''} loading="lazy" />
+          <DossierImage path={block.path} alt={block.caption || ''} />
         </button>
         {block.caption && <figcaption>{block.caption}</figcaption>}
       </figure>
@@ -49,7 +71,7 @@ export const dossierBlockViews = {
               onClick={() => onOpenGallery(galleryItems, index)}
             >
               <span className="dossier-compare-frame">
-                <img src={assetUrl(item.path)} alt={item.label || item.caption || ''} loading="lazy" />
+                <DossierImage path={item.path} alt={item.label || item.caption || ''} />
               </span>
               {item.label && <span className="dossier-compare-label">{item.label}</span>}
             </button>
@@ -81,7 +103,7 @@ export const dossierBlockViews = {
               className="dossier-gallery-thumb"
               onClick={() => onOpenGallery(block.images, index)}
             >
-              <img src={assetUrl(img.path)} alt={img.caption || ''} loading="lazy" />
+              <DossierImage path={img.path} alt={img.caption || ''} />
             </button>
           ))}
         </div>
@@ -94,13 +116,70 @@ export const dossierBlockViews = {
       <div className="dossier-block dossier-block-links">
         <ul>
           {block.items.map((item) => (
-            <li key={item.href}>
-              <a href={item.href} target="_blank" rel="noreferrer">{item.label}</a>
+            <li key={`${item.label}-${item.href}`}>
+              {isValidPublicHref(item.href) ? (
+                <a href={item.href} target="_blank" rel="noreferrer noopener">{item.label}</a>
+              ) : (
+                <span className="dossier-link-invalid">{item.label} <em>(invalid URL)</em></span>
+              )}
             </li>
           ))}
         </ul>
       </div>
     );
+  },
+
+  figure({ block, onOpenGallery }) {
+    const layoutClass = block.layout === 'side' ? ' dossier-block-figure--side' : '';
+    return (
+      <figure className={`dossier-block dossier-block-figure dossier-block--media${layoutClass}`}>
+        <div className="dossier-figure-body">
+          {block.body && <p className="dossier-figure-text"><InlineMarkdown>{block.body}</InlineMarkdown></p>}
+          <button
+            type="button"
+            className="dossier-media-open dossier-figure-media"
+            onClick={() => onOpenGallery([{ path: block.path, caption: block.caption || block.body }], 0)}
+          >
+            <DossierImage path={block.path} alt={block.caption || block.body || ''} />
+          </button>
+        </div>
+        {block.caption && <figcaption>{block.caption}</figcaption>}
+      </figure>
+    );
+  },
+
+  html({ block }) {
+    return (
+      <div
+        className="dossier-block dossier-block-html"
+        dangerouslySetInnerHTML={{ __html: block.html }}
+      />
+    );
+  },
+
+  diagram({ block }) {
+    return <DossierDiagram block={block} />;
+  },
+
+  code({ block }) {
+    const langClass = block.language ? ` language-${block.language}` : '';
+    return (
+      <figure className="dossier-block dossier-block-code">
+        <figcaption className="dossier-code-header">
+          <code className="dossier-code-location">{codeLocationLabel(block)}</code>
+          {block.language && <span className="soft-label dossier-code-lang">{block.language}</span>}
+          {CODE_REPOS[block.repo] && (
+            <span className="soft-label dossier-code-repo">{CODE_REPOS[block.repo]}</span>
+          )}
+        </figcaption>
+        <pre className={`dossier-code-body${langClass}`}><code>{block.body}</code></pre>
+        {block.caption && <p className="dossier-code-caption">{block.caption}</p>}
+      </figure>
+    );
+  },
+
+  tabs({ block, onOpenGallery }) {
+    return <DossierTabs block={block} onOpenGallery={onOpenGallery} variant={block.variant} />;
   },
 };
 

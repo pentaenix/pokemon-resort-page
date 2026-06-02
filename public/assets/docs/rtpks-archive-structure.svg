@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" role="img" aria-label="RTPKS ZIP archive layout">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f0f9fb"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="420" rx="20" fill="url(#bg)" stroke="#9fd4df" stroke-width="1.5"/>
+  <text x="36" y="44" font-family="system-ui,sans-serif" font-size="22" font-weight="700" fill="#075b78">.rtpks  ZIP archive (forward-slash paths)</text>
+  <text x="36" y="72" font-family="system-ui,sans-serif" font-size="14" fill="#5a8a96">Format: pokemon_resort.rtpks · version 1</text>
+  <g font-family="ui-monospace,Menlo,monospace" font-size="14" fill="#0e3d4d">
+    <text x="48" y="110">manifest.json</text>
+    <text x="48" y="138">index/tile_index.json</text>
+    <text x="48" y="166">pdsms/tileset.pdsts</text>
+    <text x="48" y="194">pdsms/textures/*.png</text>
+    <text x="48" y="222">pdsms/TilesetThumbnail.png</text>
+    <text x="48" y="250">metadata/tile_metadata.json</text>
+  </g>
+  <g font-family="system-ui,sans-serif" font-size="13" fill="#5a8a96">
+    <text x="340" y="110">pack id, editor payload paths</text>
+    <text x="340" y="138">localIndex ’ resortTileId</text>
+    <text x="340" y="166">native PDSMS tileset (TilesetIO)</text>
+    <text x="340" y="194">embedded texture PNGs</text>
+    <text x="340" y="222">optional preview thumbnail</text>
+    <text x="340" y="250">optional · reserved</text>
+  </g>
+  <rect x="36" y="280" width="648" height="110" rx="14" fill="#ffffff" stroke="#c8e6ec"/>
+  <text x="52" y="308" font-family="system-ui,sans-serif" font-size="13" font-weight="600" fill="#075b78">Load path</text>
+  <text x="52" y="332" font-family="system-ui,sans-serif" font-size="13" fill="#0e3d4d">Extract pdsts + textures ’ TilesetIO ’ normal PDSMS tile list. Tile index binding restored separately.</text>
+  <text x="52" y="358" font-family="system-ui,sans-serif" font-size="13" fill="#0e3d4d">One PDSMS Tile = one RTPKS tile identity (multi-cell trees stay one tile).</text>
+  <text x="52" y="382" font-family="system-ui,sans-serif" font-size="13" fill="#0e3d4d">Resort tile ID 0 is valid · empty map cells use local index -1.</text>
+</svg>

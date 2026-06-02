@@ -1,10 +1,10 @@
 {
   "mainModel": {
-    "name": "Island master model",
-    "status": "resource-needed",
-    "file": "media/models/island/island-main.glb",
+    "name": "Island terrain",
+    "status": "in-atlas",
+    "file": "media/models/island/island_terrain.glb",
     "preview": "media/models/island/island-preview.webp",
-    "summary": "Primary 3D island model used by the research atlas."
+    "summary": "Primary 3D island model used by the Island Atlas viewport."
   },
   "submodels": [],
   "categories": [

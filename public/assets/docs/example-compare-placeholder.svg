@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320" role="img" aria-label="Example compare panel placeholder">
+  <rect width="480" height="320" rx="16" fill="#eef7fa" stroke="#94cfd9" stroke-width="2"/>
+  <text x="240" y="150" text-anchor="middle" font-family="system-ui,sans-serif" font-size="18" font-weight="700" fill="#075b78">Compare panel</text>
+  <text x="240" y="178" text-anchor="middle" font-family="ui-monospace,monospace" font-size="13" fill="#5a8a96">before / after screenshot</text>
+</svg>

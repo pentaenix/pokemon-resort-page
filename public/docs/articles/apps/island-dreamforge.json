@@ -1,0 +1,216 @@
+{
+  "dossier": {
+    "overview": "Island Dreamforge is a local fantasy-map-to-terrain studio in the monorepo. You upload a handmade color map, assign heights in meters, tune procedural materials and water, optionally stack overlay layers, sculpt in a Three.js viewport, and export game-ready height maps, meshes, and packaged ZIP archives for web portals or the C++ game.\n\nRun it with ./mapmkr run from island-dreamforge/ (frontend on port 5173, FastAPI backend on 8000). Projects autosave to browser IndexedDB and survive refresh until you hit Reset project.",
+    "sections": [
+      {
+        "id": "guide",
+        "title": "App guide",
+        "layout": "tabs-primary",
+        "summary": "What Island Dreamforge does, how the five-step wizard works, and what it exports.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "overview",
+                "label": "Overview",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Objective: turn clean 2D color maps into believable 3D island terrain with shoreline water, procedural ground materials, optional structure/marker overlays, and deterministic exports sized for real-world meters.\n\nIsland Dreamforge sits upstream of Pokémon Resort overworld content. Named presets in shared/island_presets.json (pokemon_resort_soft_cliffs, volcanic_island, gentle_resort_island) tune height generation for resort-style islands.\n\nStack:\n• Backend — FastAPI + NumPy + Pillow + trimesh (height pipeline, bathymetry, mesh export)\n• Frontend — React 18 + Vite + Three.js (five-step wizard, 3D editor, autosave)\n• Runner — ./mapmkr (setup, doctor, run, build, clean)"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Data flow",
+                    "caption": "Color map in → packaged assets out",
+                    "source": "flowchart LR\n    Map[Handmade color PNG] --> H[Step 1 Heights]\n    H --> T[Step 2 Textures]\n    T --> W[Step 3 Water]\n    W --> L[Step 4 Layers]\n    L --> E[Step 5 3D Export]\n    E --> Web[Web portal ZIP]\n    E --> Game[Game package ZIP]\n    E --> Mesh[GLB OBJ STL PLY]"
+                  }
+                ]
+              },
+              {
+                "id": "workflow",
+                "label": "Five-step workflow",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "The UI is a linear wizard orchestrated in frontend/src/App.jsx. Each stage persists into the same IndexedDB autosave key (island-dreamforge-autosave-v7).\n\n1 · Heights — Upload a base map. Click a map color and type its height in meters. The app starts with water at 0 m, samples pixels exactly, and generates smooth height bands from your color samples. Island world scale sets land width/depth (presets up to ~30 km), mesh density, and fixed-meter spacing for trees and future paths.\n\n2 · Textures — Configure the procedural art pass before final water editing: resolution, tile size, macro variation, normal/bump strength, tree density, rock steepness, gravel, sand bands, wet sand, and transition softness. Preview swatches show water, trees, rock, gravel, sand, and grass.\n\n3 · Water — Tune ocean disc radius, shelf depths, foam, bathymetry smoothing, and water color steps. Water baking is non-destructive: default mode is Visual water only; indent modes carve a shallow bed instead of punching holes through the terrain.\n\n4 · Layers — Optional overlays: water hints, structures, markers/POIs, texture/noise layers. Each layer can be analyzed (connected components), hidden, cleared, deleted, or exported as JSON.\n\n5 · 3D / Export — Orbit terrain in Move mode by default; switch to sculpt/paint when needed. Regenerate procedural textures, refresh derived maps (island mask, water depth, material IDs), and download meshes or full packages."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "island-dreamforge",
+                    "path": "frontend/src/App.jsx",
+                    "lines": "880-886",
+                    "language": "javascript",
+                    "caption": "Stage navigation — five wizard tabs",
+                    "body": "      <nav className=\"stage-tabs\">\n        <button className={stage === 1 ? 'active' : ''} onClick={() => setStage(1)}>1 · Heights</button>\n        <button className={stage === 2 ? 'active' : ''} onClick={() => setStage(2)}>2 · Textures</button>\n        <button className={stage === 3 ? 'active' : ''} onClick={() => setStage(3)}>3 · Water</button>\n        <button className={stage === 4 ? 'active' : ''} onClick={() => setStage(4)}>4 · Layers</button>\n        <button className={stage === 5 ? 'active' : ''} onClick={() => setStage(5)}>5 · 3D / Export</button>\n      </nav>"
+                  }
+                ]
+              },
+              {
+                "id": "exports",
+                "label": "Exports",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Exports fall into three groups: quick downloads from step 5, standalone mesh formats via /api/export-mesh, and packaged ZIP archives with manifest.json for downstream tools.\n\nWeb Portal Package — GLB scene, RGBA material splat, water depth/color/foam textures, island/shoreline/ocean masks, shore-distance map, world.json, materials.json, structure/marker JSON stubs.\n\nGame Package — Quantized PNG maps (height u16, collision, material IDs, water depth, bathymetry, seafloor), chunked terrain LOD binaries (IDFMAP01), seafloor LOD meshes, coastline skirt (IDFSKRT1), preview GLB, and game/world.json.\n\nAd-hoc — Height PNG stages, painted texture PNG, normal map PNG, water mask PNG, layer JSON, GLB/OBJ/STL/PLY meshes, full project ZIP via /api/export-project."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Export</th><th>Format</th><th>Typical use</th></tr></thead><tbody><tr><td>Height map stages</td><td>16-bit PNG</td><td>Authoring checkpoints, external DCC</td></tr><tr><td>Procedural texture</td><td>PNG</td><td>Albedo painted in viewport</td></tr><tr><td>Normal map</td><td>PNG</td><td>Included in full project export</td></tr><tr><td>Water mask</td><td>PNG</td><td>When a water layer is active</td></tr><tr><td>Structure / marker data</td><td>JSON</td><td>Placed objects from layer analysis</td></tr><tr><td>Terrain mesh</td><td>GLB, OBJ, STL, PLY</td><td>Single-mesh download</td></tr><tr><td>Web portal package</td><td>ZIP + manifest.json</td><td>Three.js / web viewers</td></tr><tr><td>Game package</td><td>ZIP + chunked .bin</td><td>Pokémon Resort C++ loader path</td></tr><tr><td>Full project</td><td>ZIP</td><td>Archive all stages and settings</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "island-dreamforge",
+                    "path": "backend/app/island_export.py",
+                    "lines": "228-251",
+                    "language": "python",
+                    "caption": "Export manifest header — shared by web and game ZIP packages",
+                    "body": "    manifest = {\n        \"format\": \"island-dreamforge-export\",\n        \"schemaVersion\": 1,\n        \"version\": 1,\n        \"profile\": profile,\n        \"package\": package_name,\n        \"createdBy\": \"Island Dreamforge\",\n        \"units\": \"meters\",\n        \"coordinateSystem\": {\n            \"horizontalAxes\": [\"x\", \"z\"],\n            \"verticalAxis\": \"y\",\n            \"origin\": \"world_center\",\n        },\n        \"world\": meta[\"world\"],\n        \"ocean\": meta[\"ocean\"],\n        \"detail\": _detail_metadata(opts, profile),\n        \"materials\": {\n            \"ids\": _material_names(),\n            \"splatChannels\": {\n                \"r\": \"sand_wet_sand\",\n                \"g\": \"grass_forest\",\n                \"b\": \"rock_gravel\",\n                \"a\": \"water_seafloor\",\n            },\n        },"
+                  }
+                ]
+              },
+              {
+                "id": "run",
+                "label": "Run locally",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "From island-dreamforge/:\n\n./mapmkr run\n\nThe runner checks Python 3.10–3.13 and Node 18+, creates the backend venv if needed, installs dependencies, starts Uvicorn on http://127.0.0.1:8000 and Vite on http://127.0.0.1:5173, and prints log paths under .mapmkr/logs/.\n\nOther commands: ./mapmkr setup, ./mapmkr doctor, ./mapmkr build, ./mapmkr clean. Docker compose is available but local dev normally uses mapmkr.\n\nOverride the API URL in the frontend with VITE_API_URL if the backend port changes."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "island-dreamforge",
+                    "path": "README.md",
+                    "lines": "20-24",
+                    "language": "markdown",
+                    "caption": "Quick start",
+                    "body": "## Run locally\n\n```bash\n./mapmkr run\n```\n\nThe runner checks for Python 3.10-3.13 and Node 18+, creates the backend virtual environment, installs missing dependencies, starts the FastAPI backend and Vite frontend, and prints the local URL."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "architecture",
+        "title": "Architecture",
+        "summary": "Backend modules, frontend ownership, and HTTP surface.",
+        "blocks": [
+          {
+            "type": "diagram",
+            "title": "Runtime layout",
+            "caption": "Default ports in local dev",
+            "source": "flowchart TB\n    subgraph FE[\"Frontend :5173\"]\n      App[App.jsx wizard + autosave]\n      TV[TerrainViewport.jsx 3D scene]\n    end\n    subgraph BE[\"Backend :8000\"]\n      T[terrain.py heights + water bake]\n      IM[island_maps.py masks + bathymetry]\n      ME[mesh_export.py GLB + chunked bins]\n      IE[island_export.py ZIP packages]\n    end\n    App -->|multipart POST| BE\n    TV --> App"
+          },
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Module</th><th>Responsibility</th></tr></thead><tbody><tr><td><code>backend/app/terrain.py</code></td><td>Color quantization, preprocess, height generation, smoothing, water bake</td></tr><tr><td><code>backend/app/island_maps.py</code></td><td>Island mask, shoreline, shore distance, bathymetry, material maps</td></tr><tr><td><code>backend/app/layers.py</code></td><td>Connected components on overlay layers</td></tr><tr><td><code>backend/app/mesh_export.py</code></td><td>Height grid → trimesh; GLB/OBJ/STL/PLY; IDFMAP01 chunked game mesh</td></tr><tr><td><code>backend/app/island_export.py</code></td><td>Web/game ZIP assembly and manifest.json</td></tr><tr><td><code>frontend/src/App.jsx</code></td><td>Five-step UI, IndexedDB autosave, API calls</td></tr><tr><td><code>frontend/src/TerrainViewport.jsx</code></td><td>Three.js scene, materials, water shader, trees, brush tools</td></tr><tr><td><code>shared/island_presets.json</code></td><td>Named height-generation presets</td></tr><tr><td><code>shared/viewport_config.json</code></td><td>Cinematic lighting, fog, ocean, forest density</td></tr></tbody></table>"
+          },
+          {
+            "type": "text",
+            "body": "HTTP routes are documented in island-dreamforge/docs/API.md. Key groups: /api/analyze-colors and /api/heightmap (step 1), /api/bake-water (step 3), /api/analyze-layer (step 4), /api/export-mesh and /api/export-project (step 5), /api/island-derived-maps, /api/export-web-island, /api/export-game-island."
+          }
+        ]
+      },
+      {
+        "id": "materials",
+        "title": "Materials & 3D viewport",
+        "summary": "Procedural ground types, water shader, and world scale.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "The 3D viewport hides sea-level terrain pixels so the island reads as land rising from water rather than a flat rectangular PNG. Water uses the Three.js Water addon with transparency, reflection, depth darkening, shoreline foam, and horizon fade.\n\nPaint materials in the viewport (trees, grass, sand, gravel, rock) map to export material IDs 0–7: water/seafloor, wet sand, sand, grass, forest, rock, gravel, dirt/path. Material splat RGBA channels group sand, grass/forest, rock/gravel, and water/seafloor for web exports.\n\nStructures and markers snap to the final smoothed terrain surface. Vegetation uses instanced forest clumps driven by slope and height rules from shared/viewport_config.json."
+          },
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Material ID</th><th>Name</th><th>Viewport paint id</th></tr></thead><tbody><tr><td>0</td><td>water_deep_seafloor</td><td>—</td></tr><tr><td>1</td><td>wet_sand</td><td>sand (shore band)</td></tr><tr><td>2</td><td>sand</td><td>sand</td></tr><tr><td>3</td><td>grass</td><td>grass</td></tr><tr><td>4</td><td>forest</td><td>trees</td></tr><tr><td>5</td><td>rock</td><td>rock</td></tr><tr><td>6</td><td>gravel</td><td>gravel</td></tr><tr><td>7</td><td>dirt_path</td><td>—</td></tr></tbody></table>"
+          },
+          {
+            "type": "code",
+            "repo": "island-dreamforge",
+            "path": "backend/app/mesh_export.py",
+            "lines": "564-580",
+            "language": "python",
+            "caption": "Standalone mesh download formats",
+            "body": "def export_mesh_bytes(mesh: trimesh.Trimesh, fmt: str) -> Tuple[bytes, str, str]:\n    fmt = fmt.lower().strip().lstrip(\".\")\n    if fmt == \"obj\":\n        data = mesh.export(file_type=\"obj\")\n        ...\n        return data, \"model/obj\", \"island_terrain.obj\"\n    if fmt == \"stl\":\n        data = mesh.export(file_type=\"stl\")\n        return data, \"model/stl\", \"island_terrain.stl\"\n    if fmt in {\"glb\", \"gltf\"}:\n        data = mesh.export(file_type=\"glb\")\n        return data, \"model/gltf-binary\", \"island_terrain.glb\"\n    if fmt == \"ply\":\n        data = mesh.export(file_type=\"ply\")\n        return data, \"application/octet-stream\", \"island_terrain.ply\"\n    raise ValueError(f\"Unsupported mesh format: {fmt}\")"
+          }
+        ]
+      },
+      {
+        "id": "screenshots",
+        "title": "UI walkthrough",
+        "summary": "Captured from the running local app (./mapmkr run on port 5173).",
+        "blocks": [
+          {
+            "type": "gallery",
+            "caption": "Five wizard stages",
+            "images": [
+              {
+                "path": "media/docs/island-dreamforge-heights.webp",
+                "caption": "1 · Heights — color samples and world scale"
+              },
+              {
+                "path": "media/docs/island-dreamforge-textures.webp",
+                "caption": "2 · Textures — procedural material tuning"
+              },
+              {
+                "path": "media/docs/island-dreamforge-water.webp",
+                "caption": "3 · Water — ocean disc and bathymetry"
+              },
+              {
+                "path": "media/docs/island-dreamforge-layers.webp",
+                "caption": "4 · Layers — structure, marker, and overlay stacks"
+              },
+              {
+                "path": "media/docs/island-dreamforge-3d-export.webp",
+                "caption": "5 · 3D / Export — viewport and export profiles"
+              }
+            ]
+          },
+          {
+            "type": "compare",
+            "variant": "fluid",
+            "caption": "Heights authoring vs 3D export stage",
+            "items": [
+              {
+                "path": "media/docs/island-dreamforge-heights.webp",
+                "label": "Step 1 — color → meters"
+              },
+              {
+                "path": "media/docs/island-dreamforge-3d-export.webp",
+                "label": "Step 5 — orbit, sculpt, package"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "game-package",
+        "title": "Game package contents",
+        "summary": "Files inside Export Game Package (ZIP).",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Path in ZIP</th><th>Description</th></tr></thead><tbody><tr><td><code>manifest.json</code></td><td>Format island-dreamforge-export v1, world/ocean/detail, file index</td></tr><tr><td><code>game/world.json</code></td><td>World width, depth, sea level, export profile metadata</td></tr><tr><td><code>game/height_u16.png</code></td><td>16-bit height field in meters</td></tr><tr><td><code>game/collision_height_u16.png</code></td><td>Land-only collision heights (ocean flattened to sea level)</td></tr><tr><td><code>game/material_ids_u8.png</code></td><td>Per-texel material index 0–7</td></tr><tr><td><code>game/water_depth_u8.png</code></td><td>Normalized water depth</td></tr><tr><td><code>game/bathymetry_u8.png</code></td><td>Seafloor shape preview</td></tr><tr><td><code>game/seafloor_height_u16.png</code></td><td>Seafloor elevation below sea level</td></tr><tr><td><code>game/terrain_lod0.bin</code> … <code>lod2</code></td><td>Chunked land meshes (IDFMAP01)</td></tr><tr><td><code>game/seafloor_lod0.bin</code>, <code>lod1</code></td><td>Chunked seafloor meshes</td></tr><tr><td><code>game/coastline_skirt.bin</code></td><td>Coastline skirt mesh (IDFSKRT1)</td></tr><tr><td><code>preview/island_game_preview.glb</code></td><td>Combined preview scene</td></tr><tr><td><code>game/structure_instances.json</code></td><td>Structure placements (when authored)</td></tr><tr><td><code>game/marker_instances.json</code></td><td>POI / marker placements</td></tr></tbody></table>"
+          },
+          {
+            "type": "text",
+            "body": "Export detail presets (Preview Low/Medium/High, Web Export High, Game Export Low/Medium/High) control mesh resolution and chunk size. Game chunk size defaults to 16 quads and is configurable in the Export Profiles panel on step 5."
+          }
+        ]
+      },
+      {
+        "id": "related",
+        "title": "Related docs",
+        "summary": "In-repo references and sibling apps.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Authoritative markdown inside island-dreamforge/:\n\n• README.md — product behavior, exports, water rules\n• docs/ARCHITECTURE.md — module map and extension points\n• docs/API.md — HTTP route reference\n• docs/ASSETS.md — texture and skybox paths\n• AGENTS.md — coding-agent task routing\n\nRelated Resort Docs articles: owmap-format (overworld map binary consumed by the game), charbin-schema (character packages).\n\nSibling apps: pokemon-resort/ (C++ runtime), pokemon-resort-page/ (site + Operations Desk), spmk/ (sprite tooling)."
+          }
+        ]
+      }
+    ]
+  }
+}

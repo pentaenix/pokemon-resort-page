@@ -72,6 +72,12 @@
       "icon": "✧"
     },
     {
+      "title": "Resort Docs",
+      "href": "#/docs",
+      "description": "Technical and design documentation — file formats, schemas, diagrams, and authoring guides.",
+      "icon": "▤"
+    },
+    {
       "title": "Source Guide",
       "href": "#/source",
       "description": "Learn how the static site, local Operations Desk, data files, and GitHub publish flow fit together.",

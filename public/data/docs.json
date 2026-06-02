@@ -1,0 +1,215 @@
+{
+  "apps": [
+    {
+      "id": "pokemon-resort",
+      "label": "Pokémon Resort",
+      "shortLabel": "Game"
+    },
+    {
+      "id": "pokemon-resort-page",
+      "label": "Resort site & admin",
+      "shortLabel": "Site"
+    },
+    {
+      "id": "spmk",
+      "label": "SPMK",
+      "shortLabel": "SPMK"
+    },
+    {
+      "id": "island-dreamforge",
+      "label": "Island Dreamforge",
+      "shortLabel": "Dreamforge"
+    },
+    {
+      "id": "pokemon-ds-map-studio",
+      "label": "Pokémon DS Map Studio",
+      "shortLabel": "PDSMS"
+    }
+  ],
+  "categories": [
+    {
+      "id": "meta",
+      "label": "Writing docs",
+      "description": "How to author and publish articles on this site."
+    },
+    {
+      "id": "formats",
+      "label": "File formats",
+      "description": "Schemas and on-disk layouts for resort tooling and the game."
+    },
+    {
+      "id": "gameplay",
+      "label": "Gameplay & systems",
+      "description": "Architecture notes for overworld, followers, and world data."
+    },
+    {
+      "id": "design",
+      "label": "Design",
+      "description": "Visual language, UX patterns, and reference art direction."
+    },
+    {
+      "id": "apps",
+      "label": "Applications",
+      "description": "What each app in the monorepo does, how to run it, and what it exports."
+    }
+  ],
+  "articles": [
+    {
+      "id": "writing-docs",
+      "slug": "writing-docs",
+      "title": "How to write documentation articles",
+      "category": "meta",
+      "tags": ["authoring", "json", "dossier"],
+      "apps": ["pokemon-resort-page"],
+      "summary": "Tabbed authoring guide: structure, blocks, screenshots, templates, and freshness checks.",
+      "publishedAt": "2026-05-27",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "media/docs/docs-hub.webp",
+        "caption": "Docs hub in the local development site."
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "article-template",
+      "slug": "article-template",
+      "title": "Article template",
+      "category": "meta",
+      "tags": ["template", "authoring", "code", "tabs"],
+      "apps": ["pokemon-resort-page"],
+      "summary": "Starter skeleton with sections, linked code, tabs, and placeholders to replace.",
+      "publishedAt": "2026-05-27",
+      "updatedAt": "2026-05-27",
+      "heroImage": {
+        "path": "assets/docs/article-placeholder.svg",
+        "caption": "Copy public/docs/templates/article-template.json to start a new article."
+      },
+      "featured": false,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "charbin-schema",
+      "slug": "charbin-schema",
+      "title": "What is a .charbin file?",
+      "category": "formats",
+      "tags": ["charbin", "SPMK", "sprites", "characters"],
+      "apps": ["pokemon-resort", "spmk"],
+      "summary": "Portable character packages: binary layout, JSON schema, sprite profiles, SPMK authoring, and extension guide.",
+      "publishedAt": "2026-05-27",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "media/docs/spmk/charbin-detail.webp",
+        "caption": "SPMK package editor — metadata, embedded sheets, and direction previews.",
+        "fit": "contain"
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "owmap-format",
+      "slug": "owmap-format",
+      "title": "What is an .owmap file?",
+      "category": "formats",
+      "tags": ["owmap", "overworld", "map editor", "terrain"],
+      "apps": ["pokemon-resort", "pokemon-resort-page"],
+      "summary": "Binary overworld map v1 (OWM1): height grids, ramp specials, collision bits, JSON metadata, Map Editor authoring, and C++ loader.",
+      "publishedAt": "2026-05-27",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "media/docs/map-editor/map-editor-3d-preview.webp",
+        "caption": "Map Editor 3D terrain preview — height + ramp geometry before bake.",
+        "fit": "contain"
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "rtpks-format",
+      "slug": "rtpks-format",
+      "title": "What is an .rtpks file?",
+      "category": "formats",
+      "tags": ["rtpks", "PDSMS", "tileset", "tiles", "Gen 4"],
+      "apps": ["pokemon-ds-map-studio", "pokemon-resort", "pokemon-resort-page"],
+      "summary": "Resort Tile Pack Source: ZIP tileset + stable Resort tile IDs from Pokémon DS Map Studio, for handoff to the Map Editor pipeline.",
+      "publishedAt": "2026-06-01",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "media/docs/pdsms/rtpks-resort-menu.webp",
+        "caption": "PDSMS — Pokémon Resort menu with Open / Save / Append RTPKS actions.",
+        "fit": "contain"
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "island-dreamforge",
+      "slug": "island-dreamforge",
+      "title": "Island Dreamforge",
+      "category": "apps",
+      "tags": ["island-dreamforge", "terrain", "export", "3d", "tools"],
+      "apps": ["island-dreamforge", "pokemon-resort"],
+      "summary": "Fantasy color map → height field → procedural materials → 3D editor → web and game ZIP exports.",
+      "publishedAt": "2026-06-01",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "media/docs/island-dreamforge-3d-export.webp",
+        "caption": "Step 5 · 3D / Export — orbit viewport and export profiles."
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "follower-pokemon",
+      "slug": "follower-pokemon",
+      "title": "Overworld follower Pokémon",
+      "category": "gameplay",
+      "tags": ["pokemon-resort", "followers", "idle", "overworld", "nature"],
+      "apps": ["pokemon-resort"],
+      "summary": "Single companion follower: summon, pathfinding follow, and nature-weighted idle behaviours with full behaviour catalog.",
+      "publishedAt": "2026-06-01",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "media/docs/pokemon-resort/follower-overworld.webp",
+        "caption": "Overworld 3D test with follower (overworld3d_test.webp)."
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "overworld-glb-models",
+      "slug": "overworld-glb-models",
+      "title": "Overworld GLB props pipeline",
+      "category": "gameplay",
+      "tags": ["glb", "obj", "overworld", "textures", "alpha", "map editor"],
+      "apps": ["pokemon-resort", "pokemon-resort-page"],
+      "summary": "OBJ→GLB conversion (V flip + measured-alpha MASK/OPAQUE), three.js preview, Map Editor placement with footprint/roof overlays, a placement ghost, a view-only 3D workspace, and orientation re-bake, plus the C++ GlbModelLoader/Renderer (UV-grid wrap, two-pass cutout order, configurable scene depth sort) — with the black-roof / torn-roof / black-banner / cut-off-banner / character-on-top pitfalls explained.",
+      "publishedAt": "2026-06-01",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "assets/docs/article-placeholder.svg",
+        "caption": "Pokémon Center prop: OBJ rip → GLB → preview, placement, and in-game render."
+      },
+      "featured": false,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "compatibility-ontology",
+      "slug": "compatibility-ontology",
+      "title": "Compatibility ontology & round trips",
+      "category": "gameplay",
+      "tags": ["compatibility", "transfer", "openhome", "ontology", "round-trip"],
+      "apps": ["pokemon-resort", "pokemon-resort-page"],
+      "summary": "What compatible means: Game A → Resort → Game B → play → Resort → Game A with identity preserved and updates merged — plus the public route matrix.",
+      "publishedAt": "2026-06-01",
+      "updatedAt": "2026-06-01",
+      "heroImage": {
+        "path": "media/docs/pokemon-resort/compatibility-ontology-graph.webp",
+        "caption": "Compatibility ontology graph on #/ontology.",
+        "fit": "contain"
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    }
+  ]
+}

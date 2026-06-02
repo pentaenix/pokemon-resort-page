@@ -1,8 +1,11 @@
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { docArticleRelativePath } from './docs/article-path.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const dataRoot = join(root, 'public/data');
+const docsArticlesRoot = join(root, 'public/docs/articles');
 const load = async (file) => JSON.parse(await readFile(join(dataRoot, file), 'utf8'));
 const fail = (message) => { throw new Error(message); };
 const assert = (condition, message) => { if (!condition) fail(message); };
@@ -17,8 +20,8 @@ const unique = (items, label) => {
 };
 
 try {
-  const [site, homepage, theme, research, compatibility, features, bugs, gallery, models, characters, roadmap, ideas] = await Promise.all([
-    'site.json','homepage.json','theme.json','research-pois.json','compatibility.json','features.json','bugs.json','gallery.json','models.json','characters.json','roadmap.json','ideas.json'
+  const [site, homepage, theme, research, atlasPins, compatibility, features, bugs, gallery, models, characters, roadmap, ideas, docs] = await Promise.all([
+    'site.json','homepage.json','theme.json','research.json','atlas-pins.json','compatibility.json','features.json','bugs.json','gallery.json','models.json','characters.json','roadmap.json','ideas.json','docs.json'
   ].map(load));
 
   assert(site.projectName && site.logo, 'site.json requires projectName and logo');
@@ -65,6 +68,12 @@ try {
           if (type === 'compare') assert((block.items || []).length >= 2, `Feature ${feature.id} compare block needs 2+ items`);
           if (type === 'carousel') assert((block.images || []).length >= 2, `Feature ${feature.id} carousel block needs 2+ images`);
           if (type === 'gallery') assert((block.images || []).length, `Feature ${feature.id} gallery block needs images`);
+          if (type === 'figure') {
+            assert(block.path, `Feature ${feature.id} figure block needs path`);
+            assert(block.body || block.caption, `Feature ${feature.id} figure block needs body or caption`);
+          }
+          if (type === 'html') assert(block.html, `Feature ${feature.id} html block needs html`);
+          if (type === 'diagram') assert(block.source, `Feature ${feature.id} diagram block needs source`);
         }
       }
     }
@@ -88,15 +97,74 @@ try {
     }
   }
 
-  const poiIds = unique(research.pois || [], 'POI');
+  const pinIds = unique(atlasPins.pins || [], 'atlas pin');
+  const pinColorIds = new Set((atlasPins.pinColors || []).map((c) => c.id));
+  const researchIds = unique(research.entries || [], 'research entry');
+  const researchCategories = new Set(research.categories || []);
   for (const feature of features.features) {
-    if (feature.dossier?.map?.poiId) assert(poiIds.has(feature.dossier.map.poiId), `Feature ${feature.id} dossier map links to unknown POI ${feature.dossier.map.poiId}`);
+    const mapPin = feature.dossier?.map?.pinId || feature.dossier?.map?.poiId;
+    if (mapPin) assert(pinIds.has(mapPin), `Feature ${feature.id} dossier map links to unknown atlas pin ${mapPin}`);
   }
-  for (const poi of research.pois) {
-    assert(Array.isArray(poi.position) && poi.position.length === 3, `POI ${poi.id} position must be [x,y,z]`);
-    assert(Array.isArray(poi.assetNeeds), `POI ${poi.id} assetNeeds must be an array`);
-    for (const id of poi.linkedFeatures || []) assert(featureIds.has(id), `POI ${poi.id} links to unknown feature ${id}`);
-    for (const id of poi.relatedBugs || []) assert(bugIds.has(id), `POI ${poi.id} links to unknown bug ${id}`);
+  function assertDossierBlocks(ownerLabel, dossier) {
+    if (!dossier) return;
+    assert(typeof dossier === 'object', `${ownerLabel} dossier must be an object`);
+    function walkBlocks(blocks) {
+      for (const block of blocks || []) {
+        const type = block?.type;
+        assert(type, `${ownerLabel} dossier block needs a type`);
+        if (type === 'image' || type === 'video') assert(block.path, `${ownerLabel} ${type} block needs path`);
+        if (type === 'compare') assert((block.items || []).length >= 2, `${ownerLabel} compare block needs 2+ items`);
+        if (type === 'carousel') assert((block.images || []).length >= 2, `${ownerLabel} carousel block needs 2+ images`);
+        if (type === 'gallery') assert((block.images || []).length, `${ownerLabel} gallery block needs images`);
+        if (type === 'figure') {
+          assert(block.path, `${ownerLabel} figure block needs path`);
+          assert(block.body || block.caption, `${ownerLabel} figure block needs body or caption`);
+        }
+        if (type === 'html') assert(block.html, `${ownerLabel} html block needs html`);
+        if (type === 'diagram') assert(block.source, `${ownerLabel} diagram block needs source`);
+        if (type === 'code') {
+          assert(block.repo, `${ownerLabel} code block needs repo`);
+          assert(block.path, `${ownerLabel} code block needs path`);
+          assert(block.body, `${ownerLabel} code block needs body`);
+        }
+        if (type === 'tabs') {
+          assert((block.tabs || []).length >= 2, `${ownerLabel} tabs block needs 2+ tabs`);
+          for (const tab of block.tabs || []) {
+            assert(tab.label, `${ownerLabel} tabs entry needs label`);
+            assert((tab.blocks || []).length, `${ownerLabel} tab "${tab.label || tab.id}" needs blocks`);
+            walkBlocks(tab.blocks);
+          }
+        }
+      }
+    }
+    for (const section of dossier.sections || []) {
+      walkBlocks(section.blocks);
+    }
+  }
+
+  assert(atlasPins.map?.layers?.terrain, 'atlas-pins.json requires map.layers.terrain');
+
+  for (const pin of atlasPins.pins || []) {
+    assert(typeof pin.x === 'number' && pin.x >= 0 && pin.x <= 1, `Atlas pin ${pin.id} x must be 0–1`);
+    assert(typeof pin.y === 'number' && pin.y >= 0 && pin.y <= 1, `Atlas pin ${pin.id} y must be 0–1`);
+    assert(pinColorIds.has(pin.color), `Atlas pin ${pin.id} uses unknown color ${pin.color}`);
+    assert(pin.summary, `Atlas pin ${pin.id} needs summary`);
+    for (const id of pin.linkedFeatures || []) assert(featureIds.has(id), `Atlas pin ${pin.id} links to unknown feature ${id}`);
+    for (const id of pin.linkedResearch || []) assert(researchIds.has(id), `Atlas pin ${pin.id} links to unknown research ${id}`);
+    assertDossierBlocks(`Atlas pin ${pin.id}`, pin.dossier);
+  }
+
+  for (const entry of research.entries || []) {
+    assert(entry.title, `Research entry ${entry.id} needs title`);
+    assert(entry.category, `Research entry ${entry.id} needs category`);
+    if (researchCategories.size) assert(researchCategories.has(entry.category), `Research entry ${entry.id} uses unknown category ${entry.category}`);
+    assert(Array.isArray(entry.tags), `Research entry ${entry.id} tags must be an array`);
+    const linkedPins = entry.linkedPins || entry.linkedPois || [];
+    assert(Array.isArray(linkedPins), `Research entry ${entry.id} linkedPins must be an array`);
+    for (const id of linkedPins) assert(pinIds.has(id), `Research entry ${entry.id} links to unknown atlas pin ${id}`);
+    for (const id of entry.linkedFeatures || []) assert(featureIds.has(id), `Research entry ${entry.id} links to unknown feature ${id}`);
+    for (const id of entry.relatedBugs || []) assert(bugIds.has(id), `Research entry ${entry.id} links to unknown bug ${id}`);
+    assertDossierBlocks(`Research entry ${entry.id}`, entry.dossier);
   }
 
   unique(gallery.items || [], 'gallery item');
@@ -107,7 +175,10 @@ try {
   assert(models.mainModel?.file, 'models.json requires mainModel.file');
   unique(models.submodels || [], 'submodel');
   for (const model of models.submodels || []) {
-    if (model.relatedPoi) assert(poiIds.has(model.relatedPoi), `Model ${model.id} links to unknown POI ${model.relatedPoi}`);
+    if (model.relatedPin || model.relatedPoi) {
+      const pinRef = model.relatedPin || model.relatedPoi;
+      assert(pinIds.has(pinRef), `Model ${model.id} links to unknown atlas pin ${pinRef}`);
+    }
   }
 
   unique(characters.seriesCharacters || [], 'series character');
@@ -119,6 +190,30 @@ try {
   const milestoneIds = unique(roadmapItems.map((item, index) => ({ ...item, id: item.id || `roadmap-${index}` })), 'roadmap milestone');
   if (roadmap.currentMilestoneId) assert(milestoneIds.has(roadmap.currentMilestoneId), `currentMilestoneId points to unknown milestone ${roadmap.currentMilestoneId}`);
   unique(ideas.items || [], 'idea');
+  for (const idea of ideas.items || []) assertDossierBlocks(`Idea ${idea.id}`, idea.dossier);
+  for (const item of roadmapItems) assertDossierBlocks(`Milestone ${item.id}`, item.dossier);
+
+  const docCategoryIds = new Set((docs.categories || []).map((c) => c.id));
+  unique(docs.categories || [], 'docs category');
+  const docSlugs = unique(docs.articles || [], 'docs article');
+  for (const article of docs.articles || []) {
+    assert(article.slug, `Docs article ${article.id} needs slug`);
+    assert(article.title, `Docs article ${article.id} needs title`);
+    assert(article.summary, `Docs article ${article.id} needs summary`);
+    assert(docCategoryIds.has(article.category), `Docs article ${article.id} uses unknown category ${article.category}`);
+    const rel = docArticleRelativePath(article);
+    assert(rel, `Docs article ${article.id} could not resolve storage path`);
+    if (!article.path) {
+      assert(
+        rel === `${article.category}/${article.slug}.json`,
+        `Docs article ${article.id} must live at public/docs/articles/${article.category}/${article.slug}.json (or set an explicit path)`,
+      );
+    }
+    const articlePath = join(docsArticlesRoot, rel);
+    assert(existsSync(articlePath), `Docs article ${article.id} missing file public/docs/articles/${rel}`);
+    const body = JSON.parse(await readFile(articlePath, 'utf8'));
+    assertDossierBlocks(`Docs article ${article.id}`, body.dossier);
+  }
 
   console.log('Data validation passed.');
 } catch (error) {

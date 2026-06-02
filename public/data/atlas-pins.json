@@ -1,0 +1,94 @@
+{
+  "map": {
+    "layers": {
+      "terrain": "media/atlas/map/map_terrain.png",
+      "buildings": "media/atlas/map/map_buildings.png",
+      "paths": "media/atlas/map/map_paths_show.png"
+    },
+    "defaultLayers": {
+      "buildings": true,
+      "paths": true,
+      "pins": true
+    },
+    "showReference": {
+      "path": "media/atlas/reference/concierge-show-map-ep6.jpg",
+      "label": "From the show",
+      "caption": "Pokémon Concierge, episode 6 (~6:18) — the frame our hand-traced map comes from."
+    }
+  },
+  "pinColors": [
+    {
+      "id": "blue",
+      "label": "Research",
+      "hint": "Canon research, confirmed show locations, evidence-backed spots"
+    },
+    {
+      "id": "yellow",
+      "label": "Ideas & structure",
+      "hint": "Show map layout, structural notes, work-in-progress placements"
+    },
+    {
+      "id": "red",
+      "label": "Uncertain / TBD",
+      "hint": "Placeholders — location not finalized yet (e.g. lobby on the ocean)"
+    }
+  ],
+  "pins": [
+    {
+      "id": "pin-3",
+      "name": "Main hall",
+      "color": "red",
+      "x": 0.3747,
+      "y": 0.3841,
+      "summary": "This is a possible place for the main reception desk",
+      "linkedResearch": [],
+      "linkedFeatures": [],
+      "dossier": {
+        "overview": "",
+        "researchMilestones": [],
+        "sections": []
+      }
+    },
+    {
+      "id": "ferry-dock",
+      "name": "Ferry Dock",
+      "color": "blue",
+      "x": 0.6183,
+      "y": 0.1344,
+      "summary": "Primary arrival and departure point for the island — ferry, dock props, and guest arrival flow.",
+      "linkedResearch": [
+        "research-ferry-dock"
+      ],
+      "linkedFeatures": [
+        "feature-model-library"
+      ],
+      "position3d": [
+        -1.9,
+        0.22,
+        1.35
+      ],
+      "dossier": {
+        "overview": "The ferry dock is the main transport hub connecting the resort island to the outside world. Research focuses on dock geometry from the show, boat approach paths, and how guests first step onto the island.",
+        "researchMilestones": [],
+        "sections": []
+      },
+      "tilt": 20
+    },
+    {
+      "id": "lobby-tbd",
+      "name": "Lobby (placement TBD)",
+      "color": "red",
+      "x": 0.0476,
+      "y": 0.0797,
+      "summary": "Interior lobby from the show — exact island position still unknown; pin parked on the ocean until the layout locks.",
+      "linkedResearch": [],
+      "dossier": {
+        "overview": "We have show screenshots, floor diagrams, and interior references, but the lobby's exact footprint on the island map is not settled. This cork pin marks the research bundle until we slide it to the real building site.",
+        "researchMilestones": [],
+        "sections": []
+      },
+      "linkedFeatures": [],
+      "tilt": 0
+    }
+  ]
+}

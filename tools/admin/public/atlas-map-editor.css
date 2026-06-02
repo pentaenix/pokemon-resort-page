@@ -1,0 +1,199 @@
+@import './atlas-map-shared.css';
+
+.atlas-map-editor-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(320px, 400px);
+  gap: 16px;
+  align-items: start;
+}
+.atlas-map-sidebar {
+  padding: 16px;
+  max-height: calc(100vh - 180px);
+}
+.atlas-map-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.atlas-map-sidebar-head h3 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -.02em;
+}
+.atlas-map-empty-list {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0;
+}
+.atlas-pin-list {
+  display: grid;
+  gap: 8px;
+}
+.atlas-pin-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  text-align: left;
+  width: 100%;
+  padding: 12px;
+  border-radius: 16px;
+}
+.atlas-pin-list-dot {
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+.atlas-pin-list-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.atlas-pin-list-copy strong {
+  line-height: 1.25;
+}
+.atlas-map-board-panel {
+  padding: 14px;
+  min-width: 0;
+  position: sticky;
+  top: 12px;
+}
+.atlas-map-detail-panel {
+  padding: 18px;
+  max-height: calc(100vh - 180px);
+  overflow: auto;
+}
+.atlas-pin-detail-head {
+  align-items: flex-start;
+}
+.atlas-pin-fieldset {
+  border: 1px solid rgba(14,117,146,.14);
+  border-radius: 18px;
+  padding: 14px 14px 12px;
+  margin: 0 0 14px;
+  background: rgba(255,255,255,.45);
+}
+.atlas-pin-fieldset legend {
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(14,70,88,.68);
+}
+.atlas-pin-tilt-control {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+.atlas-pin-tilt-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.atlas-pin-tilt-head label {
+  margin: 0;
+  font-weight: 850;
+}
+.atlas-pin-tilt-value {
+  font-weight: 900;
+  color: #075b78;
+}
+.atlas-pin-tilt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.atlas-pin-tilt-actions .hint {
+  margin: 0;
+}
+.btn.danger {
+  color: #8b2323;
+  border-color: rgba(210,74,74,.28);
+}
+.btn.danger:hover {
+  background: rgba(210,74,74,.1);
+}
+.island-map2d-toolbar--admin {
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: rgba(255,255,255,.72);
+  border: 1px solid rgba(14,117,146,.12);
+  gap: 14px;
+}
+.island-map2d-toolbar-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.island-map2d-toolbar-label {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(14,70,88,.58);
+  min-width: 52px;
+}
+.island-map2d-shell--admin .island-map2d-colors {
+  gap: 6px;
+}
+.island-map2d-shell--admin .island-map2d-color {
+  font-size: 11px;
+  padding: 7px 10px;
+}
+.atlas-map-editor-center { min-width: 0; }
+.atlas-pin-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; flex-shrink: 0; }
+.atlas-pin-dot--blue { background: #2f7fd4; }
+.atlas-pin-dot--yellow { background: #e8b830; }
+.atlas-pin-dot--red { background: #d24a4a; }
+.atlas-pin-color-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  padding-inline: 10px;
+}
+.atlas-pin-color-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.atlas-pin-color-badge--blue::before { background: #2f7fd4; }
+.atlas-pin-color-badge--yellow::before { background: #e8b830; }
+.atlas-pin-color-badge--red::before { background: #d24a4a; }
+.atlas-pin-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.atlas-pin-list-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.atlas-pin-form label {
+  margin-bottom: 0;
+}
+.atlas-pin-form .feature-title-field input {
+  width: 100%;
+}
+.atlas-pin-detail .dossier-editor-fold {
+  margin-top: 8px;
+}
+body.atlas-map-active main { width: min(1680px, calc(100% - 28px)); }
+
+@media (max-width: 1180px) {
+  .atlas-map-editor-layout { grid-template-columns: minmax(200px, 240px) minmax(0, 1fr); }
+  .atlas-map-detail-panel { grid-column: 1 / -1; max-height: none; }
+  .atlas-map-board-panel { position: static; }
+}
+
+@media (max-width: 820px) {
+  .atlas-map-editor-layout { grid-template-columns: 1fr; }
+  .atlas-map-sidebar { max-height: none; }
+}

@@ -1,0 +1,184 @@
+{
+  "dossier": {
+    "overview": "Overworld props (buildings, signs, decorations) are authored as **GLB** (glTF 2.0 binary) and rendered by both the Operations Desk preview and the Pokémon Resort C++ game. Source art is usually a DS rip exported as **OBJ + MTL + PNG** and zipped; the Operations Desk converts it to a self-contained GLB, stores it under `pokemon-resort/assets/overworld/models/<id>/`, and lets you place it on a map. The same GLB feeds the in-engine renderer.\n\nThe single most important rule of this pipeline is how it treats **UV orientation** and **texture transparency**. DS rips combine an orange-roof / grey-glass atlas with a partly-transparent alpha channel, and getting either wrong produces the classic failure modes: a black roof, a torn roof, or a black banner. This article documents the conversion rules, the measured-alpha policy that fixes those, the Map Editor placement flow, and the C++ loader/renderer.\n\nCanonical code: `pokemon-resort-page/tools/admin/lib/{obj-compile,write-glb,texture-alpha}.mjs` (conversion) and `pokemon-resort/src/gameplay/world3d/{data/GlbModelLoader,rendering/GlbModelRenderer}.cpp` (runtime). In-repo reference: `pokemon-resort/docs/gameplay/overworld_glb_models.md`.",
+    "sections": [
+      {
+        "id": "pipeline",
+        "title": "Where GLB props fit",
+        "summary": "OBJ zip → Operations Desk converter → GLB on disk → preview, placement, and game.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Authors upload a `.zip` (OBJ + MTL + textures) or a ready `.glb` in **Operations Desk → Models**. OBJ uploads run through the converter; GLB uploads are stored as-is. Either way the result is a self-contained GLB plus a `model.json` manifest (footprint, AABB, triangle/vertex counts, material names). The Map Editor reads that catalog to place props into an `.owmap`, and the C++ game loads the referenced GLB at runtime."
+          },
+          {
+            "type": "diagram",
+            "title": "Authoring pipeline",
+            "caption": "One conversion path; the GLB on disk is the single source of truth for preview and game.",
+            "source": "flowchart LR\n    Z[OBJ + MTL + PNG zip] -->|buildObjMeshFromUpload| M[Compiled mesh + textures]\n    M -->|writeGlbFromMesh| G[Self-contained .glb]\n    G --> J[model.json manifest]\n    G --> P[Operations Desk preview - three.js]\n    G --> E[Map Editor placement -> .owmap models array]\n    E --> C[C++ GlbModelLoader -> GlbModelRenderer]"
+          },
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Stage</th><th>Module</th><th>Repo</th></tr></thead><tbody><tr><td>Unzip + parse OBJ/MTL</td><td><code>lib/obj-compile.mjs</code></td><td>pokemon-resort-page</td></tr><tr><td>Measure texture alpha</td><td><code>lib/texture-alpha.mjs</code></td><td>pokemon-resort-page</td></tr><tr><td>Write GLB binary</td><td><code>lib/write-glb.mjs</code></td><td>pokemon-resort-page</td></tr><tr><td>Manifest + ingest stats</td><td><code>lib/glb-ingest.mjs</code></td><td>pokemon-resort-page</td></tr><tr><td>Browser preview</td><td><code>public/model-glb-viewer.js</code>, <code>public/model-texture-alpha.js</code></td><td>pokemon-resort-page</td></tr><tr><td>Map placement</td><td><code>public/map-editor.js</code></td><td>pokemon-resort-page</td></tr><tr><td>Runtime load</td><td><code>data/GlbModelLoader.cpp</code></td><td>pokemon-resort</td></tr><tr><td>Runtime render</td><td><code>rendering/GlbModelRenderer.cpp</code></td><td>pokemon-resort</td></tr></tbody></table>"
+          }
+        ]
+      },
+      {
+        "id": "conversion",
+        "title": "OBJ → GLB conversion rules",
+        "layout": "tabs-primary",
+        "summary": "UV orientation, one material per MTL, sampling, and the measured-alpha policy.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "geometry",
+                "label": "Geometry & UVs",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "The converter requires authored OBJ texture coordinates (`vt`) on at least 85% of faces — it never bakes, normalizes, or clamps UVs. The **one transform** applied is a vertical flip:\n\n**V flip — `v → 1 − v`.** OBJ texcoords use a bottom-left origin; glTF (and the SDL renderer) use a top-left origin. Without the flip the model samples a vertically mirrored atlas, which on the Pokémon Center reads as a *black roof* (the orange roof region and the black region are swapped top-to-bottom). With the flip, big faces sample the same texels external OBJ viewers show."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/lib/obj-compile.mjs",
+                    "lines": "208-216",
+                    "language": "javascript",
+                    "caption": "obj-compile.mjs — interleave position/normal/UV with the V flip",
+                    "body": "const uv = obj.uvs[ti] || [0, 0];\n// OBJ texcoord origin is bottom-left; glTF (and our SDL renderer) use top-left.\n// Flip V so authored UVs sample the same texels external OBJ viewers show.\nconst base = vertices.length / 8;\nvertices.push(p[0], p[1], p[2], n[0], n[1], n[2], uv[0], 1 - uv[1]);"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Rule</th><th>Behaviour</th></tr></thead><tbody><tr><td>One glTF material per MTL material</td><td>Each gets its own embedded PNG/JPEG; primitives are grouped per material slot</td></tr><tr><td>Sampler</td><td>Nearest filtering, REPEAT wrap (DS UVs are often outside 0..1)</td></tr><tr><td>Vertex layout</td><td>Interleaved POSITION (3) + NORMAL (3) + TEXCOORD_0 (2) = 8 floats</td></tr><tr><td>Self-contained</td><td>Single BIN chunk; textures embedded as bufferViews — no external URIs</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "alpha",
+                "label": "Alpha policy",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "DS-ripped PNGs are RGBA, but the alpha channel is **usually fully opaque** and only *occasionally* a genuine cutout. Two naive policies both fail:\n\n• **\"Has an alpha channel → MASK\"** punches holes in solid surfaces, because most DS PNGs ship an opaque alpha that some tools fill with zeros over real content.\n• **\"Force everything OPAQUE\"** turns a real cutout (a banner / sign with a transparent background) into a **black square**.\n\nThe correct policy is to **decode the alpha channel and measure it**. `texture-alpha.mjs` inflates and unfilters the PNG, then counts transparent texels. A material becomes `alphaMode: MASK` (with `alphaCutoff: 0.5`) only when at least 0.5% of texels are actually transparent; otherwise it stays `OPAQUE`. The 0.5 cutoff matches DS 1-bit alpha and gives crisp edges. Because the V flip is correct, opaque regions (the orange roof) keep full alpha and are never cut, while the banner's transparent background is cut instead of rendered black."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/lib/texture-alpha.mjs",
+                    "lines": "112-138",
+                    "language": "javascript",
+                    "caption": "texture-alpha.mjs — measure real transparency, not just channel presence",
+                    "body": "export function pngHasMeaningfulTransparency(bytes, opts = {}) {\n  const cutoff = Math.round((opts.cutoff ?? 0.5) * 255);\n  const minFraction = opts.minFraction ?? 0.005;\n  const decoded = decodePngAlpha(buf);            // inflate + unfilter\n  if (!decoded.alpha) return decoded.trnsPresent;  // palette/truecolor tRNS\n  let transparent = 0;\n  for (let i = 0; i < decoded.alpha.length; i += 1)\n    if (decoded.alpha[i] < cutoff) transparent += 1;\n  return transparent / decoded.alpha.length >= minFraction;\n}"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/lib/write-glb.mjs",
+                    "lines": "136-146",
+                    "language": "javascript",
+                    "caption": "write-glb.mjs — MASK only where measured transparency exists",
+                    "body": "const cutout = srcTex ? textureHasAlpha(srcTex) : false;\nconst mat = {\n  name: prMat.name || `mat_${m}`,\n  pbrMetallicRoughness: { metallicFactor: 0, roughnessFactor: 1 },\n  doubleSided: true,\n  alphaMode: cutout ? 'MASK' : 'OPAQUE',\n};\nif (cutout) mat.alphaCutoff = 0.5;"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p>Worked example — Pokémon Center (4 materials), after decoding each texture's alpha:</p><table><thead><tr><th>Material</th><th>Texture</th><th>Measured alpha</th><th>Exported mode</th></tr></thead><tbody><tr><td><code>h_kage</code> (shadow)</td><td>16×16</td><td>100% opaque</td><td>OPAQUE</td></tr><tr><td><code>pc_1</code> (walls)</td><td>64×64</td><td>100% opaque</td><td>OPAQUE</td></tr><tr><td><code>light_a</code> (lights/banner)</td><td>64×64</td><td>~33% transparent</td><td>MASK (cutoff 0.5)</td></tr><tr><td><code>pc_2</code> (roof + banner)</td><td>64×64</td><td>~33% transparent</td><td>MASK (cutoff 0.5)</td></tr></tbody></table><p>Note <code>pc_2</code> covers both the opaque orange roof and transparent banner texels; MASK cuts only the transparent ones, so the roof stays solid.</p>"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "preview-placement",
+        "title": "Preview & placement",
+        "summary": "three.js preview honours the GLB verbatim; placement writes to the .owmap models array.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "**Preview** (`model-glb-viewer.js`) loads the on-disk GLB with `GLTFLoader` and renders with neutral image-based lighting (`RoomEnvironment` IBL + ambient/directional, sRGB output, no tone mapping) so PBR materials read like online glTF viewers. Without lights or an environment, `MeshStandardMaterial` renders **black** — that was an early false alarm mistaken for a texture bug.\n\n`model-texture-alpha.js` only tunes sampling (nearest + REPEAT, double-sided) and takes alpha **verbatim** from the GLB material's `alphaMode` (GLTFLoader sets `transparent`/`alphaTest`). It deliberately does **not** re-derive transparency from the texture's alpha channel in the browser — that decision now lives entirely in the converter."
+          },
+          {
+            "type": "text",
+            "body": "**Placement.** In the Map Editor, pick a prop, click **Place**, then click grid tiles. While placing, a translucent **ghost** (footprint outline + roof image) follows the cursor so you can see exactly which cells and shape the prop will take before clicking. Each placement is appended to the map's `models[]` array. Per-placement controls rotate (90°), scale, and remove. Saving bakes into the `.owmap` metadata.\n\n**Footprint + roof on the 2D grid.** Placed props highlight **every cell** of their rotated footprint (catalog `w×d`, swapped for 90/270 yaw) and overlay the model's **roof/top snapshot** image over those cells, so the paint grid reads as a true top-down layout rather than a single origin marker.\n\n**Workspace 2D / 3D toggle.** A 2D / 3D switch in the tool rail flips the whole workspace. 2D is the paint grid above. **3D is a view-only scene** that renders a height-shaded terrain mesh plus every placed prop as its **actual GLB** under an orbit camera (drag to orbit, scroll to zoom). Painting and placement stay in 2D; 3D is for checking how the laid-out map reads in three dimensions.\n\n**Card thumbnails.** Each catalog card renders a real front-face snapshot of the model (a one-shot orthographic GLB render to a transparent PNG, cached per id+hash) plus its tile footprint and area (`w×d · N tiles`)."
+          },
+          {
+            "type": "text",
+            "body": "**Fixing orientation (re-bake).** Some rips import lying on their side or upside-down (a truck that comes in front-side-down). The model preview has X / Y / Z buttons that rotate in 90° steps with a live preview; **Save orientation** bakes that rotation into the GLB itself (`/api/overworld-models/reorient` → `reorient-glb.mjs`): it rotates every vertex and normal, re-centers the prop on X/Z, and re-seats it onto the ground plane, then regenerates the manifest (footprint, AABB). Because the correction lives in the geometry, the preview, the Map Editor footprint, and the C++ game all agree — there is no per-instance orientation field to keep in sync."
+          },
+          {
+            "type": "html",
+            "html": "<p><strong><code>models[]</code> entry in .owmap metadata</strong></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>string</td><td>Catalog model id</td></tr><tr><td><code>glb</code></td><td>string</td><td>Path to the placed GLB (project-root relative)</td></tr><tr><td><code>position</code></td><td>[x, y, z]</td><td>World position; y = height level × tileSize</td></tr><tr><td><code>yawDeg</code></td><td>number</td><td>Rotation about +Y in degrees</td></tr><tr><td><code>scale</code></td><td>number</td><td>Uniform scale</td></tr></tbody></table>"
+          }
+        ]
+      },
+      {
+        "id": "runtime",
+        "title": "C++ loader & renderer",
+        "summary": "Self-contained GLB parse, baked transforms, and SDL_RenderGeometry with painter sort.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "`GlbModelLoader` parses the GLB's JSON + BIN chunks, walks the node graph baking world transforms into vertices, and produces a triangulated `GlbMesh` grouped per material with embedded base-color image bytes. It supports indices `u8/u16/u32`, `POSITION`/`TEXCOORD_0`, `baseColorFactor`, and `alphaMode`. External buffers/URIs are rejected — re-export self-contained.\n\nThe loader maps `alphaMode` to a single `alpha_blend` flag: both `MASK` and `BLEND` enable blending. There is no separate `alphaCutoff` path in SDL — see the next block."
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "src/gameplay/world3d/data/GlbModelLoader.cpp",
+            "lines": "292-295",
+            "language": "cpp",
+            "caption": "GlbModelLoader.cpp — alphaMode → alpha_blend",
+            "body": "if (const JsonValue* alpha = mat.get(\"alphaMode\"); alpha && alpha->isString()) {\n    const std::string mode = alpha->asString();\n    gmat.alpha_blend = (mode == \"MASK\" || mode == \"BLEND\");\n}"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "src/gameplay/world3d/rendering/GlbModelRenderer.cpp",
+            "lines": "40-41",
+            "language": "cpp",
+            "caption": "GlbModelRenderer.cpp — nearest scaling + blend mode from the material",
+            "body": "SDL_SetTextureScaleMode(raw, SDL_ScaleModeNearest);\nSDL_SetTextureBlendMode(raw, mat.alpha_blend ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);"
+          },
+          {
+            "type": "text",
+            "body": "`SDL_RenderGeometry` has no depth buffer or true alpha test, so the renderer applies the per-placement transform (scale → yaw about +Y → translate), projects via `Gen4FollowCamera`, and **painter-sorts triangles** before drawing. With DS 1-bit alpha and nearest sampling, `SDL_BLENDMODE_BLEND` yields a clean cutout that matches the converter's MASK intent.\n\n**Two-pass transparency order.** Within a model, all **opaque** triangles draw first (back-to-front), then all **cutout** (MASK/BLEND) triangles draw last (back-to-front). Without a depth buffer, a cutout banner triangle nearly coplanar with the opaque wall behind it could tie or flip on centroid depth and let the wall paint over it — the cause of *cut-off banner sections*. Drawing cutout faces last guarantees they composite over the body.\n\n**Emulating REPEAT wrap.** `SDL_RenderGeometry` *clamps* texcoords to 0..1 instead of repeating, and DS UVs routinely exceed 1 (some faces span several tiles). Before drawing, each triangle is clipped against the integer UV grid and every resulting piece is re-based into 0..1, so each piece samples a single texture tile and the clamp becomes a no-op — wrapping textures look identical to the browser preview.\n\n**Scene render order.** Placed props and the player/follower are sorted together by the camera depth of each one's ground anchor and drawn far-to-near, so a character walking behind a building is correctly hidden by it rather than always drawing on top. Each model's anchor is biased toward the camera by a configurable distance (`config/gameplay/world3d/render.json` → `occlusion.modelBehindBiasTiles`, default 1 tile) so a building starts occluding the character *before* its footprint center — e.g. a character entering a doorway is hidden by the building instead of drawing over the roof."
+          },
+          {
+            "type": "diagram",
+            "title": "Runtime decode → draw",
+            "caption": "Transforms are baked at load; only placement transform + camera vary per frame.",
+            "source": "flowchart TD\n    F[.glb on disk] --> L[GlbModelLoader: JSON+BIN, bake node transforms]\n    L --> ME[GlbMesh: per-material triangles + image bytes]\n    ME --> UP[Lazy IMG_Load_RW upload, nearest, blend if MASK/BLEND]\n    UP --> TR[Per-placement scale -> yaw -> translate]\n    TR --> PR[Gen4FollowCamera project]\n    PR --> SO[Painter sort back-to-front]\n    SO --> RG[SDL_RenderGeometry]"
+          }
+        ]
+      },
+      {
+        "id": "troubleshooting",
+        "title": "Troubleshooting & known pitfalls",
+        "summary": "The symptoms this pipeline was built to avoid, and what each one means.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Symptom</th><th>Root cause</th><th>Fix / where</th></tr></thead><tbody><tr><td>Whole model renders black in preview</td><td>No lights/environment in the three.js scene; <code>MeshStandardMaterial</code> needs IBL</td><td><code>model-glb-viewer.js</code> studio lighting (already in place)</td></tr><tr><td>Roof black (geometry/UVs look fine)</td><td>Missing V flip — atlas sampled vertically mirrored</td><td><code>obj-compile.mjs</code> <code>1 - uv[1]</code></td></tr><tr><td>Roof torn / diagonal holes</td><td>Material set to MASK while sampling a zero-alpha region (pre-flip)</td><td>Correct V flip + measured-alpha policy</td></tr><tr><td>Banner is a black square</td><td>A real cutout forced to OPAQUE (the failure mode of many online converters)</td><td>Measured-alpha MASK in <code>write-glb.mjs</code></td></tr><tr><td>Solid surface gets holes</td><td>\"Has alpha channel → MASK\" over-trigger</td><td>Use <code>pngHasMeaningfulTransparency</code> (fraction threshold), never channel presence</td></tr><tr><td>Prop renders as a solid black blob / smeared seams in game (fine in preview)</td><td><code>SDL_RenderGeometry</code> clamps UVs to [0,1] and ignores REPEAT wrap; DS UVs exceed 1 (some faces span multiple tiles), so faces sample the wrong edge texel</td><td>Clip each triangle to the integer UV grid and re-base every piece into [0,1) in <code>GlbModelRenderer.cpp</code> (<code>clipAxis</code>/<code>emitPiece</code>); mirrors <code>OverworldMapRenderer</code>'s <code>wrapUv</code></td></tr><tr><td>Character always draws on top of a building, even when behind it</td><td>Models were drawn as a block before characters</td><td>Unified depth sort of props + player + follower by ground-anchor camera depth in <code>Overworld3DTestScreen.cpp</code> (<code>GlbModelRenderer::anchorDepth</code>)</td></tr><tr><td>Transparent banner / sign has cut-off sections in game (fine in preview)</td><td>Cutout triangle nearly coplanar with the opaque wall behind it ties/flips on centroid depth, so the wall paints over it</td><td>Two-pass sort in <code>GlbModelRenderer.cpp</code>: opaque first, cutout (MASK/BLEND) last, each back-to-front (<code>DrawTri.cutout</code>)</td></tr><tr><td>Character draws over the roof when entering a doorway</td><td>Building's occlusion anchor is its footprint center, so it only hides the character past the center</td><td>Increase <code>occlusion.modelBehindBiasTiles</code> in <code>config/gameplay/world3d/render.json</code> (biases the anchor forward toward the camera)</td></tr><tr><td>Re-oriented prop floats or sinks / off-center</td><td>Rotation baked without re-seating</td><td><code>reorient-glb.mjs</code> re-centers X/Z and re-seats to y=0 after rotating</td></tr><tr><td>Prop missing in game, present in preview</td><td>GLB referenced an external buffer/URI</td><td>Re-export self-contained (single BIN chunk)</td></tr></tbody></table>"
+          },
+          {
+            "type": "text",
+            "body": "**Verifying a conversion.** Decode the alpha histogram of each texture and sample the biggest faces' texels; compare against a known-good external viewer (or a reference GLB from an online tool). Equal sampled colours on the big faces confirm the atlas mapping (V orientation) is correct. The alpha histogram (% at 0 vs 255) confirms which materials should be MASK vs OPAQUE. DS textures are effectively 1-bit alpha (clusters at 0 and 255, little in between)."
+          },
+          {
+            "type": "text",
+            "body": "**Server reloads.** The Operations Desk is a plain Node process with no hot reload. After changing any `tools/admin/lib/*.mjs` module (including the converter), **restart `npm run admin`** before importing again. The browser preview reads the on-disk GLB, so a re-generated model previews correctly without a restart, but a fresh conversion through the UI will use the old code until the server restarts."
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "owmap format (models[] lives here)", "href": "#/docs?article=owmap-format" },
+              { "label": "Island Dreamforge (terrain upstream)", "href": "#/docs?article=island-dreamforge" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

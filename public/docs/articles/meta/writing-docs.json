@@ -1,0 +1,185 @@
+{
+  "dossier": {
+    "overview": "Resort Docs articles are JSON files — not Markdown pages on the site. Each article has a card in public/data/docs.json and a body in public/docs/articles/{category}/{slug}.json, using the same rich blocks as Research and Features (text, figures, diagrams, code citations, tabs, and more).\n\nStore articles in category folders (meta/, formats/, gameplay/, design/) — never a flat pile in articles/. Longer reference material lives in the pokemon-resort-page repo: docs/AUTHORING.md, docs/TEMPLATE.md, and docs/MEDIA.md.",
+    "sections": [
+      {
+        "id": "authoring-guide",
+        "title": "Step-by-step guide",
+        "layout": "tabs-primary",
+        "summary": "Pick a tab for the task you are working on.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "caption": "Start with Getting started if this is your first article.",
+            "tabs": [
+              {
+                "id": "getting-started",
+                "label": "Getting started",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Authoring reference files in pokemon-resort-page/ (paths relative to that app root):\n\n• docs/AUTHORING.md — JSON layout, block types, validation, apps, freshness\n• docs/TEMPLATE.md — article skeleton, code blocks, write/read tabs\n• docs/MEDIA.md — capturing screenshots from the running site\n• public/docs/templates/article-template.json — JSON file to copy for a new article\n\nThe Docs hub supports search, category and app filters, sort order, and freshness badges. Run npm run docs:freshness (or npm run validate:data) to refresh staleness data.\n\nRun npm run validate:data before publishing changes."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Repo file</th><th>Purpose</th></tr></thead><tbody><tr><td><code>docs/AUTHORING.md</code></td><td>Full authoring reference</td></tr><tr><td><code>docs/TEMPLATE.md</code></td><td>Section breakdown &amp; template usage</td></tr><tr><td><code>docs/MEDIA.md</code></td><td>Screenshot workflow</td></tr><tr><td><code>public/docs/templates/article-template.json</code></td><td>JSON skeleton to copy</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Suggested reading order",
+                    "caption": "All paths under pokemon-resort-page/",
+                    "source": "flowchart TD\n    A[docs/AUTHORING.md] --> B[docs/TEMPLATE.md]\n    A --> C[docs/MEDIA.md]\n    B --> D[public/docs/templates/article-template.json]\n    D --> E[public/docs/articles/category/slug.json]\n    E --> F[npm run validate:data]"
+                  }
+                ]
+              },
+              {
+                "id": "new-article",
+                "label": "New article",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "See docs/AUTHORING.md for the full checklist. Short version:\n\n1. Pick a slug (lowercase-hyphens) and category, e.g. gameplay / follower-ai-architecture\n2. Copy public/docs/templates/article-template.json → public/docs/articles/{category}/{slug}.json\n3. Add an articles[] card to public/data/docs.json (unique id + slug + category + apps[] + summary)\n4. Replace every REPLACE_* placeholder; delete sections you do not need\n5. For guide-style articles, set layout: \"tabs-primary\" on the main tabs section\n6. npm run validate:data from pokemon-resort-page/\n7. Optional: edit in Operations Desk → Docs (npm run admin on port 9477)"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "public/data/docs.json",
+                    "lines": "articles[]",
+                    "language": "json",
+                    "caption": "Card metadata — one entry per article",
+                    "body": "{\n  \"id\": \"your-slug\",\n  \"slug\": \"your-slug\",\n  \"title\": \"Article title\",\n  \"category\": \"formats\",\n  \"tags\": [\"tag1\"],\n  \"apps\": [\"pokemon-resort\", \"pokemon-resort-page\"],\n  \"summary\": \"One line for the docs hub card.\",\n  \"publishedAt\": \"2026-05-27\",\n  \"updatedAt\": \"2026-05-27\",\n  \"heroImage\": { \"path\": \"media/docs/docs-hub.webp\", \"caption\": \"…\" },\n  \"featured\": false,\n  \"author\": \"Resort Operations\"\n}"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "public/docs/articles/gameplay/your-slug.json",
+                    "lines": "1-15",
+                    "language": "json",
+                    "caption": "Article body shape",
+                    "body": "{\n  \"dossier\": {\n    \"overview\": \"Shown under the hero on the public page.\",\n    \"sections\": [\n      {\n        \"id\": \"intro\",\n        \"title\": \"Section title\",\n        \"summary\": \"Optional lede.\",\n        \"blocks\": [{ \"type\": \"text\", \"body\": \"…\" }]\n      }\n    ]\n  }\n}"
+                  }
+                ]
+              },
+              {
+                "id": "blocks",
+                "label": "Block types",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Full table in docs/AUTHORING.md. Common blocks:\n\ntext — paragraph\nfigure / image / video — media with caption\ndiagram — Mermaid UML\ncode — linked source file (repo + path + body snippet)\ntabs — 2+ panels with nested blocks\nhtml — tables (sanitized)\nlinks — https URLs only\ncompare / carousel / gallery — multi-image layouts"
+                  },
+                  {
+                    "type": "tabs",
+                    "caption": "Example: code block cites a file; tabs split write vs read (see owmap-format article)",
+                    "tabs": [
+                      {
+                        "id": "code-example",
+                        "label": "code block",
+                        "blocks": [
+                          {
+                            "type": "text",
+                            "body": "repo is the app folder name. path is relative to that folder. Paste the excerpt from the source file into body."
+                          },
+                          {
+                            "type": "code",
+                            "repo": "pokemon-resort-page",
+                            "path": "src/dossier/registry.js",
+                            "lines": "49-56",
+                            "language": "javascript",
+                            "caption": "Minimal code block shape",
+                            "body": "registerDossierBlock({\n  type: 'text',\n  label: 'Text note',\n  normalize(block) {\n    const body = String(block.body || '').trim();\n    return body ? { type: 'text', body } : null;\n  },\n});"
+                          }
+                        ]
+                      },
+                      {
+                        "id": "tabs-example",
+                        "label": "tabs block",
+                        "blocks": [
+                          {
+                            "type": "text",
+                            "body": "Nested tabs inside a section — same structure as the tab bar above. Each tab needs id, label, and blocks[]."
+                          },
+                          {
+                            "type": "code",
+                            "repo": "pokemon-resort-page",
+                            "path": "docs/TEMPLATE.md",
+                            "lines": "53-80",
+                            "language": "json",
+                            "caption": "Write / Read tab pattern — see docs/TEMPLATE.md",
+                            "body": "{\n  \"type\": \"tabs\",\n  \"tabs\": [\n    {\n      \"id\": \"writing\",\n      \"label\": \"Writing\",\n      \"blocks\": [\n        { \"type\": \"text\", \"body\": \"How the format is authored…\" },\n        { \"type\": \"code\", \"repo\": \"pokemon-resort-page\", \"path\": \"…\", \"body\": \"…\" }\n      ]\n    },\n    {\n      \"id\": \"reading\",\n      \"label\": \"Reading\",\n      \"blocks\": [\n        { \"type\": \"text\", \"body\": \"How the runtime loads it…\" },\n        { \"type\": \"code\", \"repo\": \"pokemon-resort\", \"path\": \"…\", \"body\": \"…\" }\n      ]\n    }\n  ]\n}"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "media",
+                "label": "Screenshots",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Use captures from the running site — not mockups or placeholder art.\n\nFrom pokemon-resort-page/:\n\nnpm run dev          → 127.0.0.1:5174\nnpm run admin        → 127.0.0.1:9477\nnpm run docs:screenshots\n\nWrites public/media/docs/*.webp. Reference in JSON as media/docs/filename.webp.\n\nFull guide: docs/MEDIA.md"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/docs-hub.webp",
+                    "body": "Captured with npm run docs:screenshots while the Vite dev server was running.",
+                    "caption": "Docs hub — browser screenshot",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "package.json",
+                    "lines": "scripts",
+                    "language": "json",
+                    "caption": "npm scripts for doc media",
+                    "body": "\"docs:screenshots\": \"node tools/docs/capture-screenshots.mjs --format webp\",\n\"docs:screenshots:headed\": \"node tools/docs/capture-screenshots.mjs --headed --format webp\",\n\"docs:example-gif\": \"python3 tools/docs/build-example-gif.py\""
+                  }
+                ]
+              },
+              {
+                "id": "template",
+                "label": "Template",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Copy public/docs/templates/article-template.json to public/docs/articles/{category}/{slug}.json.\n\nCategory folders:\n• meta/ — authoring guides\n• formats/ — file format specs\n• gameplay/ — systems & architecture\n• design/ — visual / UX reference\n\nDefault sections in the template:\n• summary — intro\n• concepts — definitions + optional diagram\n• implementation — code blocks + write/read tabs\n• reference — HTML tables\n• media — screenshot placeholder\n• related — cross-app notes\n\nPreview on site: #/docs?article=article-template\nDetails: docs/TEMPLATE.md"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Publish path",
+                    "caption": "After validate:data passes",
+                    "source": "flowchart LR\n    A[Copy template JSON] --> B[Edit docs.json card]\n    B --> C[validate:data]\n    C --> D[Git commit]\n    D --> E[GitHub Pages]\n    E --> F[#/docs hub]"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "examples",
+        "title": "Examples on this site",
+        "summary": "Articles to open when learning by example.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Article slug</th><th>Demonstrates</th></tr></thead><tbody><tr><td><code>writing-docs</code></td><td>This guide — tabs, media, repo references</td></tr><tr><td><code>article-template</code></td><td>Starter skeleton with placeholders</td></tr><tr><td><code>owmap-format</code></td><td>Writing / Reading tabs + multi-repo code</td></tr><tr><td><code>charbin-schema</code></td><td>Format doc with tables and diagrams</td></tr></tbody></table>"
+          },
+          {
+            "type": "compare",
+            "variant": "fluid",
+            "caption": "Public site vs Operations Desk editor",
+            "items": [
+              { "path": "media/docs/docs-hub.webp", "label": "Public #/docs" },
+              { "path": "media/docs/admin-docs-tab.webp", "label": "Admin Docs tab" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

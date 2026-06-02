@@ -1,26 +1,44 @@
-/** @typedef {{ esc: Function, $: Function, adminAssetUrl: Function, imageAssetOptions: Function, getPois: Function, getMilestones: Function }} DossierDeps */
+import { featureHasDossierContent as sharedFeatureHasDossier, isValidHref, normalizeHrefForSave } from './dossier-shared.js';
+import { isSafeDossierAssetPath, sanitizeDossierHtml } from './sanitize-html.js';
+import { bindDiagramEditorButtons, defaultDiagramSource, registerDiagramMountHandlers, renderAllDiagramPreviews } from './diagram-editor-modal.js';
+
+/** @typedef {{ esc: Function, $: Function, adminAssetUrl: Function, imageAssetOptions: Function, filterImageAssets: Function, getPois: Function, getMilestones: Function }} DossierDeps */
+
+const sectionUndoState = { timer: 0, payload: null };
 
 /** Keep in sync with src/dossier/registry.js + src/components/dossier/blockViews.jsx */
 const BLOCK_TYPES = [
   ['text', 'Text note'],
+  ['figure', 'Text + image'],
   ['image', 'Image'],
   ['video', 'Video'],
   ['compare', 'Side-by-side compare'],
   ['carousel', 'Carousel'],
   ['gallery', 'Image gallery (grid)'],
   ['links', 'Links'],
+  ['html', 'Custom HTML'],
+  ['diagram', 'UML diagram'],
+  ['code', 'Linked code'],
+  ['tabs', 'Tabbed section'],
 ];
 
 /** Button label for “Add …” — stays in sync with the section dropdown */
 const BLOCK_ADD_VERBS = {
   text: 'Add text note',
+  figure: 'Add text + image',
   image: 'Add image',
   video: 'Add video',
   compare: 'Add side-by-side',
   carousel: 'Add carousel',
   gallery: 'Add image gallery',
   links: 'Add links',
+  html: 'Add custom HTML',
+  diagram: 'Add UML diagram',
+  code: 'Add linked code',
+  tabs: 'Add tabbed section',
 };
+
+const CODE_REPOS = ['pokemon-resort', 'pokemon-resort-page', 'spmk', 'island-dreamforge'];
 
 function syncAddBlockButton(select) {
   if (!select) return;
@@ -34,6 +52,11 @@ function syncAddBlockButton(select) {
 function initSectionAddBlockButtons(root) {
   if (!root) return;
   root.querySelectorAll('[data-add-block-type]').forEach((select) => syncAddBlockButton(select));
+}
+
+function initDossierEditorMount(mount) {
+  initSectionAddBlockButtons(mount);
+  renderAllDiagramPreviews(mount);
 }
 
 const DEFAULT_COMPARE_ITEMS = () => [
@@ -79,6 +102,55 @@ function normalizeBlock(block) {
       .map((item) => ({ label: String(item?.label || '').trim(), href: String(item?.href || item?.url || '').trim() }))
       .filter((item) => item.label && item.href);
     return items.length ? { type, items } : null;
+  }
+  if (type === 'figure') {
+    const path = String(block.path || '').trim();
+    const body = String(block.body || block.text || '').trim();
+    const caption = String(block.caption || '').trim();
+    const layout = block.layout === 'side' ? 'side' : 'stacked';
+    if (!path || !isSafeDossierAssetPath(path) || (!body && !caption)) return null;
+    return { type, path, body, caption, layout };
+  }
+  if (type === 'html') {
+    const html = sanitizeDossierHtml(block.html || block.content || '');
+    return html ? { type, html } : null;
+  }
+  if (type === 'diagram') {
+    const source = String(block.source || block.mermaid || '').trim();
+    if (!source || source.length > 32000) return null;
+    return {
+      type,
+      source,
+      title: String(block.title || '').trim(),
+      caption: String(block.caption || '').trim(),
+    };
+  }
+  if (type === 'code') {
+    const repo = String(block.repo || '').trim();
+    const path = String(block.path || '').trim();
+    const body = String(block.body || block.code || '').trim();
+    if (!repo || !CODE_REPOS.includes(repo) || !path || !body) return null;
+    return {
+      type,
+      repo,
+      path,
+      lines: String(block.lines || block.lineRange || '').trim(),
+      language: String(block.language || block.lang || '').trim(),
+      caption: String(block.caption || '').trim(),
+      body,
+    };
+  }
+  if (type === 'tabs') {
+    const tabs = (Array.isArray(block.tabs) ? block.tabs : [])
+      .map((tab, index) => {
+        const id = String(tab?.id || `tab-${index + 1}`).trim();
+        const label = String(tab?.label || tab?.title || '').trim() || `Tab ${index + 1}`;
+        const blocks = (Array.isArray(tab?.blocks) ? tab.blocks : []).map(normalizeBlock).filter(Boolean);
+        if (!blocks.length) return null;
+        return { id, label, blocks };
+      })
+      .filter(Boolean);
+    return tabs.length >= 2 ? { type, caption: String(block.caption || '').trim(), tabs } : null;
   }
   return null;
 }
@@ -136,6 +208,26 @@ function normalizeBlockDraft(block) {
     }));
     return { type, items: items.length ? items : [{ label: '', href: '' }] };
   }
+  if (type === 'figure') {
+    return {
+      type,
+      path: String(block.path || ''),
+      body: String(block.body || block.text || ''),
+      caption: String(block.caption || ''),
+      layout: block.layout === 'side' ? 'side' : 'stacked',
+    };
+  }
+  if (type === 'html') {
+    return { type, html: String(block.html || block.content || '') };
+  }
+  if (type === 'diagram') {
+    return {
+      type,
+      source: String(block.source || block.mermaid || defaultDiagramSource()),
+      title: String(block.title || ''),
+      caption: String(block.caption || ''),
+    };
+  }
   return { type: 'text', body: '' };
 }
 
@@ -166,7 +258,7 @@ export function normalizeFeatureDossierRaw(feature, options = {}) {
   return {
     overview: String(raw.overview || ''),
     map: {
-      poiId: String(map.poiId || '').trim(),
+      pinId: String(map.pinId || map.poiId || '').trim(),
       label: String(map.label || '').trim(),
       note: String(map.note || '').trim(),
       position: position.length ? position.map((n) => String(n)) : ['', '', ''],
@@ -179,9 +271,74 @@ export function normalizeFeatureDossierRaw(feature, options = {}) {
 }
 
 export function featureHasDossierContent(feature) {
-  const dossier = normalizeFeatureDossierRaw(feature);
-  return Boolean(dossier.overview.trim() || dossier.sections.length || dossier.researchMilestones.length
-    || dossier.map.poiId || dossier.map.label || dossier.map.note);
+  return sharedFeatureHasDossier(feature, normalizeFeatureDossierRaw);
+}
+
+function dossierPathPreview(path, deps) {
+  const { esc, adminAssetUrl } = deps;
+  const trimmed = String(path || '').trim();
+  if (!trimmed) {
+    return '<div class="dossier-path-preview dossier-path-preview--empty" data-dossier-preview><span>No preview</span></div>';
+  }
+  return `<div class="dossier-path-preview" data-dossier-preview><img src="${esc(adminAssetUrl(trimmed))}" alt="" loading="lazy" data-dossier-preview-img /></div>`;
+}
+
+function linkRowHtml(item, idx, esc) {
+  const href = String(item.href || item.url || '');
+  const invalid = href.trim() && !isValidHref(href);
+  return `<div class="dossier-link-row${invalid ? ' dossier-link-row--invalid' : ''}" data-link-row="${idx}">
+    <label>Label<input data-link-label value="${esc(item.label || '')}"></label>
+    <label>URL<input data-link-href value="${esc(href)}" placeholder="https://…" spellcheck="false">
+    ${invalid ? '<span class="hint link-invalid-hint">Invalid URL — use https://… or mailto:name@example.com</span>' : ''}</label>
+    <button type="button" class="btn ghost small" data-link-remove>×</button>
+  </div>`;
+}
+
+function renderDossierAssetPicker(deps, query = '') {
+  const { esc, adminAssetUrl, filterImageAssets, imageAssetOptions } = deps;
+  const assets = typeof filterImageAssets === 'function'
+    ? filterImageAssets(query, 80)
+    : imageAssetOptions().slice(0, 80);
+  const total = imageAssetOptions().length;
+  return `<details class="dossier-asset-picker" open>
+    <summary>Pick from project assets (<span id="dossierAssetCount">${total}</span> total · showing ${assets.length})</summary>
+    <label class="dossier-asset-search">Filter<input type="search" id="dossierAssetSearch" value="${esc(query)}" placeholder="Filter by path…" autocomplete="off"></label>
+    <div class="dossier-asset-grid" id="dossierAssetGrid">${assets.length
+    ? assets.map((p) => `<button type="button" class="dossier-asset-pick" data-pick-asset-path="${esc(p)}" title="${esc(p)}"><img src="${esc(adminAssetUrl(p))}" alt="" loading="lazy" /></button>`).join('')
+    : '<p class="hint">No assets match this filter.</p>'}</div>
+  </details>`;
+}
+
+function clearSectionUndo(mount) {
+  window.clearTimeout(sectionUndoState.timer);
+  sectionUndoState.timer = 0;
+  sectionUndoState.payload = null;
+  mount?.querySelector('[data-dossier-undo-bar]')?.classList.add('hidden');
+}
+
+function showSectionUndo(record, section, index, mount) {
+  clearSectionUndo(mount);
+  sectionUndoState.payload = { record, section, index };
+  const bar = mount?.querySelector('[data-dossier-undo-bar]');
+  if (bar) {
+    bar.classList.remove('hidden');
+    const titleEl = bar.querySelector('[data-undo-section-title]');
+    if (titleEl) titleEl.textContent = section.title || 'Untitled';
+  }
+  sectionUndoState.timer = window.setTimeout(clearSectionUndo, 12000);
+}
+
+function blockTypeLabel(type) {
+  return BLOCK_TYPES.find(([v]) => v === type)?.[1] || type;
+}
+
+function wrapDossierBlockEditor(type, sectionIndex, blockIndex, extraClass, bodyHtml) {
+  const label = blockTypeLabel(type);
+  const extra = extraClass ? ` ${extraClass}` : '';
+  return `<details class="dossier-block-editor-details dossier-block-editor${extra}" data-dossier-block data-section="${sectionIndex}" data-block="${blockIndex}" open>
+    <summary class="dossier-block-summary"><span class="dossier-block-type-pill">${label}</span></summary>
+    <div class="dossier-block-editor-body">${bodyHtml}</div>
+  </details>`;
 }
 
 function dossierMilestoneRows(items, esc) {
@@ -192,29 +349,29 @@ function dossierMilestoneRows(items, esc) {
   </div>`).join('');
 }
 
-function dossierBlockHtml(block, sectionIndex, blockIndex, esc) {
+function dossierBlockHtml(block, sectionIndex, blockIndex, deps) {
+  const { esc } = deps;
   const type = block?.type || 'text';
   const commonCaption = esc(block?.caption || '');
   if (type === 'text') {
-    return `<div class="dossier-block-editor" data-dossier-block data-section="${sectionIndex}" data-block="${blockIndex}">
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, '', `
       <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
-      <label>Text<textarea rows="4" data-block-body>${esc(block?.body || block?.text || '')}</textarea></label>
-    </div>`;
+      <label>Text<textarea rows="4" data-block-body>${esc(block?.body || block?.text || '')}</textarea></label>`);
   }
   if (type === 'image' || type === 'video') {
-    return `<div class="dossier-block-editor" data-dossier-block data-section="${sectionIndex}" data-block="${blockIndex}">
+    const path = block?.path || '';
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, '', `
       <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
-      <div class="row"><label>File path<input data-block-path list="dossierAssets" value="${esc(block?.path || '')}" placeholder="media/… or assets/…"></label>
-      <label>Caption<input data-block-caption value="${commonCaption}"></label></div>
-      ${type === 'video' ? `<label>Poster (optional)<input data-block-poster value="${esc(block?.poster || '')}" list="dossierAssets"></label>` : ''}
-    </div>`;
+      <div class="dossier-path-with-preview"><label>File path<input data-block-path list="dossierAssets" value="${esc(path)}" placeholder="media/… or assets/…"></label>${dossierPathPreview(path, deps)}</div>
+      <label>Caption<input data-block-caption value="${commonCaption}"></label>
+      ${type === 'video' ? `<div class="dossier-path-with-preview"><label>Poster (optional)<input data-block-poster value="${esc(block?.poster || '')}" list="dossierAssets"></label>${dossierPathPreview(block?.poster, deps)}</div>` : ''}`);
   }
   if (type === 'compare') {
     const items = block?.items?.length >= 2 ? block.items : DEFAULT_COMPARE_ITEMS();
     const variant = block?.variant === 'fixed' ? 'fixed' : 'fluid';
-    return `<div class="dossier-block-editor dossier-block-compare" data-dossier-block data-section="${sectionIndex}" data-block="${blockIndex}">
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, 'dossier-block-compare', `
       <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
       <p class="hint dossier-block-hint">Add image paths for each panel. Fixed layout keeps panels side-by-side on wide screens.</p>
@@ -222,15 +379,14 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, esc) {
       <label>Caption<input data-block-caption value="${commonCaption}"></label>
       <div class="dossier-compare-items" data-compare-items>${items.map((item, idx) => `<div class="dossier-compare-row" data-compare-row="${idx}">
         <label>Label<input data-compare-label value="${esc(item.label || '')}"></label>
-        <label>Path<input data-compare-path list="dossierAssets" value="${esc(item.path || '')}" placeholder="assets/…"></label>
+        <div class="dossier-path-with-preview"><label>Path<input data-compare-path list="dossierAssets" value="${esc(item.path || '')}" placeholder="assets/…"></label>${dossierPathPreview(item.path, deps)}</div>
         <button type="button" class="btn ghost small" data-compare-remove ${items.length <= 2 ? 'disabled' : ''} title="Need at least 2 panels">×</button>
       </div>`).join('')}</div>
-      <button type="button" class="btn ghost small" data-compare-add>Add panel</button>
-    </div>`;
+      <button type="button" class="btn ghost small" data-compare-add>Add panel</button>`);
   }
   if (type === 'carousel') {
     const images = Array.isArray(block?.images) && block.images.length >= 2 ? block.images : [{ path: '', caption: '' }, { path: '', caption: '' }];
-    return `<div class="dossier-block-editor" data-dossier-block data-section="${sectionIndex}" data-block="${blockIndex}">
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, '', `
       <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
       <label>Carousel caption<input data-block-caption value="${commonCaption}"></label>
@@ -238,17 +394,16 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, esc) {
         const path = typeof img === 'string' ? img : img?.path;
         const caption = typeof img === 'string' ? '' : img?.caption;
         return `<div class="dossier-gallery-row" data-carousel-row="${idx}">
-          <label>Path<input data-carousel-path list="dossierAssets" value="${esc(path || '')}"></label>
+          <div class="dossier-path-with-preview"><label>Path<input data-carousel-path list="dossierAssets" value="${esc(path || '')}"></label>${dossierPathPreview(path, deps)}</div>
           <label>Caption<input data-carousel-caption value="${esc(caption || '')}"></label>
           <button type="button" class="btn ghost small" data-carousel-remove ${images.length <= 2 ? 'disabled' : ''}>×</button>
         </div>`;
       }).join('')}</div>
-      <button type="button" class="btn ghost small" data-carousel-add>Add slide</button>
-    </div>`;
+      <button type="button" class="btn ghost small" data-carousel-add>Add slide</button>`);
   }
   if (type === 'gallery') {
     const images = Array.isArray(block?.images) && block.images.length ? block.images : [{ path: '', caption: '' }];
-    return `<div class="dossier-block-editor" data-dossier-block data-section="${sectionIndex}" data-block="${blockIndex}">
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, '', `
       <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
       <label>Gallery caption<input data-block-caption value="${commonCaption}"></label>
@@ -256,31 +411,96 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, esc) {
         const path = typeof img === 'string' ? img : img?.path;
         const caption = typeof img === 'string' ? '' : img?.caption;
         return `<div class="dossier-gallery-row" data-gallery-row="${idx}">
-          <label>Path<input data-gallery-path list="dossierAssets" value="${esc(path || '')}"></label>
+          <div class="dossier-path-with-preview"><label>Path<input data-gallery-path list="dossierAssets" value="${esc(path || '')}"></label>${dossierPathPreview(path, deps)}</div>
           <label>Caption<input data-gallery-caption value="${esc(caption || '')}"></label>
           <button type="button" class="btn ghost small" data-gallery-remove>×</button>
         </div>`;
       }).join('')}</div>
-      <button type="button" class="btn ghost small" data-gallery-add>Add image</button>
-    </div>`;
+      <button type="button" class="btn ghost small" data-gallery-add>Add image</button>`);
   }
   if (type === 'links') {
     const items = Array.isArray(block?.items) && block.items.length ? block.items : [{ label: '', href: '' }];
-    return `<div class="dossier-block-editor" data-dossier-block data-section="${sectionIndex}" data-block="${blockIndex}">
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, '', `
       <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
-      <div data-link-items>${items.map((item, idx) => `<div class="dossier-link-row" data-link-row="${idx}">
-        <label>Label<input data-link-label value="${esc(item.label || '')}"></label>
-        <label>URL<input data-link-href value="${esc(item.href || item.url || '')}"></label>
-        <button type="button" class="btn ghost small" data-link-remove>×</button>
-      </div>`).join('')}</div>
-      <button type="button" class="btn ghost small" data-link-add>Add link</button>
-    </div>`;
+      <div data-link-items>${items.map((item, idx) => linkRowHtml(item, idx, esc)).join('')}</div>
+      <button type="button" class="btn ghost small" data-link-add>Add link</button>`);
   }
-  return dossierBlockHtml({ type: 'text', body: '' }, sectionIndex, blockIndex, esc);
+  if (type === 'figure') {
+    const path = block?.path || '';
+    const layout = block?.layout === 'side' ? 'side' : 'stacked';
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, 'dossier-block-figure-editor', `
+      <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
+      <p class="hint dossier-block-hint">Paragraph beside an image. Needs body or caption text plus a valid asset path.</p>
+      <label>Body text<textarea rows="4" data-block-body>${esc(block?.body || block?.text || '')}</textarea></label>
+      <div class="dossier-path-with-preview"><label>Image path<input data-block-path list="dossierAssets" value="${esc(path)}" placeholder="media/… or assets/…"></label>${dossierPathPreview(path, deps)}</div>
+      <label>Caption (optional)<input data-block-caption value="${commonCaption}"></label>
+      <label>Layout<select data-figure-layout><option value="stacked" ${layout === 'stacked' ? 'selected' : ''}>Stacked (text above image)</option><option value="side" ${layout === 'side' ? 'selected' : ''}>Side by side</option></select></label>`);
+  }
+  if (type === 'html') {
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, 'dossier-block-html-editor', `
+      <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
+      <p class="hint dossier-block-hint">Safe subset of HTML only. Scripts, inline styles, and remote images are stripped on save. Use <code>assets/</code> or <code>media/</code> paths for images.</p>
+      <label>HTML<textarea rows="10" data-block-html spellcheck="false" placeholder="<p>…</p>">${esc(block?.html || block?.content || '')}</textarea></label>
+      <button type="button" class="btn ghost small" data-html-preview-btn>Preview HTML</button>
+      <div class="dossier-html-preview-wrap is-hidden" data-html-preview-wrap hidden>
+        <span class="hint">Preview (sanitized)</span>
+        <div class="dossier-html-preview" data-dossier-html-preview></div>
+      </div>`);
+  }
+  if (type === 'diagram') {
+    const source = block?.source || block?.mermaid || defaultDiagramSource();
+    return `<details class="dossier-block-editor-details dossier-block-editor dossier-block-diagram-editor" data-dossier-block data-block-kind="diagram" data-section="${sectionIndex}" data-block="${blockIndex}" open>
+      <summary class="dossier-block-summary"><span class="dossier-block-type-pill">UML diagram</span></summary>
+      <div class="dossier-block-editor-body">
+        <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
+        <p class="hint dossier-block-hint">Text-based UML via Mermaid — class, state, sequence, and flowchart diagrams. Use the editor modal for the source.</p>
+        <label>Title (optional)<input data-block-diagram-title value="${esc(block?.title || '')}" placeholder="Pokémon follower AI"></label>
+        <label>Caption (optional)<input data-block-diagram-caption value="${esc(block?.caption || '')}" placeholder="High-level behaviour overview"></label>
+        <textarea hidden data-block-diagram-source>${esc(source)}</textarea>
+        <div class="dossier-diagram-inline-preview" data-diagram-inline-preview><p class="hint">Rendering…</p></div>
+        <button type="button" class="btn primary" data-diagram-edit-btn>Edit diagram…</button>
+      </div>
+    </details>`;
+  }
+  if (type === 'code') {
+    const repo = block?.repo || 'pokemon-resort';
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, 'dossier-block-code-editor', `
+      <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
+      <p class="hint dossier-block-hint">Paths are relative to the app root in this monorepo (e.g. pokemon-resort/src/…). Paste the snippet into <strong>body</strong>; keep it in sync with the linked file.</p>
+      <div class="row"><label>Repo root<select data-code-repo>${CODE_REPOS.map((r) => `<option value="${r}" ${r === repo ? 'selected' : ''}>${r}</option>`).join('')}</select></label>
+      <label>File path<input data-code-path value="${esc(block?.path || '')}" placeholder="src/gameplay/…"></label>
+      <label>Lines (optional)<input data-code-lines value="${esc(block?.lines || block?.lineRange || '')}" placeholder="42-68"></label></div>
+      <div class="row"><label>Language<input data-code-language value="${esc(block?.language || block?.lang || '')}" placeholder="cpp, mjs, json"></label>
+      <label>Caption<input data-block-caption value="${commonCaption}"></label></div>
+      <label>Code body<textarea rows="12" data-code-body spellcheck="false">${esc(block?.body || block?.code || '')}</textarea></label>`);
+  }
+  if (type === 'tabs') {
+    const tabs = block?.tabs?.length >= 2 ? block.tabs : [
+      { id: 'writing', label: 'Writing', blocks: [{ type: 'text', body: '' }] },
+      { id: 'reading', label: 'Reading', blocks: [{ type: 'text', body: '' }] },
+    ];
+    return wrapDossierBlockEditor(type, sectionIndex, blockIndex, 'dossier-block-tabs-editor', `
+      <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
+      <p class="hint dossier-block-hint">Two or more tabs; each tab holds nested blocks as JSON (text, code, diagram, …). LLMs often edit tabs directly in the article JSON file.</p>
+      <label>Caption (optional)<input data-block-caption value="${commonCaption}"></label>
+      <div data-tab-editors>${tabs.map((tab, tabIndex) => `<fieldset class="dossier-tab-editor" data-tab-editor="${tabIndex}">
+        <legend>Tab ${tabIndex + 1}</legend>
+        <div class="row"><label>ID<input data-tab-id value="${esc(tab.id || '')}"></label><label>Label<input data-tab-label value="${esc(tab.label || '')}"></label></div>
+        <label>Blocks JSON<textarea rows="10" data-tab-blocks-json spellcheck="false">${esc(JSON.stringify(tab.blocks || [], null, 2))}</textarea></label>
+      </fieldset>`).join('')}</div>
+      <button type="button" class="btn ghost small" data-tab-add>Add tab</button>`);
+  }
+  return dossierBlockHtml({ type: 'text', body: '' }, sectionIndex, blockIndex, deps);
 }
 
-function dossierSectionHtml(section, sectionIndex, esc) {
+function dossierSectionHtml(section, sectionIndex, deps) {
+  const { esc } = deps;
   const blocks = section.blocks?.length ? section.blocks : [];
   return `<details class="dossier-section-editor" data-dossier-section="${sectionIndex}" open>
     <summary><strong>Section:</strong> <span data-section-title-preview>${esc(section.title || 'Untitled')}</span></summary>
@@ -289,7 +509,7 @@ function dossierSectionHtml(section, sectionIndex, esc) {
       <label>ID<input data-section-id value="${esc(section.id || '')}" placeholder="section-slug"></label></div>
       <label>Section summary<textarea rows="2" data-section-summary>${esc(section.summary || '')}</textarea></label>
       <div class="dossier-blocks-host" data-dossier-blocks>${blocks.length
-    ? blocks.map((block, blockIndex) => dossierBlockHtml(block, sectionIndex, blockIndex, esc)).join('')
+    ? blocks.map((block, blockIndex) => dossierBlockHtml(block, sectionIndex, blockIndex, deps)).join('')
     : '<p class="hint dossier-blocks-empty">No blocks in this section yet.</p>'}</div>
       <div class="dossier-section-actions">
         <label class="dossier-add-block-picker">Block type
@@ -302,31 +522,58 @@ function dossierSectionHtml(section, sectionIndex, esc) {
   </details>`;
 }
 
-export function featureDossierEditorHtml(feature, deps) {
-  const { esc, getPois } = deps;
-  const dossier = normalizeFeatureDossierRaw(feature, { forEditor: true });
-  const assets = deps.imageAssetOptions();
-  const pois = getPois();
+export function dossierEditorHtml(record, deps, config = {}) {
+  const { esc, getPins = () => [], getPois = () => [] } = deps;
+  const {
+    title = 'Rich content',
+    hint = 'Sections and blocks appear in the public modal. Collapse blocks while editing to reduce clutter.',
+    showMap = false,
+    showResearchMilestones = false,
+    open = true,
+  } = config;
+  const dossier = normalizeFeatureDossierRaw(record, { forEditor: true });
+  const assets = deps.imageAssetOptions().slice(0, 300);
+  const pinList = getPins().length ? getPins() : getPois();
   const [px, py, pz] = dossier.map.position;
-  return `<section class="dossier-editor" id="featureDossierHost">
-    <h3>Research dossier <span class="hint">rich modal on the public board</span></h3>
-    <p class="hint">Build per-generation notes, side-by-side comparisons, videos, galleries, map pins, and milestones. Incomplete blocks stay visible until paths are filled in.</p>
-    <label>Overview<textarea id="dossierOverview" rows="4" placeholder="Long-form intro: goals, scope, what visitors should understand…">${esc(dossier.overview)}</textarea></label>
-    <details class="dossier-map-editor"><summary>Map &amp; location</summary>
-      <div class="row"><label>POI id<input id="dossierMapPoi" list="dossierPoiList" value="${esc(dossier.map.poiId)}" placeholder="poi-…"></label>
-      <label>Label<input id="dossierMapLabel" value="${esc(dossier.map.label)}"></label></div>
-      <label>Note<textarea id="dossierMapNote" rows="2">${esc(dossier.map.note)}</textarea></label>
-      <div class="row three"><label>X<input id="dossierMapX" value="${esc(px)}"></label><label>Y<input id="dossierMapY" value="${esc(py)}"></label><label>Z<input id="dossierMapZ" value="${esc(pz)}"></label></div>
-      <datalist id="dossierPoiList">${pois.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</datalist>
-    </details>
-    <h4>Research milestones</h4>
-    <div id="dossierMilestones" class="check-editor">${dossierMilestoneRows(dossier.researchMilestones, esc) || '<p class="hint">Optional checkpoints for research (separate from card tasks).</p>'}</div>
-    <button type="button" class="btn ghost small" id="addDossierMilestone">Add milestone</button>
-    <h4>Sections</h4>
-    <div id="dossierSections">${dossier.sections.map((section, index) => dossierSectionHtml(section, index, esc)).join('') || '<p class="hint">No sections yet — add one below (e.g. “Gen III”, “UI mocks”).</p>'}</div>
-    <button type="button" class="btn ghost small" id="addDossierSection">Add section</button>
-    <datalist id="dossierAssets">${assets.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
-  </section>`;
+  const mapBlock = showMap ? `<details class="dossier-map-editor"><summary>Map &amp; location <span class="hint">(optional)</span></summary>
+      <div class="row"><label>Atlas pin id<input data-dossier-map-poi list="dossierPinList" value="${esc(dossier.map.pinId || dossier.map.poiId)}" placeholder="ferry-dock"></label>
+      <label>Label<input data-dossier-map-label value="${esc(dossier.map.label)}"></label></div>
+      <label>Note<textarea data-dossier-map-note rows="2">${esc(dossier.map.note)}</textarea></label>
+      <div class="row three"><label>X<input data-dossier-map-x value="${esc(px)}"></label><label>Y<input data-dossier-map-y value="${esc(py)}"></label><label>Z<input data-dossier-map-z value="${esc(pz)}"></label></div>
+      <datalist id="dossierPinList">${pinList.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</datalist>
+    </details>` : '';
+  const milestoneBlock = showResearchMilestones ? `<h4>Research milestones</h4>
+    <div data-dossier-milestones class="check-editor">${dossierMilestoneRows(dossier.researchMilestones, esc) || '<p class="hint">Optional checkpoints for research (separate from card tasks).</p>'}</div>
+    <button type="button" class="btn ghost small" data-add-dossier-milestone>Add milestone</button>` : '';
+  return `<details class="dossier-editor-fold" data-dossier-host ${open ? 'open' : ''}>
+    <summary class="dossier-editor-fold-summary"><strong>${title}</strong> <span class="hint">— click to collapse</span></summary>
+    <section class="dossier-editor dossier-editor-fold-body">
+      <p class="hint">${hint}</p>
+      <label>Overview<textarea data-dossier-overview rows="4" placeholder="Long-form intro…">${esc(dossier.overview)}</textarea></label>
+      ${mapBlock}
+      ${milestoneBlock}
+      <h4>Sections</h4>
+      <div data-dossier-sections>${dossier.sections.map((section, index) => dossierSectionHtml(section, index, deps)).join('') || '<p class="hint">No sections yet — add one below.</p>'}</div>
+      <button type="button" class="btn ghost small" data-add-dossier-section>Add section</button>
+      <datalist id="dossierAssets">${assets.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
+      ${renderDossierAssetPicker(deps)}
+      <div data-dossier-undo-bar class="dossier-undo-bar hidden" role="status">
+        <span>Removed section “<strong data-undo-section-title>Untitled</strong>”.</span>
+        <button type="button" class="btn small" data-dossier-undo-section>Undo</button>
+        <button type="button" class="btn ghost small" data-dossier-dismiss-undo>Dismiss</button>
+      </div>
+    </section>
+  </details>`;
+}
+
+export function featureDossierEditorHtml(feature, deps) {
+  return dossierEditorHtml(feature, deps, {
+    title: 'Research dossier',
+    hint: 'Build notes, media, comparisons, galleries, and custom HTML. Map pin is optional — expand only when linking to a POI on the atlas.',
+    showMap: true,
+    showResearchMilestones: true,
+    open: true,
+  });
 }
 
 function readBlockFromEl(el, { keepDrafts = false } = {}) {
@@ -385,22 +632,87 @@ function readBlockFromEl(el, { keepDrafts = false } = {}) {
       href: row.querySelector('[data-link-href]')?.value?.trim() || '',
     }));
     if (keepDrafts) return { type, items: items.length ? items : [{ label: '', href: '' }] };
-    const filled = items.filter((item) => item.label && item.href);
+    const filled = items
+      .map((item) => ({ label: item.label, href: normalizeHrefForSave(item.href) }))
+      .filter((item) => item.label && isValidHref(item.href));
     return filled.length ? { type, items: filled } : null;
+  }
+  if (type === 'figure') {
+    const path = el.querySelector('[data-block-path]')?.value?.trim() || '';
+    const body = el.querySelector('[data-block-body]')?.value?.trim() || '';
+    const caption = el.querySelector('[data-block-caption]')?.value?.trim() || '';
+    const layout = el.querySelector('[data-figure-layout]')?.value === 'side' ? 'side' : 'stacked';
+    if (keepDrafts) {
+      return { type, path: el.querySelector('[data-block-path]')?.value || '', body: el.querySelector('[data-block-body]')?.value || '', caption: el.querySelector('[data-block-caption]')?.value || '', layout };
+    }
+    if (!path || !isSafeDossierAssetPath(path) || (!body && !caption)) return null;
+    return { type, path, body, caption, layout };
+  }
+  if (type === 'html') {
+    const raw = el.querySelector('[data-block-html]')?.value || '';
+    if (keepDrafts) return { type, html: raw };
+    const html = sanitizeDossierHtml(raw);
+    return html ? { type, html } : null;
+  }
+  if (type === 'diagram') {
+    const source = el.querySelector('[data-block-diagram-source]')?.value || '';
+    const title = el.querySelector('[data-block-diagram-title]')?.value?.trim() || '';
+    const caption = el.querySelector('[data-block-diagram-caption]')?.value?.trim() || '';
+    if (keepDrafts) return { type, source, title, caption };
+    const trimmed = source.trim();
+    return trimmed && trimmed.length <= 32000 ? { type, source: trimmed, title, caption } : null;
+  }
+  if (type === 'code') {
+    const repo = el.querySelector('[data-code-repo]')?.value?.trim() || '';
+    const path = el.querySelector('[data-code-path]')?.value?.trim() || '';
+    const lines = el.querySelector('[data-code-lines]')?.value?.trim() || '';
+    const language = el.querySelector('[data-code-language]')?.value?.trim() || '';
+    const caption = el.querySelector('[data-block-caption]')?.value?.trim() || '';
+    const body = el.querySelector('[data-code-body]')?.value || '';
+    if (keepDrafts) return { type, repo, path, lines, language, caption, body };
+    const trimmed = body.trim();
+    if (!repo || !CODE_REPOS.includes(repo) || !path || !trimmed) return null;
+    return { type, repo, path, lines, language, caption, body: trimmed };
+  }
+  if (type === 'tabs') {
+    const caption = el.querySelector('[data-block-caption]')?.value?.trim() || '';
+    const tabs = [...el.querySelectorAll('[data-tab-editor]')].map((row, index) => {
+      const id = row.querySelector('[data-tab-id]')?.value?.trim() || `tab-${index + 1}`;
+      const label = row.querySelector('[data-tab-label]')?.value?.trim() || `Tab ${index + 1}`;
+      const raw = row.querySelector('[data-tab-blocks-json]')?.value || '[]';
+      let blocks = [];
+      try { blocks = JSON.parse(raw); } catch { blocks = []; }
+      if (!Array.isArray(blocks)) blocks = [];
+      if (keepDrafts) return { id, label, blocks };
+      return { id, label, blocks: blocks.map(normalizeBlock).filter(Boolean) };
+    }).filter((tab) => keepDrafts || tab.blocks.length);
+    if (keepDrafts) {
+      return {
+        type,
+        caption,
+        tabs: tabs.length >= 2 ? tabs : [
+          { id: 'writing', label: 'Writing', blocks: [] },
+          { id: 'reading', label: 'Reading', blocks: [] },
+        ],
+      };
+    }
+    return tabs.length >= 2 ? { type, caption, tabs } : null;
   }
   return null;
 }
 
-export function readFeatureDossierFromDom($, options = {}) {
+export function readDossierFromDom($, options = {}) {
   const keepDrafts = options.keepDrafts !== false;
-  const host = $('#featureDossierHost');
+  const mountSelector = options.mountSelector || '#featureDossierMount';
+  const mount = document.querySelector(mountSelector);
+  const host = mount?.querySelector('[data-dossier-host]');
   if (!host) return null;
-  const overview = $('#dossierOverview')?.value?.trim() || '';
-  const mapPoi = $('#dossierMapPoi')?.value?.trim() || '';
-  const mapLabel = $('#dossierMapLabel')?.value?.trim() || '';
-  const mapNote = $('#dossierMapNote')?.value?.trim() || '';
-  const position = ['dossierMapX', 'dossierMapY', 'dossierMapZ'].map((id) => Number($(`#${id}`)?.value));
-  const hasMap = mapPoi || mapLabel || mapNote || position.some((n) => Number.isFinite(n));
+  const overview = host.querySelector('[data-dossier-overview]')?.value?.trim() || '';
+  const mapPoi = host.querySelector('[data-dossier-map-poi]')?.value?.trim() || '';
+  const mapLabel = host.querySelector('[data-dossier-map-label]')?.value?.trim() || '';
+  const mapNote = host.querySelector('[data-dossier-map-note]')?.value?.trim() || '';
+  const position = ['x', 'y', 'z'].map((axis) => Number(host.querySelector(`[data-dossier-map-${axis}]`)?.value));
+  const hasMap = Boolean(host.querySelector('[data-dossier-map-poi]')) && (mapPoi || mapLabel || mapNote || position.some((n) => Number.isFinite(n)));
   const researchMilestones = [...host.querySelectorAll('[data-dossier-milestone]')].map((row) => ({
     label: row.querySelector('[data-dossier-milestone-label]')?.value?.trim() || '',
     done: Boolean(row.querySelector('[data-dossier-milestone-done]')?.checked),
@@ -416,13 +728,30 @@ export function readFeatureDossierFromDom($, options = {}) {
   const dossier = { overview, researchMilestones, sections };
   if (hasMap) {
     dossier.map = {
-      poiId: mapPoi,
+      pinId: mapPoi,
+      poiId: undefined,
       label: mapLabel,
       note: mapNote,
       position: position.every((n) => Number.isFinite(n)) ? position : undefined,
     };
   }
   return dossier;
+}
+
+export const readFeatureDossierFromDom = readDossierFromDom;
+
+function updatePathPreviewForInput(input, deps) {
+  const wrap = input?.closest('.dossier-path-with-preview');
+  const preview = wrap?.querySelector('[data-dossier-preview]');
+  if (!preview) return;
+  const path = input.value.trim();
+  if (!path) {
+    preview.className = 'dossier-path-preview dossier-path-preview--empty';
+    preview.innerHTML = '<span>No preview</span>';
+    return;
+  }
+  preview.className = 'dossier-path-preview';
+  preview.innerHTML = `<img src="${deps.esc(deps.adminAssetUrl(path))}" alt="" loading="lazy" data-dossier-preview-img onerror="this.closest('[data-dossier-preview]').className='dossier-path-preview dossier-path-preview--broken';this.remove()" />`;
 }
 
 function createBlock(type) {
@@ -433,38 +762,86 @@ function createBlock(type) {
   if (type === 'gallery') return { type: 'gallery', caption: '', images: [{ path: '', caption: '' }] };
   if (type === 'carousel') return { type: 'carousel', caption: '', images: [{ path: '', caption: '' }, { path: '', caption: '' }] };
   if (type === 'links') return { type: 'links', items: [{ label: '', href: '' }] };
+  if (type === 'figure') return { type: 'figure', path: '', body: '', caption: '', layout: 'stacked' };
+  if (type === 'html') return { type: 'html', html: '<p></p>' };
+  if (type === 'diagram') return { type: 'diagram', title: '', caption: '', source: defaultDiagramSource() };
+  if (type === 'code') return { type: 'code', repo: 'pokemon-resort', path: '', lines: '', language: '', caption: '', body: '' };
+  if (type === 'tabs') {
+    return {
+      type: 'tabs',
+      caption: '',
+      tabs: [
+        { id: 'writing', label: 'Writing', blocks: [{ type: 'text', body: '' }] },
+        { id: 'reading', label: 'Reading', blocks: [{ type: 'text', body: '' }] },
+      ],
+    };
+  }
   if (type === 'image' || type === 'video') return { type, path: '', caption: '' };
   return { type: 'text', body: '' };
 }
 
+function showDossierHtmlPreview(previewBtn, deps) {
+  const blockEl = previewBtn.closest('[data-dossier-block]');
+  const wrap = blockEl?.querySelector('[data-html-preview-wrap]');
+  const preview = blockEl?.querySelector('[data-dossier-html-preview]');
+  const raw = blockEl?.querySelector('[data-block-html]')?.value || '';
+  if (!wrap || !preview) return;
+  let html = '';
+  try {
+    html = sanitizeDossierHtml(raw);
+  } catch {
+    html = '';
+  }
+  wrap.hidden = false;
+  wrap.classList.remove('is-hidden');
+  if (html) {
+    preview.innerHTML = html;
+    preview.querySelectorAll('img[src]').forEach((img) => {
+      const src = img.getAttribute('src')?.trim();
+      if (src && deps?.adminAssetUrl) img.src = deps.adminAssetUrl(src);
+    });
+  } else {
+    preview.innerHTML = '<p class="hint">Nothing to preview — use allowed tags (e.g. &lt;p&gt;, &lt;ul&gt;, &lt;img src=\"media/…\"&gt;) and site asset paths for images.</p>';
+  }
+}
+
 function handleDossierMountClick(event, deps) {
-  const { $, getRecord, onDirty } = deps;
-  const mount = $('#featureDossierMount');
-  const host = $('#featureDossierHost');
+  const { $, getRecord, onDirty, mountSelector = '#featureDossierMount' } = deps;
+  const mount = document.querySelector(mountSelector);
+  const host = mount?.querySelector('[data-dossier-host]');
   if (!mount || !host) return;
+
+  const previewBtn = event.target.closest('[data-html-preview-btn]');
+  if (previewBtn && mount.contains(previewBtn)) {
+    event.preventDefault();
+    showDossierHtmlPreview(previewBtn, deps);
+    return;
+  }
 
   const btn = event.target.closest('button');
   if (!btn || !mount.contains(btn)) return;
 
   const persist = () => {
+    if (typeof getRecord !== 'function') return;
     const record = getRecord();
     if (!record) return;
-    record.dossier = readFeatureDossierFromDom($, { keepDrafts: true });
-    onDirty();
+    record.dossier = readDossierFromDom($, { keepDrafts: true, mountSelector });
+    onDirty?.();
   };
 
   /** Re-render dossier UI from in-memory record (do not read DOM — would drop pending edits). */
   const refresh = () => {
+    if (typeof getRecord !== 'function') return;
     const record = getRecord();
     if (!record || !mount) return;
-    mount.innerHTML = featureDossierEditorHtml(record, deps);
-    initSectionAddBlockButtons(mount);
+    mount.innerHTML = deps.renderEditorHtml(record, deps);
+    initDossierEditorMount(mount);
     onDirty();
   };
 
-  if (btn.id === 'addDossierMilestone') {
+  if (btn.matches('[data-add-dossier-milestone]')) {
     event.preventDefault();
-    const box = $('#dossierMilestones');
+    const box = host.querySelector('[data-dossier-milestones]');
     if (!box) return;
     const hint = box.querySelector('.hint');
     hint?.remove();
@@ -485,7 +862,7 @@ function handleDossierMountClick(event, deps) {
     return;
   }
 
-  if (btn.id === 'addDossierSection') {
+  if (btn.matches('[data-add-dossier-section]')) {
     event.preventDefault();
     persist();
     const record = getRecord();
@@ -502,14 +879,49 @@ function handleDossierMountClick(event, deps) {
     return;
   }
 
+  if (btn.matches('[data-dossier-undo-section]')) {
+    event.preventDefault();
+    const payload = sectionUndoState.payload;
+    if (!payload?.record?.dossier?.sections) return;
+    payload.record.dossier.sections.splice(payload.index, 0, payload.section);
+    clearSectionUndo();
+    refresh();
+    return;
+  }
+
+  if (btn.matches('[data-dossier-dismiss-undo]')) {
+    event.preventDefault();
+    clearSectionUndo();
+    return;
+  }
+
+  if (btn.matches('[data-pick-asset-path]')) {
+    event.preventDefault();
+    const path = btn.dataset.pickAssetPath;
+    const target = mount.querySelector('[data-dossier-last-path-target]')
+      || mount.querySelector('[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]');
+    if (target && path) {
+      target.value = path;
+      updatePathPreviewForInput(target, deps);
+      persist();
+    }
+    return;
+  }
+
   if (btn.matches('[data-dossier-section-remove]')) {
     event.preventDefault();
-    const sectionEl = btn.closest('[data-dossier-section]');
-    if (!sectionEl) return;
-    const title = sectionEl.querySelector('[data-section-title]')?.value?.trim() || 'this section';
-    if (!window.confirm(`Remove section “${title}”?`)) return;
-    sectionEl.remove();
     persist();
+    const record = getRecord();
+    const sectionEl = btn.closest('[data-dossier-section]');
+    if (!record || !sectionEl) return;
+    const sections = [...host.querySelectorAll('[data-dossier-section]')];
+    const index = sections.indexOf(sectionEl);
+    if (index < 0 || !record.dossier?.sections?.[index]) return;
+    const title = record.dossier.sections[index].title || 'this section';
+    if (!window.confirm(`Remove section “${title}”?`)) return;
+    const removed = record.dossier.sections.splice(index, 1)[0];
+    showSectionUndo(record, removed, index, mount);
+    refresh();
     return;
   }
 
@@ -622,19 +1034,21 @@ function handleDossierMountClick(event, deps) {
     persist();
     return;
   }
+
 }
 
 function handleDossierMountChange(event, deps) {
-  const { $, getRecord, onDirty } = deps;
-  const mount = $('#featureDossierMount');
-  const host = $('#featureDossierHost');
+  const { $, getRecord, onDirty, mountSelector = '#featureDossierMount' } = deps;
+  const mount = document.querySelector(mountSelector);
+  const host = mount?.querySelector('[data-dossier-host]');
   if (!mount || !host || !mount.contains(event.target)) return;
 
   const persist = () => {
+    if (typeof getRecord !== 'function') return;
     const record = getRecord();
     if (!record) return;
-    record.dossier = readFeatureDossierFromDom($, { keepDrafts: true });
-    onDirty();
+    record.dossier = readDossierFromDom($, { keepDrafts: true, mountSelector });
+    onDirty?.();
   };
 
   if (event.target.matches('[data-add-block-type]')) {
@@ -654,10 +1068,9 @@ function handleDossierMountChange(event, deps) {
     if (!block) return;
     const next = createBlock(event.target.value);
     record.dossier.sections[sectionIndex].blocks[blockIndex] = next;
-    const mountEl = $('#featureDossierMount');
-    if (mountEl && record) {
-      mountEl.innerHTML = featureDossierEditorHtml(record, deps);
-      initSectionAddBlockButtons(mountEl);
+    if (mount && record) {
+      mount.innerHTML = deps.renderEditorHtml(record, deps);
+      initSectionAddBlockButtons(mount);
       onDirty();
     }
     return;
@@ -671,23 +1084,68 @@ function handleDossierMountChange(event, deps) {
   persist();
 }
 
-export function bindFeatureDossierEditor(deps) {
-  const { $ } = deps;
+export function bindDossierEditor(deps) {
+  const { $, mountSelector = '#featureDossierMount', renderEditorHtml = featureDossierEditorHtml } = deps;
   if (typeof $ !== 'function') return;
-  const mount = $('#featureDossierMount');
+  const mount = document.querySelector(mountSelector);
   if (!mount) return;
+  const editorDeps = { ...deps, mountSelector, renderEditorHtml, readDossierFromDom };
 
-  initSectionAddBlockButtons(mount);
+  initDossierEditorMount(mount);
+  registerDiagramMountHandlers(mountSelector, editorDeps);
+  bindDiagramEditorButtons();
 
   if (mount.dataset.dossierBound !== '1') {
     mount.dataset.dossierBound = '1';
-    mount.addEventListener('click', (event) => handleDossierMountClick(event, deps));
-    mount.addEventListener('change', (event) => handleDossierMountChange(event, deps));
+    let dossierInputTimer = 0;
+    let assetSearchTimer = 0;
+    mount.addEventListener('click', (event) => handleDossierMountClick(event, editorDeps));
+    mount.addEventListener('change', (event) => handleDossierMountChange(event, editorDeps));
+    mount.addEventListener('focusin', (event) => {
+      if (!event.target.matches('[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]')) return;
+      mount.querySelectorAll('[data-dossier-last-path-target]').forEach((el) => el.removeAttribute('data-dossier-last-path-target'));
+      event.target.setAttribute('data-dossier-last-path-target', '1');
+    });
     mount.addEventListener('input', (event) => {
+      if (!event.target.closest('[data-dossier-host]')) return;
       if (event.target.matches('[data-section-title]')) {
         const preview = event.target.closest('[data-dossier-section]')?.querySelector('[data-section-title-preview]');
         if (preview) preview.textContent = event.target.value.trim() || 'Untitled';
       }
+      if (event.target.id === 'dossierAssetSearch') {
+        window.clearTimeout(assetSearchTimer);
+        assetSearchTimer = window.setTimeout(() => {
+          const picker = mount.querySelector('.dossier-asset-picker');
+          if (picker) {
+            const q = event.target.value;
+            const next = renderDossierAssetPicker(deps, q);
+            picker.outerHTML = next;
+          }
+        }, 200);
+        return;
+      }
+      if (event.target.matches('[data-link-href]')) {
+        const row = event.target.closest('[data-link-row]');
+        const href = event.target.value.trim();
+        const invalid = href && !isValidHref(href);
+        row?.classList.toggle('dossier-link-row--invalid', Boolean(invalid));
+        const hint = row?.querySelector('.link-invalid-hint');
+        if (invalid && !hint) {
+          event.target.insertAdjacentHTML('afterend', '<span class="hint link-invalid-hint">Invalid URL — use https://… or mailto:name@example.com</span>');
+        } else if (!invalid) hint?.remove();
+      }
+      if (event.target.matches('[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]')) {
+        updatePathPreviewForInput(event.target, deps);
+      }
+      window.clearTimeout(dossierInputTimer);
+      dossierInputTimer = window.setTimeout(() => {
+        const record = deps.getRecord?.();
+        if (!record) return;
+        record.dossier = readDossierFromDom(deps.$, { keepDrafts: true, mountSelector });
+        deps.onDirty?.();
+      }, 280);
     });
   }
 }
+
+export const bindFeatureDossierEditor = bindDossierEditor;

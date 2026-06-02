@@ -1,0 +1,128 @@
+{
+  "trackerTypes": [
+    {
+      "id": "owSprites",
+      "label": "Pokémon sprites",
+      "description": "Normal and shiny Pokémon spritesheets for this generation."
+    }
+  ],
+  "generations": {
+    "gen1": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen2": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen3": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen4": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen5": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen6": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen7": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen8": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    },
+    "gen9": {
+      "trackers": {
+        "owSprites": {
+          "hasNormal": false,
+          "hasShiny": false,
+          "normalSpritesheet": "",
+          "shinySpritesheet": "",
+          "flagIssue": false,
+          "issueNote": "",
+          "notes": ""
+        }
+      }
+    }
+  }
+}

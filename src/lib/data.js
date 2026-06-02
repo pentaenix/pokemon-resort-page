@@ -2,7 +2,8 @@ export const DATA_FILES = {
   site: 'data/site.json',
   homepage: 'data/homepage.json',
   theme: 'data/theme.json',
-  research: 'data/research-pois.json',
+  research: 'data/research.json',
+  atlasPins: 'data/atlas-pins.json',
   compatibility: 'data/compatibility.json',
   features: 'data/features.json',
   bugs: 'data/bugs.json',
@@ -11,6 +12,7 @@ export const DATA_FILES = {
   characters: 'data/characters.json',
   roadmap: 'data/roadmap.json',
   ideas: 'data/ideas.json',
+  docs: 'data/docs.json',
 };
 
 export async function loadSiteData() {

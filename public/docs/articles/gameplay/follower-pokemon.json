@@ -1,0 +1,166 @@
+{
+  "dossier": {
+    "overview": "Pokémon Resort's overworld follower is a single companion Pokémon that walks behind the player on the 3D test map (RESORT → 3D TEST). When the player stands still, nature-driven idle behaviours kick in: weighted random actions such as circling, poking, sleeping, or exploring within a radius of the player.\n\nConfig lives under config/gameplay/followers/. Runtime code is in src/gameplay/world3d/followers/ — planner separate from executor, same pattern planned for future map-spawned Pokémon.",
+    "sections": [
+      {
+        "id": "guide",
+        "title": "Follower guide",
+        "layout": "tabs-primary",
+        "summary": "How summoning works, how idle behaviours are chosen, and every behaviour id available today.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "overview",
+                "label": "Overview",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "The follower prototype is wired through Overworld3DTestScreen: it loads session.json (which species, nature, optional forced behaviour), summon.json (ball throw + follow step timing), and idle_behaviours.json (nature weights and motion tuning).\n\nLifecycle states: Hidden → BallRelease → EntryFlash → Active. While Active and the player is moving, the follower pathfinds to the tile the player last stood on. When the player is idle for startAfterIdleSeconds (default 5 s), the NatureIdlePlanner picks a behaviour from weighted tables and FollowerController executes a queue of small action primitives.\n\nPlayer movement cancels idle immediately and runs cancel_return — the follower pathfinds back to an adjacent tile near the player (or soft-snaps after a delay). Enable enable_active_idle_behavior_debug in config/app.json to show the active behaviour label on screen (AIB: …)."
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/pokemon-resort/follower-overworld.webp",
+                    "body": "Captured from RESORT → 3D TEST (pokemon-resort/screenshots/overworld3d_test.webp). Follower active on the test owmap with debug idle label when enabled.",
+                    "caption": "Overworld 3D test — follower on map",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Idle behaviour pipeline",
+                    "caption": "Planning vs execution",
+                    "source": "flowchart LR\n    CFG[idle_behaviours.json] --> PLAN[NatureIdlePlanner]\n    SESS[session.json nature] --> PLAN\n    PLAN -->|IdlePlan actions| EXEC[FollowerController]\n    EXEC -->|MovePath Face Wait| WORLD[Grid pathfinding]\n    EXEC -->|Poke Jump Sleep| ANIM[Sprite + dust VFX]"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/followers/session.json",
+                    "lines": "1-9",
+                    "language": "json",
+                    "caption": "Session config — species, nature, optional forced behaviour for testing",
+                    "body": "{\n  \"follower\": {\n    \"enabled\": true,\n    \"pokemonSpecies\": \"psyduck\",\n    \"pokeballId\": \"poke_ball\",\n    \"nature\": \"Jolly\",\n    \"forcedBehavior\": \"circle_player\"\n  }\n}"
+                  }
+                ]
+              },
+              {
+                "id": "summon-follow",
+                "label": "Summon & follow",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Summon timing (summon.json):\n\n• followStepDurationMs — grid step duration while catching up (default 250 ms)\n• ballAnimation — duration, full frame strip, optional fall from fallHeightWorld\n• entryAnimation — scale-in flash when the Pokémon appears\n\nNormal follow: each time the player enters a new tile, the follower builds a path to the player's previous tile using buildFollowerPath. Pathfinding respects collision, height deltas (±1), ramp special tiles, NPC occupancy, and treats the player's current tile as occupied unless it is the goal.\n\nCharbin resolution: resolveFollowerPokemonCharbinPath and resolveFollowerPokeballCharbinPath map species and ball ids to assets/characters/pokemon/*.charbin packages."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/followers/summon.json",
+                    "lines": "1-16",
+                    "language": "json",
+                    "caption": "Summon and follow step defaults",
+                    "body": "{\n  \"follower\": {\n    \"followStepDurationMs\": 250,\n    \"ballAnimation\": {\n      \"durationMs\": 180,\n      \"fullAnimation\": true,\n      \"fallEnabled\": true,\n      \"fallHeightWorld\": 10.0\n    },\n    \"entryAnimation\": {\n      \"durationMs\": 180,\n      \"startScale\": 0.0,\n      \"colorRgba\": [255, 255, 255, 255]\n    }\n  }\n}"
+                  }
+                ]
+              },
+              {
+                "id": "idle-behaviours",
+                "label": "Idle behaviours",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "How a behaviour is chosen:\n\n1. Read nature from session (e.g. Jolly) → map to a weight group (assertive, steady, curious, composed, energetic, neutral).\n2. Start with groupWeights[group] for each behaviour id (0–10 after clamp).\n3. Add natureModifiers[nature] deltas (can be negative).\n4. Drop behaviours with weight ≤ 0. Sleep is skipped unless sleep is available (not yet enabled in production planner calls).\n5. Quirky nature: 20% chance to flatten all weights to 1 for a random pick.\n6. Weighted random select → NatureIdlePlanner builds an IdlePlan (10–20 s target duration by default).\n7. On natural end, optionally path back to idle origin tile at returnToOriginSpeedMultiplier (1.35×).\n\nIf planning fails (blocked tiles), fallbackOrder runs: watch_player → face_away → random_walk → do_nothing.\n\nforcedBehavior in session.json overrides weights so only that id can win (used for QA and captures)."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Config id</th><th>What the follower does</th><th>Action primitives</th></tr></thead><tbody><tr><td><code>random_walk</code></td><td>Picks random walkable tiles within maxPlayerRadius of the player; pauses between legs.</td><td>MovePath, Wait</td></tr><tr><td><code>random_explore</code></td><td>Like random walk but turns to random facings and shorter glances between steps.</td><td>MovePath, Face, Wait</td></tr><tr><td><code>watch_player</code></td><td>Stays in place; alternates facing the player and glancing to random directions.</td><td>Face, Wait</td></tr><tr><td><code>approach_player_side</code></td><td>Pathfinds to an adjacent tile beside the player, then faces the player with long pauses.</td><td>MovePath, Face, Wait</td></tr><tr><td><code>circle_player</code></td><td>Walks the ring of tiles around the player (cardinal neighbours).</td><td>MovePath</td></tr><tr><td><code>dance_circle</code></td><td>Orbits like circle_player; 25% chance each step to do a full spin sequence.</td><td>MovePath, Face, Wait</td></tr><tr><td><code>spin_orbit</code></td><td>Faster orbit (1.15× speed) with rapid random facing changes.</td><td>MovePath, Face</td></tr><tr><td><code>poke_player</code></td><td>Approaches adjacent tile, then repeated forward poke nudges toward the player (1–3 per burst).</td><td>MovePath, Face, Poke</td></tr><tr><td><code>poke_in_place</code></td><td>Poke bursts without moving; faces player between bursts.</td><td>Face, Poke, Wait</td></tr><tr><td><code>sleep</code></td><td>Plays sleep animation for at least 3 s (requires sleep_available — currently false in live planner).</td><td>Sleep</td></tr><tr><td><code>face_away</code></td><td>Turns back to the player and holds for the behaviour duration.</td><td>Face, Wait</td></tr><tr><td><code>drift_away</code></td><td>Walks to a tile 2+ steps from player (preferring farther), then faces away with pauses.</td><td>MovePath, Face, Wait</td></tr><tr><td><code>guard_post</code></td><td>Like drift_away but picks closer tiles (min radius 1); holds facing away — sentinel posture.</td><td>MovePath, Face, Wait</td></tr><tr><td><code>inspect_poi</code></td><td>Random walk within radius with explore-style turning — stands in for POI inspection until map POIs exist.</td><td>MovePath, Face, Wait</td></tr><tr><td><code>jump_fidget</code></td><td>Repeated in-place jumps (1–4 per burst) with landing dust VFX when enabled.</td><td>Jump, Wait</td></tr><tr><td><code>hop_wander</code></td><td>Short hops between nearby tiles (hop movement flag on path steps).</td><td>MovePath (hop), Wait</td></tr><tr><td><code>shy_hide</code></td><td>Steps to player's side/back tile if valid, then alternates facing toward and away from player.</td><td>MovePath, Face, Wait</td></tr><tr><td><code>follow_npc</code></td><td>Random walk within radius (same pathing as random_walk today; NPC targeting reserved).</td><td>MovePath, Wait</td></tr><tr><td><code>do_nothing</code></td><td>Fallback only — no actions.</td><td>—</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Weight group</th><th>Natures</th><th>Typical lean</th></tr></thead><tbody><tr><td><code>assertive</code></td><td>Lonely, Brave, Adamant, Naughty</td><td>drift_away, guard_post, poke</td></tr><tr><td><code>steady</code></td><td>Bold, Relaxed, Impish, Lax</td><td>sleep, guard_post, calm pacing</td></tr><tr><td><code>curious</code></td><td>Modest, Mild, Quiet, Rash</td><td>inspect_poi, random_explore</td></tr><tr><td><code>composed</code></td><td>Calm, Gentle, Sassy, Careful</td><td>face_away, guard_post, inspect_poi</td></tr><tr><td><code>energetic</code></td><td>Timid, Hasty, Jolly, Naive</td><td>circle, dance, jump, hop — sleep weight 0</td></tr><tr><td><code>neutral</code></td><td>Hardy, Docile, Serious, Bashful, Quirky</td><td>balanced; Quirky gets random roll</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Per-behaviour GIFs (idle-watch-player, idle-circle-player, etc.) are still pending. Set forcedBehavior in session.json, stand still 5+ s, and record each behaviour separately when capturing."
+                  }
+                ]
+              },
+              {
+                "id": "config",
+                "label": "Config reference",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Global idle tuning in idle_behaviours.json → natureIdle:\n\n• startAfterIdleSeconds — delay before first behaviour (5.0)\n• behaviorDurationSeconds — min/max plan length (10–20 s)\n• cooldownBetweenBehaviorsSeconds — gap before next pick (2.5–4 s)\n• maxPlayerRadius — tile Manhattan radius for random targets (5)\n• movementSpeedMultiplier / returnToOriginSpeedMultiplier / cancelReturnSpeedMultiplier\n• restoreOriginalPositionOnNaturalEnd / restoreOriginalDirectionOnNaturalEnd\n• jump — heightPixels (16), durationSeconds (0.35)\n• poke — distanceTiles, forwardSeconds, returnSeconds\n• landingDust — dust.png sprite sheet on jump landings\n• behaviorWeightClamp — weights clamped to 0–10\n• quirkyRandomBehaviorChance — 0.2"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/followers/idle_behaviours.json",
+                    "lines": "1-20",
+                    "language": "json",
+                    "caption": "Core idle timing and motion multipliers",
+                    "body": "{\n  \"natureIdle\": {\n    \"enabled\": true,\n    \"natureSource\": \"pokemon.temporal.nature\",\n    \"disableIfNatureMissingOrInvalid\": true,\n    \"startAfterIdleSeconds\": 5.0,\n    \"behaviorDurationSeconds\": { \"min\": 10.0, \"max\": 20.0 },\n    \"cooldownBetweenBehaviorsSeconds\": { \"min\": 2.5, \"max\": 4.0 },\n    \"movementSpeedMultiplier\": 1.0,\n    \"returnToOriginSpeedMultiplier\": 1.35,\n    \"cancelReturnSpeedMultiplier\": 2.25,\n    \"maxPlayerRadius\": 5,\n    \"restoreOriginalPositionOnNaturalEnd\": true,\n    \"restoreOriginalDirectionOnNaturalEnd\": true"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>File</th><th>Purpose</th></tr></thead><tbody><tr><td><code>config/gameplay/followers/session.json</code></td><td>Enabled flag, species, ball, nature, forcedBehavior</td></tr><tr><td><code>config/gameplay/followers/summon.json</code></td><td>Ball throw, entry flash, follow step ms</td></tr><tr><td><code>config/gameplay/followers/idle_behaviours.json</code></td><td>Weights, nature modifiers, jump/poke/dust</td></tr><tr><td><code>config/app.json</code></td><td>enable_active_idle_behavior_debug overlay</td></tr></tbody></table>"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "architecture",
+        "title": "Code map",
+        "summary": "Modules to read when extending follower or idle behaviour.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Module</th><th>Role</th></tr></thead><tbody><tr><td><code>NatureIdleConfig.cpp</code></td><td>Loads idle_behaviours.json</td></tr><tr><td><code>NatureIdlePlanner.cpp</code></td><td>Weight selection + IdlePlan action queues</td></tr><tr><td><code>FollowerController.cpp</code></td><td>Summon states, follow, idle execution, cancel return</td></tr><tr><td><code>FollowerIdleExitTarget.cpp</code></td><td>Pick adjacent tile when returning after idle</td></tr><tr><td><code>FollowerConfig.cpp</code></td><td>Loads session.json + summon.json; charbin paths</td></tr><tr><td><code>Overworld3DTestScreen.cpp</code></td><td>Screen adapter — wires player idle/activity into follower</td></tr></tbody></table>"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "src/gameplay/world3d/followers/NatureIdlePlanner.cpp",
+            "lines": "43-51",
+            "language": "cpp",
+            "caption": "Nature → weight group mapping",
+            "body": "const std::unordered_map<std::string, std::string>& natureGroups() {\n    static const std::unordered_map<std::string, std::string> kGroups{\n        {\"Lonely\", \"assertive\"}, {\"Brave\", \"assertive\"}, {\"Adamant\", \"assertive\"}, {\"Naughty\", \"assertive\"},\n        {\"Bold\", \"steady\"}, {\"Relaxed\", \"steady\"}, {\"Impish\", \"steady\"}, {\"Lax\", \"steady\"},\n        {\"Modest\", \"curious\"}, {\"Mild\", \"curious\"}, {\"Quiet\", \"curious\"}, {\"Rash\", \"curious\"},\n        {\"Calm\", \"composed\"}, {\"Gentle\", \"composed\"}, {\"Sassy\", \"composed\"}, {\"Careful\", \"composed\"},\n        {\"Timid\", \"energetic\"}, {\"Hasty\", \"energetic\"}, {\"Jolly\", \"energetic\"}, {\"Naive\", \"energetic\"},\n        {\"Hardy\", \"neutral\"}, {\"Docile\", \"neutral\"}, {\"Serious\", \"neutral\"}, {\"Bashful\", \"neutral\"}, {\"Quirky\", \"neutral\"},\n    };\n    return kGroups;\n}"
+          },
+          {
+            "type": "text",
+            "body": "Action primitive types (IdleActionType): MovePath, Wait, Face, Poke, Jump, Sleep. The planner never touches SDL — it only emits plans. FollowerController translates grid paths to world steps, drives the charbin animator, and spawns landing dust via LandingDustSystem on jump landings.\n\nThis follower is explicitly a single-actor, player-relative prototype. Future overworld Pokémon (multi-actor, spawn points, smart objects) should reuse the planner/executor split but not grow FollowerController into general AI — see docs/gameplay/overworld_pokemon_architecture_handoff.md in the game repo."
+          }
+        ]
+      },
+      {
+        "id": "media-checklist",
+        "title": "Media",
+        "summary": "Game captures from pokemon-resort/screenshots/.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Source file</th><th>Docs path</th><th>Status</th></tr></thead><tbody><tr><td><code>overworld3d_test.webp</code></td><td><code>media/docs/pokemon-resort/follower-overworld.webp</code></td><td>In article</td></tr><tr><td><code>idle-*.gif</code></td><td><code>media/docs/pokemon-resort/idle-{behaviour}.gif</code></td><td>Pending</td></tr></tbody></table>"
+          },
+          {
+            "type": "text",
+            "body": "Recording tip: set forcedBehavior in session.json, launch RESORT → 3D TEST, stand still 5+ s. Source screenshots live in pokemon-resort/screenshots/ and are copied to public/media/docs/pokemon-resort/ for the site."
+          }
+        ]
+      },
+      {
+        "id": "related",
+        "title": "Related",
+        "summary": "Sibling docs and forward-looking architecture.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "In-repo (pokemon-resort/):\n\n• docs/gameplay/overworld_pokemon_architecture_handoff.md — boundaries for future map-spawned Pokémon\n• docs/gameplay/owmap_format.md — overworld map binary loaded by the test screen\n\nResort Docs:\n\n• owmap-format — map editor write/read path\n• charbin-schema — follower sprite packages (.charbin)\n• island-dreamforge — terrain authoring upstream of maps"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -7,8 +7,10 @@ import Home from './pages/Home.jsx';
 import Atlas from './pages/Atlas.jsx';
 import Ontology from './pages/Ontology.jsx';
 import Board from './pages/Board.jsx';
-import Milestones from './pages/Milestones.jsx';
+import Plan from './pages/Plan.jsx';
+import ConciergeResearch from './pages/ConciergeResearch.jsx';
 import SourceGuide from './pages/SourceGuide.jsx';
+import Docs from './pages/Docs.jsx';
 import Legal from './pages/Legal.jsx';
 
 const pages = {
@@ -16,7 +18,11 @@ const pages = {
   '/atlas': Atlas,
   '/ontology': Ontology,
   '/board': Board,
-  '/milestones': Milestones,
+  '/milestones': Plan,
+  '/plan': Plan,
+  '/research': ConciergeResearch,
+  '/concierge': ConciergeResearch,
+  '/docs': Docs,
   '/source': SourceGuide,
   '/legal': Legal,
 };
@@ -25,7 +31,7 @@ function normalizeRoute(route) {
   const aliases = {
     '/issues': '/board',
     '/roadmap': '/milestones',
-    '/ideas': '/board',
+    '/ideas': '/milestones',
     '/gallery': '/atlas',
     '/models': '/atlas',
     '/characters': '/atlas',

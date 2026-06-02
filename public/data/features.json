@@ -8,52 +8,17 @@
   ],
   "features": [
     {
-      "id": "feature-ontology",
-      "title": "Compatibility Ontology",
-      "stage": "Testing",
-      "priority": "High",
-      "progress": 78,
-      "summary": "Interactive generation-to-generation route lab with stable hover, draggable nodes, focus mode, outward self-loops, mobile fallback, and local layout saving. Cross routes and most self-routes are untested until recorded.",
-      "linkedBugs": [
-        "BUG-TRANSFER-GEN2-SELF",
-        "BUG-TRANSFER-GEN7-SELF",
-        "BUG-UI-ONTOLOGY-HOVER-STUTTER",
-        "BUG-UI-MOBILE-ONTOLOGY-READABILITY"
-      ],
-      "tasks": [
-        {
-          "done": true,
-          "label": "Replace single-scroll chart with dedicated page"
-        },
-        {
-          "done": true,
-          "label": "Mark all routes untested except documented Gen II and Gen VII self failures"
-        },
-        {
-          "done": true,
-          "label": "Point self-loops outward from each generation"
-        },
-        {
-          "done": true,
-          "label": "Add draggable node layout"
-        },
-        {
-          "done": false,
-          "label": "Curate real game box art resources"
-        },
-        {
-          "done": true,
-          "label": "Document RESOURCE-TO-ADD paths for curated game box art"
-        }
-      ],
-      "area": "Compatibility",
+      "id": "FEAT-NEW-02126",
+      "title": "Pokemon Sleep  sprite editor",
+      "area": "Art",
+      "stage": "On-Flight",
+      "priority": "Low",
+      "progress": 0,
+      "summary": "There are over 1000 pokemon now and multiple forms, around 1300, not including shiny pokemon, and we need to have a quick way to generate this sprite once and then repeat it automatically for all other forms",
+      "linkedBugs": [],
       "linkedRoutes": [],
-      "images": [
-        {
-          "path": "assets/reference/compatibility-planning-map.png",
-          "caption": "Old Ontologhy"
-        }
-      ],
+      "tasks": [],
+      "images": [],
       "dossier": {
         "overview": "",
         "map": {
@@ -69,26 +34,15 @@
         "researchMilestones": [],
         "sections": [
           {
-            "id": "section-20545",
+            "id": "section-26097",
             "title": "New section",
             "summary": "",
             "blocks": [
               {
-                "type": "compare",
-                "variant": "fixed",
-                "caption": "",
-                "items": [
-                  {
-                    "path": "media/games/box-art/gen-03/emerald.webp",
-                    "label": "Left",
-                    "caption": ""
-                  },
-                  {
-                    "path": "media/games/box-art/gen-03/leaf-green.webp",
-                    "label": "Right",
-                    "caption": ""
-                  }
-                ]
+                "type": "diagram",
+                "source": "stateDiagram-v2\n    direction LR\n    [*] --> Idle\n    Idle --> Following: player moves\n    Following --> Idle: player stops\n    Idle --> Summoned: summon action\n    Summoned --> Following: latch complete\n    Following --> IdleBehaviour: player idle\n    IdleBehaviour --> Following: player moves\n    IdleBehaviour --> Idle: behaviour ends",
+                "title": "",
+                "caption": ""
               }
             ]
           }
@@ -105,24 +59,40 @@
       "linkedBugs": [],
       "tasks": [
         {
-          "label": "Add dedicated Gallery page",
-          "done": true
+          "done": true,
+          "label": "Add dedicated Gallery page"
         },
         {
-          "label": "Define media folder contract",
-          "done": true
+          "done": true,
+          "label": "Define media folder contract"
         },
         {
-          "label": "Add real screenshots and frame crops",
-          "done": false
+          "done": false,
+          "label": "Add real screenshots and frame crops"
         },
         {
-          "label": "Connect gallery items to POIs/routes/features",
-          "done": false
+          "done": false,
+          "label": "Connect gallery items to POIs/routes/features"
         }
       ],
       "area": "Media",
-      "linkedRoutes": []
+      "linkedRoutes": [],
+      "images": [],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "poiId": "",
+          "label": "",
+          "note": "",
+          "position": [
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": []
+      }
     },
     {
       "id": "feature-model-library",
@@ -285,6 +255,44 @@
           }
         ]
       }
+    },
+    {
+      "id": "feature-ontology",
+      "title": "Compatibility ontology",
+      "stage": "Landed",
+      "priority": "High",
+      "progress": 85,
+      "summary": "Public generation-to-generation compatibility lab with route statuses, checklists, focus mode, and mobile fallbacks.",
+      "linkedBugs": [
+        "BUG-TRANSFER-GEN2-SELF",
+        "BUG-TRANSFER-GEN7-SELF",
+        "BUG-UI-ONTOLOGY-HOVER-STUTTER",
+        "BUG-UI-MOBILE-ONTOLOGY-READABILITY"
+      ],
+      "linkedRoutes": [
+        "gen2-gen2",
+        "gen7-gen7"
+      ],
+      "tasks": [
+        {
+          "label": "Ship public ontology page",
+          "done": true
+        },
+        {
+          "label": "Document Gen II self round-trip failure",
+          "done": false
+        },
+        {
+          "label": "Document Gen VII self round-trip failure",
+          "done": false
+        },
+        {
+          "label": "Keep mobile route-list fallback usable",
+          "done": true
+        }
+      ],
+      "area": "Compatibility",
+      "images": []
     },
     {
       "id": "feature-roadmap-ideas",

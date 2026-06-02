@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { assetUrl } from '../../lib/data.js';
+import { DossierImage } from './DossierImage.jsx';
 
 export function DossierCarousel({ images, caption, onOpenGallery }) {
   const [index, setIndex] = useState(0);
@@ -12,17 +12,17 @@ export function DossierCarousel({ images, caption, onOpenGallery }) {
     <figure className="dossier-block dossier-block-carousel dossier-block--media">
       {caption && <figcaption className="dossier-block-label">{caption}</figcaption>}
       <div className="dossier-carousel">
-        <button type="button" className="dossier-carousel-nav" onClick={() => go(-1)} aria-label="Previous slide">‹</button>
+        <button type="button" className="dossier-carousel-nav" onClick={(e) => { e.stopPropagation(); go(-1); }} aria-label="Previous slide">‹</button>
         <button
           type="button"
           className="dossier-carousel-slide"
           onClick={() => onOpenGallery(images, index)}
           aria-label={`View slide ${index + 1} full size`}
         >
-          <img src={assetUrl(current.path)} alt={current.caption || ''} loading="lazy" />
+          <DossierImage path={current.path} alt={current.caption || ''} />
           {current.caption && <span className="dossier-carousel-caption">{current.caption}</span>}
         </button>
-        <button type="button" className="dossier-carousel-nav" onClick={() => go(1)} aria-label="Next slide">›</button>
+        <button type="button" className="dossier-carousel-nav" onClick={(e) => { e.stopPropagation(); go(1); }} aria-label="Next slide">›</button>
       </div>
       <div className="dossier-carousel-dots" role="tablist" aria-label="Carousel slides">
         {images.map((img, dotIndex) => (

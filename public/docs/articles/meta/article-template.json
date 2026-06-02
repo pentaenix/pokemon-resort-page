@@ -1,0 +1,150 @@
+{
+  "dossier": {
+    "overview": "Starter skeleton for a new Resort Docs article. Replace every REPLACE_* placeholder, delete sections you do not need, and keep repo paths relative to each app root in the monorepo (pokemon-resort/, pokemon-resort-page/, spmk/, island-dreamforge/).\n\nSave the file under public/docs/articles/{category}/{slug}.json where category matches the card in docs.json (meta, formats, gameplay, or design). Set apps[] on the card for hub filters. For a tabbed guide, add layout: \"tabs-primary\" on the section that holds your main tabs block.",
+    "sections": [
+      {
+        "id": "summary",
+        "title": "Summary",
+        "summary": "One paragraph lede for this section — what the reader will learn.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "REPLACE_SUMMARY — plain-language explanation of the topic, audience, and where it lives in the repo."
+          }
+        ]
+      },
+      {
+        "id": "concepts",
+        "title": "Core concepts",
+        "summary": "Definitions and mental model before file layouts or code.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "REPLACE_CONCEPT_1\nREPLACE_CONCEPT_2"
+          },
+          {
+            "type": "diagram",
+            "title": "High-level flow",
+            "caption": "Optional — delete if not needed",
+            "source": "flowchart LR\n    A[Input] --> B[Process]\n    B --> C[Output]"
+          }
+        ]
+      },
+      {
+        "id": "implementation",
+        "title": "Implementation",
+        "summary": "Linked source files and tabbed write/read paths when a format has two sides.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Use code blocks to cite real files. repo is the app root folder name; path is relative to that root. Paste the snippet into body and keep lines in sync when the source changes."
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "REPLACE/path/from/app/root.ext",
+            "lines": "1-20",
+            "language": "cpp",
+            "caption": "Primary runtime entry — REPLACE description",
+            "body": "// REPLACE with excerpt from the linked file\nnamespace example {\n  void run();\n}"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort-page",
+            "path": "tools/admin/lib/REPLACE.mjs",
+            "lines": "10-40",
+            "language": "javascript",
+            "caption": "Tooling that writes or validates the same format",
+            "body": "export function example() {\n  return true;\n}"
+          },
+          {
+            "type": "tabs",
+            "caption": "Use tabs when one topic has distinct write vs read paths (e.g. encoding vs decoding).",
+            "tabs": [
+              {
+                "id": "writing",
+                "label": "Writing",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "REPLACE — how data is authored, edited, or serialized."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/lib/REPLACE-writer.mjs",
+                    "lines": "50-90",
+                    "language": "javascript",
+                    "caption": "Writer / encoder",
+                    "body": "export function encodeExample(payload) {\n  // REPLACE excerpt\n  return buffer;\n}"
+                  }
+                ]
+              },
+              {
+                "id": "reading",
+                "label": "Reading",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "REPLACE — how the game or tools load and validate the format."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "src/REPLACE/Loader.cpp",
+                    "lines": "100-140",
+                    "language": "cpp",
+                    "caption": "Runtime loader",
+                    "body": "SceneConfig loadExample(const std::string& path) {\n  // REPLACE excerpt\n  return config;\n}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "reference",
+        "title": "Reference tables",
+        "summary": "Field lists, binary layout, or config keys.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead><tbody><tr><td>REPLACE_field</td><td>REPLACE_type</td><td>REPLACE_note</td></tr></tbody></table>"
+          }
+        ]
+      },
+      {
+        "id": "media",
+        "title": "Screenshots & diagrams",
+        "summary": "Optional — capture real UI with npm run docs:screenshots.",
+        "blocks": [
+          {
+            "type": "figure",
+            "path": "media/docs/docs-hub.webp",
+            "body": "Replace with a Playwright capture or delete this section.",
+            "caption": "Example screenshot block",
+            "layout": "stacked"
+          }
+        ]
+      },
+      {
+        "id": "related",
+        "title": "Related docs & apps",
+        "summary": "Cross-links when the topic spans multiple apps.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Apps in this workspace:\n\n• pokemon-resort/ — C++ game runtime\n• pokemon-resort-page/ — public site + Operations Desk\n• spmk/ — character/sprite tooling\n• island-dreamforge/ — separate frontend/backend experiment"
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "How to write documentation", "href": "https://github.com/your-name/pokemon-resort-page" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

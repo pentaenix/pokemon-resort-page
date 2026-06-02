@@ -1,0 +1,264 @@
+{
+  "dossier": {
+    "overview": "An `.owmap` file is the binary overworld map format (v1, magic `OWM1`) shared between the **Operations Desk Map Editor** and the Pokémon Resort C++ terrain loader. It combines a fast binary header, a UTF-8 metadata JSON blob (spawn, camera, NPC placements, 3D model hooks), and three packed terrain layers: height, special ramps, and collision bits.\n\nMaps are authored in the admin **Map Editor**, saved to `pokemon-resort/assets/overworld/maps/*.owmap`, and loaded at runtime by `loadOwmapScene`. Terrain meshes may come upstream from **Island Dreamforge** exports; character sprites on the map reference `.charbin` packages (see charbin-schema).\n\nCanonical encode/decode: `pokemon-resort-page/tools/admin/lib/owmap-format.mjs`. In-repo reference: `pokemon-resort/docs/gameplay/owmap_format.md`.",
+    "sections": [
+      {
+        "id": "pipeline",
+        "title": "Where .owmap fits",
+        "summary": "Dreamforge terrain → Map Editor bake → game runtime.",
+        "blocks": [
+          {
+            "type": "figure",
+            "path": "media/docs/map-editor/map-editor-overview.webp",
+            "body": "Operations Desk → **Map Editor** (`npm run admin`, port 9477). Left: map file list. Center: unified paint grid (height tint + ramp glyphs + collision overlay + spawn marker). Right: brush tools, ramp presets, and metadata fields. Default maps folder: `pokemon-resort/assets/overworld/maps/`.",
+            "caption": "Map Editor with testing.owmap loaded",
+            "layout": "stacked"
+          },
+          {
+            "type": "diagram",
+            "title": "Authoring pipeline",
+            "caption": "Metadata stays JSON-shaped in the editor; terrain grids pack into binary on save",
+            "source": "flowchart LR\n    DF[Island Dreamforge] -->|GLB / textures| ME[Map Editor]\n    ME -->|paint height ramps collision| JSON[In-memory map object]\n    JSON -->|bakeTerrainSpecials + encodeOwmap| OWM[.owmap file]\n    OWM -->|loadOwmapScene| GAME[C++ SceneConfig]\n    CB[.charbin packages] -->|characters[] refs| ME"
+          },
+          {
+            "type": "text",
+            "body": "Runtime default for the 3D test screen: `assets/overworld/maps/testing.owmap` (hardcoded in `Overworld3DTestScreen.cpp`).\n\nThe editor keeps full `terrain.{height,special,collision}` grids in memory while you paint. On **Save .owmap**, the server calls `bakeTerrainSpecials()` (resolves editor-only auto ramps) then `encodeOwmap()`, which strips terrain from the JSON header and appends the three binary layers.\n\nBoth JSON-era `.map.json` imports and binary `.owmap` files round-trip through the same in-memory map shape via `mapFromJson()` / `decodeOwmap()`."
+          }
+        ]
+      },
+      {
+        "id": "schema",
+        "title": "Schema reference",
+        "layout": "tabs-primary",
+        "summary": "Binary container, terrain semantics, and JSON metadata.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "binary",
+                "label": "Binary layout",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Little-endian, version 1. Row-major indexing for all terrain layers: `index = y * width + x`. The JSON metadata block never contains terrain grids — `encodeOwmap()` calls `stripTerrainForMeta()` before stringify."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Offset</th><th>Size</th><th>Field</th></tr></thead><tbody><tr><td>0</td><td>4</td><td>magic <code>OWM1</code> (<code>0x4F574D31</code>)</td></tr><tr><td>4</td><td>2</td><td><code>version</code> u16 = 1</td></tr><tr><td>6</td><td>2</td><td><code>width</code> u16 (1…256)</td></tr><tr><td>8</td><td>2</td><td><code>height</code> u16 (1…256)</td></tr><tr><td>10</td><td>4</td><td><code>tileSize</code> f32 (typically 16)</td></tr><tr><td>14</td><td>4</td><td><code>metaLen</code> u32</td></tr><tr><td>18</td><td>N</td><td><code>metaJson</code> UTF-8 (N = metaLen)</td></tr><tr><td>18+N</td><td>W×H</td><td><code>height[]</code> u8 per cell</td></tr><tr><td>…</td><td>W×H</td><td><code>special[]</code> u8 per cell</td></tr><tr><td>…</td><td>⌈W×H/8⌉</td><td><code>collision</code> bits (1 = blocked)</td></tr></tbody></table><p>Collision packing: cell <code>(x,y)</code> → bit index <code>i = y*W + x</code> → byte <code>i >> 3</code>, bit <code>i & 7</code>. Unpacked at runtime to u8 <code>0/1</code> grids.</p>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "File structure",
+                    "caption": "Reader validates exact payload size — no trailing bytes",
+                    "source": "flowchart TD\n    H[18-byte header] --> J[metaJson UTF-8]\n    J --> HT[height W×H bytes]\n    HT --> SP[special W×H bytes]\n    SP --> CO[collision ceil W×H/8 bytes]\n    CO --> SC[SceneConfig via parseSceneMetadata + grids]"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/lib/owmap-format.mjs",
+                    "lines": "129-155",
+                    "language": "javascript",
+                    "caption": "encodeOwmap — pack header, JSON, and terrain layers",
+                    "body": "export function encodeOwmap(map) {\n  const width = map.grid?.width || map.terrain?.height?.[0]?.length || 16;\n  const height = map.grid?.height || map.terrain?.height?.length || 16;\n  const tileSize = Number(map.grid?.tileSize) || 16;\n  const metaJson = JSON.stringify(stripTerrainForMeta(map));\n  const metaBytes = new TextEncoder().encode(metaJson);\n  const heightBytes = packU8Grid(map.terrain.height, width, height);\n  const specialBytes = packU8Grid(map.terrain.special, width, height);\n  const collisionBytes = packCollisionBits(map.terrain.collision, width, height);\n  // … write OWM1 header + append payloads …\n  return buf;\n}"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "src/gameplay/world3d/data/OwmapOverworldLoader.cpp",
+                    "lines": "109-172",
+                    "language": "cpp",
+                    "caption": "loadOwmapScene — validate magic, dimensions, parse JSON, unpack grids",
+                    "body": "SceneConfig loadOwmapScene(const std::string& project_root, const std::string& owmap_path) {\n    // magic OWM1, version 1, width/height <= 256\n    // parse metaJson → parseSceneMetadata()\n    // unpack height, special, collision grids\n    // ERROR if special==1 (editor-only AUTO) remains on disk\n    return scene;\n}"
+                  }
+                ]
+              },
+              {
+                "id": "terrain",
+                "label": "Terrain layers",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Layer</th><th>Storage</th><th>Range</th><th>Meaning</th></tr></thead><tbody><tr><td><code>height</code></td><td>u8 per cell</td><td>0…255</td><td>Discrete height level; multiplied by <code>tileSize</code> for world Y</td></tr><tr><td><code>special</code></td><td>u8 per cell</td><td>0…13</td><td>Ramp / corner shape (see table below)</td></tr><tr><td><code>collision</code></td><td>1 bit per cell</td><td>0/1</td><td><code>1</code> = blocked for pathfinding and player movement</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th><code>special</code></th><th>Label</th><th>On disk?</th></tr></thead><tbody><tr><td>0</td><td>Flat</td><td>yes</td></tr><tr><td>1</td><td>Auto ramp (editor)</td><td><strong>no</strong> — baked to 2–5 or cleared on save</td></tr><tr><td>2</td><td>Ramp north</td><td>yes</td></tr><tr><td>3</td><td>Ramp east</td><td>yes</td></tr><tr><td>4</td><td>Ramp south</td><td>yes</td></tr><tr><td>5</td><td>Ramp west</td><td>yes</td></tr><tr><td>6–9</td><td>Convex corners NE/SE/SW/NW</td><td>yes</td></tr><tr><td>10–13</td><td>Concave corners NE/SE/SW/NW</td><td>yes</td></tr></tbody></table><p>Auto ramp (1) infers cardinal direction from neighbor height deltas in the editor preview. On save, <code>bakeTerrainSpecials()</code> writes 2–5 or clears to 0. The game loader logs an error if <code>special==1</code> is still present — always re-export from the Map Editor before shipping.</p>"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/map-editor/map-editor-ramp.webp",
+                    "body": "Ramp brush with preset picker (cardinals 2–5, convex 6–9, concave 10–13, auto 1). Grid cells show ramp shorthand glyphs overlaid on height tint.",
+                    "caption": "Ramp brush and special presets",
+                    "layout": "side"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/map-editor/map-editor-collision.webp",
+                    "body": "Blocked brush paints collision bits (red overlay). Follower pathfinding and player movement treat blocked cells as impassable. Height deltas of ±1 and ramp specials still govern step-up rules separately.",
+                    "caption": "Collision (blocked) brush",
+                    "layout": "side"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/public/ramp-specials.js",
+                    "lines": "152-180",
+                    "language": "javascript",
+                    "caption": "bakeTerrainSpecials — resolve AUTO (1) before encodeOwmap",
+                    "body": "export function bakeTerrainSpecials(map) {\n  // Clone map; for each cell with special===AUTO:\n  //   infer cardinal from neighbor heights → write 2–5, or clear to FLAT\n  return { map: next, bakedCount, clearedCount };\n}"
+                  }
+                ]
+              },
+              {
+                "id": "metadata",
+                "label": "JSON metadata",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Metadata is everything except `terrain` grids. Parsed by `SceneMetadataParser.cpp` into `SceneConfig` (`Overworld3DConfig.hpp`). Paths in JSON are relative to the game project root unless absolute."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Section</th><th>Key fields</th><th>Notes</th></tr></thead><tbody><tr><td>Identity</td><td><code>id</code>, <code>name</code>, <code>type</code></td><td><code>type</code>: <code>exterior</code> or <code>interior</code></td></tr><tr><td><code>grid</code></td><td><code>enabled</code>, <code>tileSize</code>, <code>width</code>, <code>height</code></td><td>Width/height also duplicated in binary header</td></tr><tr><td><code>visual</code></td><td><code>mesh</code>, <code>material</code>, <code>textureDirectory</code>, <code>origin[]</code>, <code>scale</code></td><td>3D terrain mesh hook for renderer</td></tr><tr><td><code>player</code></td><td><code>character</code>, <code>spawnTile[]</code>, <code>spawnHeight</code>, <code>facing</code></td><td><code>character</code> → sprite package path (.charbin or legacy .character.json)</td></tr><tr><td><code>camera</code></td><td><code>preset</code></td><td>Resolved via <code>config/gameplay/camera/presets.json</code></td></tr><tr><td><code>lighting</code></td><td><code>preset</code>, <code>brightness</code>, <code>tint[]</code></td><td>Exterior/interior presets</td></tr><tr><td><code>characters[]</code></td><td><code>id</code>, <code>characterId</code>, <code>tile[]</code>, <code>facing</code>, <code>movementProfile</code></td><td>NPC placements — not runtime party state</td></tr><tr><td><code>models[]</code></td><td><code>id</code>, <code>mesh</code>, <code>material</code>, <code>position[]</code>, <code>yawDeg</code>, <code>scale</code></td><td>Static 3D props on the map</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p><strong><code>characters[]</code> entry</strong></p><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>string</td><td>Map-local NPC id</td></tr><tr><td><code>characterId</code></td><td>string</td><td>References a package under <code>assets/characters/</code></td></tr><tr><td><code>tile</code></td><td>[x, y]</td><td>Grid coordinates</td></tr><tr><td><code>facing</code></td><td>string</td><td><code>south</code>, <code>west</code>, <code>east</code>, <code>north</code></td></tr><tr><td><code>movementProfile</code></td><td>string</td><td><code>stand_still</code>, <code>random_move</code>, <code>line_move</code>, <code>rotate_in_place</code></td></tr><tr><td><code>lineDistance</code></td><td>number</td><td>Steps for line-move profile</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "text",
+                    "body": "What does **not** belong in metadata:\n\n• Party / box Pokémon state (use Resort + OpenHome — see compatibility-ontology)\n• Per-session follower config (see follower-pokemon / session.json)\n• Map-level wild Pokémon spawn tables — not in v1 yet (see overworld_pokemon_architecture_handoff.md in the game repo)"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "authoring",
+        "title": "Authoring in the Map Editor",
+        "summary": "Brushes, tools, save path, and 3D preview.",
+        "blocks": [
+          {
+            "type": "figure",
+            "path": "media/docs/map-editor/map-editor-3d-preview.webp",
+            "body": "Click **Open 3D** to preview the painted height field with ramp corner geometry. Drag to orbit, right-drag to pan. The preview uses the same corner-height rules as `OverworldMapRenderer.cpp`. Import GLB places terrain meshes referenced in `visual` / `models[]`.",
+            "caption": "3D terrain preview modal",
+            "layout": "stacked"
+          },
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Brush</th><th>Layer</th><th>Purpose</th></tr></thead><tbody><tr><td>Height</td><td><code>terrain.height</code></td><td>Paint discrete levels 0…255</td></tr><tr><td>Ramp</td><td><code>terrain.special</code></td><td>Cardinal, corner, or auto ramps</td></tr><tr><td>Blocked</td><td><code>terrain.collision</code></td><td>Impassable cells</td></tr><tr><td>Spawn</td><td><code>player.spawnTile</code></td><td>Player start tile (not a terrain layer)</td></tr></tbody></table><p>Tools: Paint, Area, Line, Clear, Fill, Raise, Lower, Eyedropper. Brush sizes 1×1 through 5×5.</p>"
+          },
+          {
+            "type": "text",
+            "body": "Workflow:\n\n1. `cd pokemon-resort-page && npm run admin` → http://127.0.0.1:9477 → **Map Editor** tab\n2. Set **Maps folder** (default `pokemon-resort/assets/overworld/maps`) → **Apply folder** → **Refresh**\n3. Load an existing `.owmap` or **New map** → paint terrain → set spawn / metadata\n4. **Save .owmap** — server bakes auto ramps, writes binary to the maps folder\n5. **Download .owmap** — export without saving (same bake path)\n6. **Import .map.json** — legacy JSON maps convert via `mapFromJson()` then save as `.owmap`\n\nAdmin API (see `tools/admin/server.mjs`): `POST /api/maps/save`, `GET /api/maps/list`, `POST /api/maps/export-owmap`. Feature flag: `owmap-bake`."
+          }
+        ]
+      },
+      {
+        "id": "read-write",
+        "title": "Writer vs reader",
+        "summary": "Same OWM1 v1 layout in JavaScript and C++.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "caption": "Paths relative to each repo root.",
+            "tabs": [
+              {
+                "id": "writing",
+                "label": "Writing (Map Editor)",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "The Map Editor holds a JSON-shaped map object. Save triggers `bakeTerrainSpecials()` then `encodeOwmap()` in `server.mjs` → `writeMapOwmap()`. Terrain never appears inside `metaJson` on disk."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/lib/owmap-format.mjs",
+                    "lines": "157-186",
+                    "language": "javascript",
+                    "caption": "decodeOwmap — re-open saved maps in the editor",
+                    "body": "export function decodeOwmap(buffer) {\n  // Validate OWM1 magic, version 1\n  // Parse metaJson → spread into map object\n  // Unpack height, special, collision into terrain.{height,special,collision}[][]\n  return { ...meta, grid: { tileSize, width, height }, terrain: { … } };\n}"
+                  }
+                ]
+              },
+              {
+                "id": "reading",
+                "label": "Reading (game)",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "`loadSceneConfig()` routes `.owmap` paths to `loadOwmapScene()`. Metadata becomes `SceneConfig`; terrain grids populate `TerrainConfig`. Character packages on the map load separately via `loadCharacterDefinition()` when NPCs spawn.\n\nShared metadata parser: `SceneMetadataParser.cpp` (also used by legacy JSON scene loader in `JsonOverworldLoader.cpp`)."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "src/gameplay/world3d/data/SceneMetadataParser.cpp",
+                    "lines": "49-92",
+                    "language": "cpp",
+                    "caption": "parseSceneMetadata — visual, grid, player spawn",
+                    "body": "SceneConfig parseSceneMetadata(const JsonValue& root, const std::string& project_root) {\n    // Requires visual + player sections\n    // Resolves mesh/material paths relative to project_root\n    // Reads spawnTile, facing, camera preset id\n    return out;\n}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "extending",
+        "title": "How to extend the format",
+        "summary": "Version bumps, new metadata, and loader coordination.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "**Safe extensions (v1):**\n\n• Add optional keys to metadata JSON — update `SceneMetadataParser.cpp` to read them; old maps ignore unknown fields\n• Add new `special` tile IDs (14+) — coordinate with `ramp-specials.js`, Map Editor presets, and `OverworldMapRenderer.cpp` corner math\n• Add NPC `movementProfile` values — extend `parseMovementProfile()` and editor dropdown\n\n**Breaking changes:**\n\n• Bump `version` u16 in the binary header (currently 1) and teach both `decodeOwmap()` and `OwmapOverworldLoader.cpp` to accept the new version\n• Change grid packing (e.g. wider collision flags) — requires coordinated writer/reader change\n• Never store terrain inside `metaJson` — keeps editor round-trip and binary size predictable\n\nUpdate `pokemon-resort/docs/gameplay/owmap_format.md` and this article in the same change."
+          },
+          {
+            "type": "diagram",
+            "title": "Extension decision flow",
+            "caption": "Prefer optional JSON fields before bumping binary version",
+            "source": "flowchart TD\n    Q[Need new map data?] --> A{Terrain per cell?}\n    A -->|Yes| B{Fits special layer?}\n    B -->|Yes| C[Add special ID + renderer]\n    B -->|No| D[Consider v2 grid or metadata tile map]\n    A -->|No| E[Optional metadata JSON key]\n    E --> F[SceneMetadataParser + editor UI]"
+          }
+        ]
+      },
+      {
+        "id": "validation",
+        "title": "Validation & related docs",
+        "summary": "Checks on load and cross-links.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Check</th><th>Where</th></tr></thead><tbody><tr><td>Magic <code>OWM1</code></td><td>JS decoder + C++ loader</td></tr><tr><td>Version == 1</td><td>Both sides</td></tr><tr><td>Width/height 1…256</td><td>C++ loader</td></tr><tr><td>Payload size matches W×H</td><td>Truncation errors if short</td></tr><tr><td>Metadata JSON parses</td><td><code>parseSceneMetadata</code></td></tr><tr><td><code>special != 1</code> on disk</td><td>C++ loader error (unbaked auto ramp)</td></tr><tr><td><code>visual</code> + <code>player</code> required</td><td>Metadata parser</td></tr></tbody></table>"
+          },
+          {
+            "type": "gallery",
+            "caption": "Map Editor captures (Playwright from npm run admin)",
+            "images": [
+              { "path": "media/docs/map-editor/map-editor-overview.webp", "caption": "Overview — grid, map list, brushes" },
+              { "path": "media/docs/map-editor/map-editor-ramp.webp", "caption": "Ramp specials" },
+              { "path": "media/docs/map-editor/map-editor-collision.webp", "caption": "Collision overlay" },
+              { "path": "media/docs/map-editor/map-editor-3d-preview.webp", "caption": "3D preview" }
+            ]
+          },
+          {
+            "type": "text",
+            "body": "In-repo references:\n\n• `pokemon-resort/docs/gameplay/owmap_format.md` — short canonical spec\n• `pokemon-resort/docs/gameplay/overworld_pokemon_architecture_handoff.md` — future spawn contracts (not in owmap v1 yet)\n• `tools/admin/public/ramp-specials.js` — special tile IDs and bake rules\n• `tools/admin/public/map-editor.js` — editor UI and save flow"
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "Island Dreamforge (terrain upstream)", "href": "#/docs?article=island-dreamforge" },
+              { "label": "charbin schema (character packages on maps)", "href": "#/docs?article=charbin-schema" },
+              { "label": "Overworld follower Pokémon (runtime on owmap terrain)", "href": "#/docs?article=follower-pokemon" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

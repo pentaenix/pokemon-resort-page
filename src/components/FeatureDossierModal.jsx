@@ -5,6 +5,7 @@ import { collectDossierGalleryImages, normalizeFeatureDossier } from '../lib/fea
 import { lockBodyScroll } from '../lib/scrollLock.js';
 import { DossierBlockView } from './dossier/blockViews.jsx';
 import { ImageGalleryModal } from './ImageGalleryModal.jsx';
+import { InlineMarkdown } from '../lib/inlineMarkdown.jsx';
 import { ProgressBar, StatusPill } from './StatusPill.jsx';
 
 const DOSSIER_LAYER = 210;
@@ -19,7 +20,10 @@ export function FeatureDossierModal({ feature, bugs = [], onClose }) {
   const tasksDone = (feature.tasks || []).filter((task) => task.done).length;
   const tasksTotal = (feature.tasks || []).length;
 
-  useEffect(() => lockBodyScroll(), []);
+  useEffect(() => {
+    const unlock = lockBodyScroll();
+    return unlock;
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -90,7 +94,7 @@ export function FeatureDossierModal({ feature, bugs = [], onClose }) {
           {dossier.overview && (
             <section className="feature-dossier-section">
               <h3>Overview</h3>
-              <p className="feature-dossier-overview">{dossier.overview}</p>
+              <p className="feature-dossier-overview"><InlineMarkdown>{dossier.overview}</InlineMarkdown></p>
             </section>
           )}
 
@@ -102,9 +106,9 @@ export function FeatureDossierModal({ feature, bugs = [], onClose }) {
               {dossier.map.position?.length >= 2 && (
                 <p className="soft-label">Position: {dossier.map.position.join(', ')}</p>
               )}
-              {dossier.map.poiId && (
-                <a className="button small" href={routeHref('/atlas')}>View on Island Atlas{dossier.map.poiId ? ` (${dossier.map.poiId})` : ''}</a>
-              )}
+              {dossier.map.pinId || dossier.map.poiId ? (
+                <a className="button small" href={routeHref('/atlas', { pin: dossier.map.pinId || dossier.map.poiId })}>View on Island Atlas</a>
+              ) : null}
             </section>
           )}
 
@@ -119,10 +123,12 @@ export function FeatureDossierModal({ feature, bugs = [], onClose }) {
             </section>
           )}
 
-          {dossier.sections.map((section) => (
-            <section key={section.id} className="feature-dossier-section">
+          {dossier.sections.map((section, sectionIndex) => (
+            <section key={`${section.id}-${sectionIndex}`} className="feature-dossier-section">
               <h3>{section.title}</h3>
-              {section.summary && <p className="feature-dossier-section-summary">{section.summary}</p>}
+              {section.summary && (
+                <p className="feature-dossier-section-summary"><InlineMarkdown>{section.summary}</InlineMarkdown></p>
+              )}
               <div className="feature-dossier-blocks">
                 {section.blocks.map((block, index) => (
                   <DossierBlockView

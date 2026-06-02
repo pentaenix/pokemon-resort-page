@@ -6,5 +6,6 @@ export {
   getDossierBlock,
   getDossierBlockTypes,
   normalizeDossierBlock,
+  normalizeDossierBlocks,
   collectImagesFromBlock,
 } from './registry.js';

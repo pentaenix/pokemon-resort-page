@@ -16,15 +16,15 @@ function normalizeSection(section, index) {
 
 function normalizeMap(map) {
   if (!map || typeof map !== 'object') return null;
-  const poiId = String(map.poiId || '').trim();
+  const pinId = String(map.pinId || map.poiId || '').trim();
   const label = String(map.label || '').trim();
   const note = String(map.note || '').trim();
   const position = Array.isArray(map.position)
     ? map.position.map((n) => Number(n)).filter((n) => Number.isFinite(n))
     : [];
-  if (!poiId && !label && !note && position.length < 2) return null;
+  if (!pinId && !label && !note && position.length < 2) return null;
   return {
-    poiId,
+    pinId,
     label,
     note,
     position: position.length >= 2 ? position.slice(0, 3) : undefined,
@@ -67,20 +67,27 @@ export function normalizeFeatureDossier(feature) {
 
 export function featureHasDossier(feature) {
   const dossier = normalizeFeatureDossier(feature);
+  const hasSections = dossier.sections.some((section) => section.summary || section.blocks.length);
   return Boolean(
     dossier.overview
     || dossier.map
     || dossier.researchMilestones.length
-    || dossier.sections.length,
+    || hasSections,
   );
 }
 
 export function collectDossierGalleryImages(dossier) {
   const images = [];
-  for (const section of dossier.sections) {
-    for (const block of section.blocks) {
+  function walkBlocks(blocks) {
+    for (const block of blocks || []) {
       images.push(...collectImagesFromBlock(block));
+      if (block.type === 'tabs') {
+        for (const tab of block.tabs || []) walkBlocks(tab.blocks);
+      }
     }
+  }
+  for (const section of dossier.sections) {
+    walkBlocks(section.blocks);
   }
   const seen = new Set();
   return images.filter((img) => {

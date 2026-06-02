@@ -1,0 +1,319 @@
+{
+  "computedAt": "2026-06-02T04:56:39.727Z",
+  "articles": {
+    "writing-docs": {
+      "status": "stale",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-06-02",
+      "apps": [
+        "pokemon-resort-page"
+      ],
+      "refs": [
+        {
+          "repo": "pokemon-resort-page",
+          "path": "public/data/docs.json",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "public/docs/articles/gameplay/your-slug.json",
+          "exists": false,
+          "modifiedAt": null
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "src/dossier/registry.js",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "docs/TEMPLATE.md",
+          "exists": true,
+          "modifiedAt": "2026-06-01"
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "package.json",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        }
+      ]
+    },
+    "article-template": {
+      "status": "unknown",
+      "articleUpdatedAt": "2026-05-27",
+      "newestCodeChange": null,
+      "apps": [
+        "pokemon-resort-page",
+        "pokemon-resort"
+      ],
+      "refs": [
+        {
+          "repo": "pokemon-resort",
+          "path": "REPLACE/path/from/app/root.ext",
+          "exists": false,
+          "modifiedAt": null
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "tools/admin/lib/REPLACE.mjs",
+          "exists": false,
+          "modifiedAt": null
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "tools/admin/lib/REPLACE-writer.mjs",
+          "exists": false,
+          "modifiedAt": null
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "src/REPLACE/Loader.cpp",
+          "exists": false,
+          "modifiedAt": null
+        }
+      ]
+    },
+    "charbin-schema": {
+      "status": "current",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-06-01",
+      "apps": [
+        "pokemon-resort",
+        "spmk"
+      ],
+      "refs": [
+        {
+          "repo": "spmk",
+          "path": "spmk_app/charbin_io.py",
+          "exists": true,
+          "modifiedAt": "2026-06-01"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "src/gameplay/world3d/data/JsonOverworldLoader.cpp",
+          "exists": true,
+          "modifiedAt": "2026-05-31"
+        },
+        {
+          "repo": "spmk",
+          "path": "spmk_app/character_package.py",
+          "exists": true,
+          "modifiedAt": "2026-06-01"
+        }
+      ]
+    },
+    "owmap-format": {
+      "status": "stale",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-06-02",
+      "apps": [
+        "pokemon-resort",
+        "pokemon-resort-page"
+      ],
+      "refs": [
+        {
+          "repo": "pokemon-resort-page",
+          "path": "tools/admin/lib/owmap-format.mjs",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "src/gameplay/world3d/data/OwmapOverworldLoader.cpp",
+          "exists": true,
+          "modifiedAt": "2026-05-31"
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "tools/admin/public/ramp-specials.js",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "src/gameplay/world3d/data/SceneMetadataParser.cpp",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        }
+      ]
+    },
+    "rtpks-format": {
+      "status": "current",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-05-20",
+      "apps": [
+        "pokemon-ds-map-studio",
+        "pokemon-resort",
+        "pokemon-resort-page"
+      ],
+      "refs": [
+        {
+          "repo": "pokemon-ds-map-studio",
+          "path": "src/main/java/resort/formats/RtpksManifest.java",
+          "exists": true,
+          "modifiedAt": "2026-05-20"
+        },
+        {
+          "repo": "pokemon-ds-map-studio",
+          "path": "src/main/java/resort/formats/TileIndexBuilder.java",
+          "exists": true,
+          "modifiedAt": "2026-05-20"
+        },
+        {
+          "repo": "pokemon-ds-map-studio",
+          "path": "src/main/java/resort/formats/RtpksWriter.java",
+          "exists": true,
+          "modifiedAt": "2026-05-20"
+        },
+        {
+          "repo": "pokemon-ds-map-studio",
+          "path": "src/main/java/resort/formats/RtpksReader.java",
+          "exists": true,
+          "modifiedAt": "2026-05-20"
+        }
+      ]
+    },
+    "island-dreamforge": {
+      "status": "current",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-05-31",
+      "apps": [
+        "island-dreamforge",
+        "pokemon-resort"
+      ],
+      "refs": [
+        {
+          "repo": "island-dreamforge",
+          "path": "frontend/src/App.jsx",
+          "exists": true,
+          "modifiedAt": "2026-05-31"
+        },
+        {
+          "repo": "island-dreamforge",
+          "path": "backend/app/island_export.py",
+          "exists": true,
+          "modifiedAt": "2026-05-31"
+        },
+        {
+          "repo": "island-dreamforge",
+          "path": "README.md",
+          "exists": true,
+          "modifiedAt": "2026-05-31"
+        },
+        {
+          "repo": "island-dreamforge",
+          "path": "backend/app/mesh_export.py",
+          "exists": true,
+          "modifiedAt": "2026-05-31"
+        }
+      ]
+    },
+    "follower-pokemon": {
+      "status": "current",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-06-01",
+      "apps": [
+        "pokemon-resort"
+      ],
+      "refs": [
+        {
+          "repo": "pokemon-resort",
+          "path": "config/gameplay/followers/session.json",
+          "exists": true,
+          "modifiedAt": "2026-06-01"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "config/gameplay/followers/summon.json",
+          "exists": true,
+          "modifiedAt": "2026-06-01"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "config/gameplay/followers/idle_behaviours.json",
+          "exists": true,
+          "modifiedAt": "2026-06-01"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "src/gameplay/world3d/followers/NatureIdlePlanner.cpp",
+          "exists": true,
+          "modifiedAt": "2026-06-01"
+        }
+      ]
+    },
+    "overworld-glb-models": {
+      "status": "stale",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-06-02",
+      "apps": [
+        "pokemon-resort",
+        "pokemon-resort-page"
+      ],
+      "refs": [
+        {
+          "repo": "pokemon-resort-page",
+          "path": "tools/admin/lib/obj-compile.mjs",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "tools/admin/lib/texture-alpha.mjs",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort-page",
+          "path": "tools/admin/lib/write-glb.mjs",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "src/gameplay/world3d/data/GlbModelLoader.cpp",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "src/gameplay/world3d/rendering/GlbModelRenderer.cpp",
+          "exists": true,
+          "modifiedAt": "2026-06-02"
+        }
+      ]
+    },
+    "compatibility-ontology": {
+      "status": "current",
+      "articleUpdatedAt": "2026-06-01",
+      "newestCodeChange": "2026-05-28",
+      "apps": [
+        "pokemon-resort",
+        "pokemon-resort-page"
+      ],
+      "refs": [
+        {
+          "repo": "pokemon-resort-page",
+          "path": "public/data/compatibility.json",
+          "exists": true,
+          "modifiedAt": "2026-05-28"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "docs/openhome-persistent-identity-integration.md",
+          "exists": true,
+          "modifiedAt": "2026-05-09"
+        },
+        {
+          "repo": "pokemon-resort",
+          "path": "docs/transfer_system/SAVE_EXIT_SAFETY.md",
+          "exists": true,
+          "modifiedAt": "2026-05-09"
+        }
+      ]
+    }
+  }
+}

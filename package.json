@@ -5,15 +5,25 @@
     "preview": "vite preview --host 127.0.0.1",
     "admin": "node tools/admin/server.mjs",
     "fetch:boxart": "node tools/fetch-boxart.mjs",
-    "validate:data": "node tools/validate-data.mjs",
-    "publish": "node tools/publish.mjs"
+    "validate:data": "node tools/docs/compute-freshness.mjs && node tools/validate-data.mjs",
+    "docs:freshness": "node tools/docs/compute-freshness.mjs",
+    "publish": "node tools/publish.mjs",
+    "docs:example-gif": "python3 tools/docs/build-example-gif.py",
+    "docs:capture": "tools/docs/capture-screenshot.sh",
+    "docs:screenshots": "node tools/docs/capture-screenshots.mjs --format webp",
+    "docs:screenshots:headed": "node tools/docs/capture-screenshots.mjs --headed --format webp",
+    "docs:optimize": "tools/docs/optimize-image.sh"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "fflate": "^0.8.3",
+    "mermaid": "^11.15.0",
     "react": "latest",
     "react-dom": "latest",
-    "three": "latest"
+    "three": "latest",
+    "vite": "latest"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "playwright": "^1.52.0"
+  }
 }

@@ -329,7 +329,19 @@ function NodeHealthText({ stats }) {
     </text>
   );
 }
-function OntologyGraph({ generations, routes, statuses, positions, selectedRoute, focusedId, onFocus, onSelectRoute, onClearRoute, onClearFocus, filter }) {
+function OntologyGraph({
+  generations,
+  routes,
+  statuses,
+  positions,
+  selectedRoute,
+  focusedId,
+  onFocus,
+  onSelectRoute,
+  onClearRoute,
+  onClearFocus,
+  filter,
+}) {
   const visibleRoutes = routes.filter((route) => {
     if (focusedId && !(route.from === focusedId || route.to === focusedId)) return false;
     if (filter !== 'all' && route.status !== filter) return false;
@@ -367,8 +379,9 @@ function OntologyGraph({ generations, routes, statuses, positions, selectedRoute
             const p = positions[gen.id] || CENTER;
             const active = focusedId === gen.id;
             const stats = generationStats(gen.id, routes);
+            const nodeLabel = `${gen.label}. ${nodeHealthLabel(stats) || 'No routes'}. P passed, U untested, F failing.`;
             return (
-              <g key={gen.id} transform={`translate(${p.x}, ${p.y})`} className={`generation-node ${active ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); onFocus(gen.id); }} tabIndex="0" role="button" aria-label={`Focus ${gen.label}. ${nodeHealthLabel(stats) || 'No routes'}. P passed, U untested, F failing.`} onKeyDown={(e) => e.key === 'Enter' && onFocus(gen.id)}>
+              <g key={gen.id} transform={`translate(${p.x}, ${p.y})`} className={`generation-node ${active ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); onFocus(gen.id); }} tabIndex="0" role="button" aria-label={`Focus ${nodeLabel}`} onKeyDown={(e) => e.key === 'Enter' && onFocus(gen.id)}>
                 <circle className="node-aura" r={active ? 72 : 58} fill={gen.accent} />
                 <circle r={active ? 62 : 50} fill={gen.accent} filter="url(#nodeShadowV5)" />
                 <circle r={active ? 54 : 42} fill="rgba(255,255,255,.22)" stroke="rgba(255,255,255,.72)" strokeWidth="2" />
@@ -442,16 +455,11 @@ function OntologyPanel({ generations, games, routes, statuses, focusedId, select
 }
 export default function Ontology({ data, query }) {
   const { generations, routes, games, statuses } = data.compatibility;
-  const baseLayout = useMemo(() => circlePositions(generations), [generations]);
   const [focusedId, setFocusedId] = useState(query.gen || '');
   const [filter, setFilter] = useState(query.status || 'all');
   const [selectedRouteId, setSelectedRouteId] = useState(query.route || '');
   const [search, setSearch] = useState(query.q || '');
   const [searchHelpOpen, setSearchHelpOpen] = useState(false);
-  const positions = useMemo(
-    () => (focusedId ? focusPositions(generations, focusedId) : baseLayout),
-    [focusedId, generations, baseLayout],
-  );
   const selectedRoute = routes.find((r) => r.id === selectedRouteId) || null;
   const searchContext = useMemo(() => buildSearchContext(generations, games, statuses), [generations, games, statuses]);
   const routeBlobs = useMemo(() => new Map(
@@ -464,6 +472,10 @@ export default function Ontology({ data, query }) {
       return routeMatchesSearch(r, search, searchContext, routeBlobs);
     });
   }, [routes, focusedId, filter, search, searchContext, routeBlobs]);
+  const positions = useMemo(
+    () => (focusedId ? focusPositions(generations, focusedId) : circlePositions(generations)),
+    [focusedId, generations],
+  );
   useEffect(() => {
     if (!search.trim() || !selectedRouteId) return;
     if (!filteredRoutes.some((route) => route.id === selectedRouteId)) setSelectedRouteId('');
@@ -492,5 +504,58 @@ export default function Ontology({ data, query }) {
     setFocusedId('');
     setSelectedRouteId('');
   }
-  return <main><PageTitle eyebrow="Compatibility Ontology" title="A stable directional route lab for generation round trips.">Each generation pair has two parallel arrows—one per direction. Click an arrow to inspect that route in the side panel. Click a generation circle to focus that era&apos;s game library.</PageTitle><section className="ontology-toolbar"><div className="segmented" role="group" aria-label="Route status filters">{['all','red','yellow','blue','green','gray'].map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value === 'all' ? 'All routes' : statuses[value]?.label}</button>)}</div><div className="search-box-group"><label className="search-box"><span>Search</span><div className="search-box-field"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="game, route, bug ID…" />{search && <button type="button" className="search-clear" onClick={() => setSearch('')} aria-label="Clear search">×</button>}</div></label><button type="button" className="search-help-trigger" onClick={() => setSearchHelpOpen(true)} aria-label="How route search works">?</button></div><SearchHelpModal open={searchHelpOpen} onClose={() => setSearchHelpOpen(false)} /></section><section className="ontology-layout"><div className="ontology-main-card"><OntologyGraph generations={generations} routes={filteredRoutes} statuses={statuses} positions={positions} selectedRoute={selectedRoute} focusedId={focusedId} onFocus={focus} onClearRoute={clearRoute} onClearFocus={clearFocus} filter="all" onSelectRoute={selectRoute} /><RouteList routes={filteredRoutes.slice(0, 60)} statuses={statuses} selectedRoute={selectedRoute} generations={generations} onSelectRoute={selectRoute} /></div><OntologyPanel generations={generations} games={games} routes={routes} statuses={statuses} focusedId={focusedId} selectedRoute={selectedRoute} onSelectRoute={selectRoute} /></section></main>;
+  return (
+    <main>
+      <PageTitle eyebrow="Compatibility Ontology" title="A stable directional route lab for generation round trips.">
+        Each generation pair has two parallel arrows—one per direction. Click an arrow to inspect that route in the side panel. Click a generation circle to focus that era&apos;s game library.
+      </PageTitle>
+      <section className="ontology-toolbar">
+        <div className="segmented" role="group" aria-label="Route status filters">
+          {['all', 'red', 'yellow', 'blue', 'green', 'gray'].map((value) => (
+            <button key={value} type="button" className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>
+              {value === 'all' ? 'All routes' : statuses[value]?.label}
+            </button>
+          ))}
+        </div>
+        <div className="search-box-group">
+          <label className="search-box">
+            <span>Search</span>
+            <div className="search-box-field">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="game, route, bug ID…" />
+              {search && <button type="button" className="search-clear" onClick={() => setSearch('')} aria-label="Clear search">×</button>}
+            </div>
+          </label>
+          <button type="button" className="search-help-trigger" onClick={() => setSearchHelpOpen(true)} aria-label="How route search works">?</button>
+        </div>
+        <SearchHelpModal open={searchHelpOpen} onClose={() => setSearchHelpOpen(false)} />
+      </section>
+      <section className="ontology-layout">
+        <div className="ontology-main-card">
+          <OntologyGraph
+            generations={generations}
+            routes={filteredRoutes}
+            statuses={statuses}
+            positions={positions}
+            selectedRoute={selectedRoute}
+            focusedId={focusedId}
+            onFocus={focus}
+            onClearRoute={clearRoute}
+            onClearFocus={clearFocus}
+            filter="all"
+            onSelectRoute={selectRoute}
+          />
+          <RouteList routes={filteredRoutes.slice(0, 60)} statuses={statuses} selectedRoute={selectedRoute} generations={generations} onSelectRoute={selectRoute} />
+        </div>
+        <OntologyPanel
+          generations={generations}
+          games={games}
+          routes={routes}
+          statuses={statuses}
+          focusedId={focusedId}
+          selectedRoute={selectedRoute}
+          onSelectRoute={selectRoute}
+        />
+      </section>
+    </main>
+  );
 }

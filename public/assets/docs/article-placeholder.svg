@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="480" viewBox="0 0 960 480" role="img" aria-label="Documentation image placeholder">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e8f4f8"/>
+      <stop offset="100%" stop-color="#d4eef5"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="480" fill="url(#bg)"/>
+  <rect x="48" y="48" width="864" height="384" rx="24" fill="#fff" stroke="#94cfd9" stroke-width="2" stroke-dasharray="12 8"/>
+  <text x="480" y="220" text-anchor="middle" font-family="system-ui,sans-serif" font-size="28" font-weight="700" fill="#075b78">Replace this image</text>
+  <text x="480" y="260" text-anchor="middle" font-family="ui-monospace,monospace" font-size="16" fill="#5a8a96">assets/docs/your-screenshot.webp</text>
+  <text x="480" y="300" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" fill="#5a8a96">Drop a .webp or .png under public/ and update the article JSON path.</text>
+</svg>

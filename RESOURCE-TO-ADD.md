@@ -504,7 +504,9 @@ Features can include a rich `dossier` for the public **Research** / **Details** 
         { "type": "compare", "variant": "fixed", "caption": "…", "items": [{ "path": "…", "label": "Gen 3" }, { "path": "…", "label": "Gen 4" }] },
         { "type": "carousel", "caption": "…", "images": [{ "path": "…", "caption": "…" }, { "path": "…", "caption": "…" }] },
         { "type": "gallery", "caption": "…", "images": [{ "path": "…", "caption": "…" }] },
-        { "type": "links", "items": [{ "label": "Bulbapedia", "href": "https://…" }] }
+        { "type": "links", "items": [{ "label": "Bulbapedia", "href": "https://…" }] },
+        { "type": "figure", "path": "media/features/ui.webp", "body": "Paragraph beside the shot…", "caption": "Optional caption", "layout": "side" },
+        { "type": "html", "html": "<p>Custom layout</p><img src=\"media/features/badge.webp\" alt=\"\">" }
       ]
     }
   ]
@@ -513,7 +515,9 @@ Features can include a rich `dossier` for the public **Research** / **Details** 
 
 Legacy `images[]` on a feature still works and is merged into the dossier view until you move everything into sections.
 
-**Extending block types (developers):** register in `src/dossier/registry.js` (`registerDossierBlock`) and add a view in `src/components/dossier/blockViews.jsx`. Mirror the type in `tools/admin/public/feature-dossier-editor.js` (`BLOCK_TYPES` + editor HTML).
+**Built-in block types:** `text`, `figure` (text + image), `image`, `video`, `compare`, `carousel`, `gallery`, `links`, `html` (sanitized custom markup). HTML allows a safe tag subset; scripts, inline styles, and remote `img` URLs are stripped on save and render (`src/lib/sanitizeHtml.js`).
+
+**Extending block types (developers):** register in `src/dossier/registry.js` (`registerDossierBlock`) and add a view in `src/components/dossier/blockViews.jsx`. Mirror the type in `tools/admin/public/feature-dossier-editor.js` (`BLOCK_TYPES` + editor HTML). The same registry pattern is intended for future **research / POI** rich content (not wired yet).
 
 Recommended community issue shape:
 
