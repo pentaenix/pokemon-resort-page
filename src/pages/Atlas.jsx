@@ -7,6 +7,7 @@ import { PinDetailPanel } from '../components/atlas/PinDetailPanel.jsx';
 import { ImageGalleryModal } from '../components/ImageGalleryModal.jsx';
 import { assetUrl, atlasSectionHref, scrollToSection } from '../lib/data.js';
 import { normalizeAtlasPins, ATLAS_PIN_COLORS } from '../lib/atlasPins.js';
+import { resolveCarouselSlideDisplay } from '../lib/frameFilename.js';
 
 function fitIslandModel(model, targetSize = 5.5) {
   const box = new THREE.Box3().setFromObject(model);
@@ -162,7 +163,18 @@ function IslandStage3D({ islandModelUrl }) {
   );
 }
 
-function AtlasCarousel({ items = [] }) {
+function buildCarouselGalleryImages(items = []) {
+  return items.map((item) => {
+    const display = resolveCarouselSlideDisplay(item);
+    const caption = [display.metaLine, display.description].filter(Boolean).join(' — ');
+    return {
+      path: item.src,
+      caption: caption || display.title || '',
+    };
+  });
+}
+
+function AtlasCarousel({ items = [], onOpenSlide }) {
   if (!items.length) return null;
   return (
     <section className="atlas-carousel-section" id="atlas-carousel" aria-label="Island Atlas gallery">
@@ -172,19 +184,46 @@ function AtlasCarousel({ items = [] }) {
         <p>Show stills, research grabs, and work-in-progress shots from the atlas desk.</p>
       </div>
       <div className="media-carousel atlas-media-carousel">
-        {items.map((item) => (
-          <figure key={item.id || item.src} className="carousel-card atlas-carousel-card">
-            {item.type === 'video' ? (
-              <video src={assetUrl(item.src)} muted loop playsInline controls={false} aria-label={item.title || item.caption} />
-            ) : (
-              <img src={assetUrl(item.src)} alt={item.title || item.caption || 'Island Atlas media'} />
-            )}
-            <figcaption>
-              {item.title ? <strong>{item.title}</strong> : null}
-              {item.caption ? <span>{item.caption}</span> : null}
-            </figcaption>
-          </figure>
-        ))}
+        {items.map((item, index) => {
+          const display = resolveCarouselSlideDisplay(item);
+          const openLabel = display.title
+            ? `Open ${display.title} full size`
+            : `Open frame ${index + 1} full size`;
+          return (
+            <figure key={item.id || item.src} className="carousel-card atlas-carousel-card">
+              <button
+                type="button"
+                className="atlas-carousel-open"
+                onClick={() => onOpenSlide?.(index)}
+                aria-label={openLabel}
+              >
+                {item.type === 'video' ? (
+                  <video src={assetUrl(item.src)} muted loop playsInline controls={false} aria-hidden="true" />
+                ) : (
+                  <img src={assetUrl(item.src)} alt="" />
+                )}
+                <span className="atlas-carousel-open-lens" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" fill="none">
+                    <path d="M6.2 10.4a4.2 4.2 0 1 0 0-8.4 4.2 4.2 0 0 0 0 8.4Z" stroke="currentColor" strokeWidth="1.3" />
+                    <path d="M9.4 9.4 13 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  <span>Open</span>
+                </span>
+              </button>
+              <figcaption>
+                {(display.episodeLine || display.timeLine) ? (
+                  <span className="carousel-card-meta">
+                    {display.episodeLine ? <span className="carousel-card-episode">{display.episodeLine}</span> : null}
+                    {display.episodeLine && display.timeLine ? <span className="carousel-card-meta-sep" aria-hidden="true"> · </span> : null}
+                    {display.timeLine ? <span className="carousel-card-time">{display.timeLine}</span> : null}
+                  </span>
+                ) : null}
+                {display.title ? <strong>{display.title}</strong> : null}
+                {display.description ? <span>{display.description}</span> : null}
+              </figcaption>
+            </figure>
+          );
+        })}
       </div>
     </section>
   );
@@ -236,7 +275,7 @@ export default function Atlas({ data, query }) {
   );
   const [selectedId, setSelectedId] = useState(query?.pin || null);
   const [layers, setLayers] = useState({ ...atlas.map.defaultLayers });
-  const [showReferenceOpen, setShowReferenceOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(null);
 
   const selected = useMemo(
     () => allPins.find((p) => p.id === selectedId) || null,
@@ -323,22 +362,49 @@ export default function Atlas({ data, query }) {
         <PinDetailPanel
           pin={selected}
           showReference={atlas.map.showReference}
-          onOpenReference={() => setShowReferenceOpen(true)}
+          onOpenReference={() => setGalleryOpen({
+            title: atlas.map.showReference?.label || 'From the show',
+            images: [{
+              path: atlas.map.showReference.path,
+              caption: atlas.map.showReference.caption,
+            }],
+          })}
+          onOpenPinCover={() => {
+            if (!selected?.coverImage?.path) return;
+            setGalleryOpen({
+              title: selected.coverImage.label || selected.name,
+              images: [{
+                path: selected.coverImage.path,
+                caption: selected.coverImage.caption,
+              }],
+            });
+          }}
         />
       </section>
 
-      {showReferenceOpen && atlas.map.showReference ? (
+      {galleryOpen ? (
         <ImageGalleryModal
-          title={atlas.map.showReference.label}
-          images={[{
-            path: atlas.map.showReference.path,
-            caption: atlas.map.showReference.caption,
-          }]}
-          onClose={() => setShowReferenceOpen(false)}
+          title={galleryOpen.title}
+          images={galleryOpen.images}
+          startIndex={galleryOpen.startIndex ?? 0}
+          onClose={() => setGalleryOpen(null)}
         />
       ) : null}
 
-      <AtlasCarousel items={atlas.map.carousel} />
+      <AtlasCarousel
+        items={atlas.map.carousel}
+        onOpenSlide={(index) => {
+          const items = atlas.map.carousel || [];
+          const slide = items[index];
+          if (!slide?.src) return;
+          const display = resolveCarouselSlideDisplay(slide);
+          setGalleryOpen({
+            title: display.title || 'Field capture',
+            images: buildCarouselGalleryImages(items),
+            startIndex: index,
+          });
+        }}
+      />
 
       <section className="atlas-3d-section" id="atlas-3d">
         <div className="section-intro compact">

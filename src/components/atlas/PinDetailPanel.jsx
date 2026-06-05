@@ -1,14 +1,14 @@
 import React, { useMemo } from 'react';
 import { RichContentBody } from '../RichContentBody.jsx';
 import { StatusPill } from '../StatusPill.jsx';
-import { ShowReferencePreview } from './ShowReferencePreview.jsx';
+import { AtlasFramePreview } from './AtlasFramePreview.jsx';
 import { routeHref } from '../../lib/data.js';
 import { ATLAS_PIN_COLORS } from '../../lib/atlasPins.js';
 import { recordHasRichContent } from '../../lib/richContent.js';
 
 const pinTone = { blue: 'blue', yellow: 'yellow', red: 'red' };
 
-export function PinDetailPanel({ pin, showReference, onOpenReference }) {
+export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinCover }) {
   const colorMeta = ATLAS_PIN_COLORS[pin?.color] || ATLAS_PIN_COLORS.yellow;
   const hasDossier = useMemo(
     () => pin && recordHasRichContent({ dossier: pin.dossier }),
@@ -29,7 +29,15 @@ export function PinDetailPanel({ pin, showReference, onOpenReference }) {
               </div>
             </div>
           </div>
-          <ShowReferencePreview showReference={showReference} onOpen={onOpenReference} />
+          {pin.coverImage?.path ? (
+            <AtlasFramePreview
+              image={pin.coverImage}
+              label={pin.coverImage.label || pin.name}
+              caption={pin.coverImage.caption}
+              onOpen={onOpenPinCover}
+              openLabel={`Open ${pin.name} frame`}
+            />
+          ) : null}
           <div className="atlas-pin-panel-body">
             {pin.summary && <p className="atlas-pin-summary">{pin.summary}</p>}
             {(pin.linkedResearch?.length > 0 || pin.linkedFeatures?.length > 0) && (
@@ -61,7 +69,13 @@ export function PinDetailPanel({ pin, showReference, onOpenReference }) {
               Tap open water to step back.
             </p>
           </div>
-          <ShowReferencePreview showReference={showReference} onOpen={onOpenReference} />
+          <AtlasFramePreview
+            image={showReference}
+            label={showReference?.label}
+            caption={showReference?.caption}
+            onOpen={onOpenReference}
+            openLabel="Open full show map"
+          />
         </>
       )}
     </aside>

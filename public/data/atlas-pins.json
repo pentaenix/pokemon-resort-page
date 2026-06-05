@@ -43,6 +43,20 @@
         "src": "media/atlas/carousel/VS-Netflix-PokmonConciergeE6IsThatReallytheBestOption-6-18.jpg",
         "caption": "Map from the show",
         "type": "image"
+      },
+      {
+        "id": "atlas-slide-90206",
+        "title": "Front beach",
+        "src": "media/atlas/carousel/VS-Netflix-PokmonConciergeE2WhatsonYourMindPsyduck-2-01.jpg",
+        "caption": "",
+        "type": "image"
+      },
+      {
+        "id": "atlas-slide-13647",
+        "title": "",
+        "src": "media/atlas/carousel/VS-Netflix-PokmonConciergeE6IsThatReallytheBestOption-0-24.jpg",
+        "caption": "",
+        "type": "image"
       }
     ]
   },
@@ -65,11 +79,63 @@
   ],
   "pins": [
     {
+      "id": "massage-pavilion-watanabe-office",
+      "name": "Massage Pavilion & Ms. Watanabe’s Office",
+      "color": "blue",
+      "x": 0.389,
+      "y": 0.4287,
+      "summary": "Poolside massage cabana used for guest treatments and talks with Ms. Watanabe.",
+      "linkedResearch": [],
+      "linkedFeatures": [],
+      "dossier": {
+        "overview": "A curtained cabana beside the pool, close to the Main Reception Pavilion. Haru visits here on her first day, receives a massage, and falls asleep. The space includes a massage bed, plants, wicker chairs, lamps, curtains, and a small table used for tea or staff/client conversations. Use Ms. Watanabe; she is the resort supervisor and Haru’s boss.",
+        "researchMilestones": [],
+        "sections": [
+          {
+            "id": "section-23552",
+            "title": "Massage Pavilion Reference Images",
+            "summary": "Exterior and interior views of the poolside cabana, showing the massage bed, curtains, wicker seating, tea table, lamps, plants, and sightlines to the pool and reception area.",
+            "blocks": [
+              {
+                "type": "image",
+                "path": "media/atlas/massage-pavilion-watanabe-office/VS-Netflix-PokmonConciergeE1ImHarutheNewConcierge-9-36.jpg",
+                "caption": "Interior massage view"
+              },
+              {
+                "type": "carousel",
+                "caption": "Interior office view",
+                "images": [
+                  {
+                    "path": "media/atlas/massage-pavilion-watanabe-office/VS-Netflix-PokmonConciergeE1ImHarutheNewConcierge-11-31.jpg",
+                    "caption": "View of the table"
+                  },
+                  {
+                    "path": "media/atlas/massage-pavilion-watanabe-office/VS-Netflix-PokmonConciergeE1ImHarutheNewConcierge-13-31.jpg",
+                    "caption": "View of the entrance"
+                  },
+                  {
+                    "path": "media/atlas/massage-pavilion-watanabe-office/VS-Netflix-PokmonConciergeE1ImHarutheNewConcierge-13-38.jpg",
+                    "caption": "view towards the main reception"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "tilt": 20,
+      "coverImage": {
+        "path": "media/atlas/pin-3/VS-Netflix-PokmonConciergeE1ImHarutheNewConcierge-9-28.jpg",
+        "label": "",
+        "caption": ""
+      }
+    },
+    {
       "id": "ferry-dock",
       "name": "Ferry Dock",
       "color": "blue",
-      "x": 0.6183,
-      "y": 0.1344,
+      "x": 0.6115,
+      "y": 0.1206,
       "summary": "Primary arrival and departure point for the island — ferry, dock props, and guest arrival flow.",
       "linkedResearch": [
         "research-ferry-dock"
@@ -87,14 +153,19 @@
         "researchMilestones": [],
         "sections": []
       },
-      "tilt": 20
+      "tilt": 20,
+      "coverImage": {
+        "path": "media/atlas/ferry-dock/VS-Netflix-PokmonConciergeE4WelcometothePokmonResort-10-38.jpg",
+        "label": "",
+        "caption": ""
+      }
     },
     {
       "id": "main-reception-pavilion",
       "name": "Main Reception Pavilion",
       "color": "blue",
-      "x": 0.3776,
-      "y": 0.3852,
+      "x": 0.3722,
+      "y": 0.3858,
       "summary": "Open-air check-in building beside the pool, with the reception desk, lounge seating, hammocks, and access to the resort’s main paths.",
       "linkedResearch": [],
       "dossier": {
@@ -110,7 +181,12 @@
         ]
       },
       "linkedFeatures": [],
-      "tilt": 0
+      "tilt": -10,
+      "coverImage": {
+        "path": "media/atlas/main-reception-pavilion/Pokemon_Resort.png",
+        "label": "",
+        "caption": ""
+      }
     }
   ]
 }

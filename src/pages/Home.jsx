@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState } from 'react';
 import { assetUrl } from '../lib/data.js';
 import { pickResortSpotlight } from '../lib/resortSpotlight.js';
 import { StatusPill } from '../components/StatusPill.jsx';
@@ -46,7 +46,7 @@ function HomeCarousel({ items = [] }) {
 export default function Home({ data }) {
   const { site, homepage } = data;
   const digest = computeDigest(data);
-  const spotlight = useMemo(() => pickResortSpotlight(data), [data]);
+  const [spotlight] = useState(() => pickResortSpotlight(data));
   const hero = homepage.hero;
   return (
     <main className="home-page">

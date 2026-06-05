@@ -307,7 +307,8 @@ function pathFieldRow(label, path, inputAttrString, deps) {
   return `<div class="dossier-path-with-preview">
     <label class="dossier-path-label">${label}
       <span class="dossier-path-input-row">
-        <input ${inputAttrString} list="dossierAssets" value="${esc(path || '')}">
+        <input ${inputAttrString} value="${esc(path || '')}">
+        <button type="button" class="btn ghost small dossier-path-browse" data-dossier-path-browse>Browse</button>
         <button type="button" class="btn small dossier-path-upload" data-dossier-path-upload>Upload</button>
       </span>
     </label>
@@ -337,35 +338,39 @@ function runDossierUpload(deps, mount, persist, input) {
         target.value = path;
         updatePathPreviewForInput(target, deps);
       }
-      const picker = mount.querySelector('.dossier-asset-picker');
-      if (picker) {
-        const q = mount.querySelector('#dossierAssetSearch')?.value || '';
-        picker.outerHTML = renderDossierAssetPicker(deps, q);
-      }
       persist?.();
     },
   });
 }
 
-function renderDossierAssetPicker(deps, query = '') {
-  const { esc, adminAssetUrl, filterImageAssets, imageAssetOptions } = deps;
-  const assets = typeof filterImageAssets === 'function'
-    ? filterImageAssets(query, 80)
-    : imageAssetOptions().slice(0, 80);
+function renderDossierAssetPicker(deps) {
+  const { esc, imageAssetOptions } = deps;
   const total = imageAssetOptions().length;
   const { folder, subdir } = resolveDossierUploadTarget(deps);
   const targetLabel = subdir ? `${folder}/${subdir}` : folder;
-  return `<details class="dossier-asset-picker" open>
-    <summary>Images &amp; media (<span id="dossierAssetCount">${total}</span> in project · showing ${assets.length})</summary>
-    <div class="dossier-asset-upload-row">
-      <button type="button" class="btn small" data-dossier-upload-asset>Upload from computer</button>
-      <span class="hint">→ <code>public/${esc(targetLabel)}/</code></span>
-    </div>
-    <label class="dossier-asset-search">Filter existing assets<input type="search" id="dossierAssetSearch" value="${esc(query)}" placeholder="Filter by path…" autocomplete="off"></label>
-    <div class="dossier-asset-grid" id="dossierAssetGrid">${assets.length
-    ? assets.map((p) => `<button type="button" class="dossier-asset-pick" data-pick-asset-path="${esc(p)}" title="${esc(p)}"><img src="${esc(adminAssetUrl(p))}" alt="" loading="lazy" /></button>`).join('')
-    : '<p class="hint">No assets match this filter — upload one above.</p>'}</div>
-  </details>`;
+  return `<p class="hint dossier-asset-hint">${total} images in project. Use <strong>Browse</strong> or <strong>Upload</strong> on any path field · default folder <code>public/${esc(targetLabel)}/</code></p>`;
+}
+
+function runDossierBrowse(deps, mount, persist, input) {
+  if (typeof deps.openAssetPickerModal !== 'function') return;
+  if (input) markPathInputTarget(input, mount);
+  const { folder, subdir } = resolveDossierUploadTarget(deps);
+  deps.openAssetPickerModal({
+    defaultFolder: subdir ? `${folder}/${subdir}` : folder,
+    uploadFolder: folder,
+    uploadSubdir: subdir,
+    title: 'Choose image or clip',
+    onSelect: (path) => {
+      const target = mount.querySelector('[data-dossier-last-path-target]')
+        || input
+        || mount.querySelector(DOSSIER_PATH_INPUT_SELECTOR);
+      if (target && path) {
+        target.value = path;
+        updatePathPreviewForInput(target, deps);
+      }
+      persist?.();
+    },
+  });
 }
 
 function clearSectionUndo(mount) {
@@ -617,7 +622,6 @@ export function dossierEditorHtml(record, deps, config = {}) {
       <h4>Sections</h4>
       <div data-dossier-sections>${dossier.sections.map((section, index) => dossierSectionHtml(section, index, editorDeps)).join('') || '<p class="hint">No sections yet — add one below.</p>'}</div>
       <button type="button" class="btn ghost small" data-add-dossier-section>Add section</button>
-      <datalist id="dossierAssets">${assets.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
       ${renderDossierAssetPicker(editorDeps)}
       <div data-dossier-undo-bar class="dossier-undo-bar hidden" role="status">
         <span>Removed section “<strong data-undo-section-title>Untitled</strong>”.</span>
@@ -958,24 +962,16 @@ function handleDossierMountClick(event, deps) {
     return;
   }
 
-  if (btn.matches('[data-pick-asset-path]')) {
+  if (btn.matches('[data-dossier-path-browse]')) {
     event.preventDefault();
-    const path = btn.dataset.pickAssetPath;
-    const target = mount.querySelector('[data-dossier-last-path-target]')
-      || mount.querySelector('[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]');
-    if (target && path) {
-      target.value = path;
-      updatePathPreviewForInput(target, deps);
-      persist();
-    }
+    const input = btn.closest('.dossier-path-with-preview')?.querySelector(DOSSIER_PATH_INPUT_SELECTOR);
+    runDossierBrowse(deps, mount, persist, input);
     return;
   }
 
-  if (btn.matches('[data-dossier-upload-asset], [data-dossier-path-upload]')) {
+  if (btn.matches('[data-dossier-path-upload]')) {
     event.preventDefault();
-    const input = btn.matches('[data-dossier-path-upload]')
-      ? btn.closest('.dossier-path-with-preview')?.querySelector(DOSSIER_PATH_INPUT_SELECTOR)
-      : null;
+    const input = btn.closest('.dossier-path-with-preview')?.querySelector(DOSSIER_PATH_INPUT_SELECTOR);
     runDossierUpload(deps, mount, persist, input);
     return;
   }
@@ -1170,7 +1166,6 @@ export function bindDossierEditor(deps) {
   if (mount.dataset.dossierBound !== '1') {
     mount.dataset.dossierBound = '1';
     let dossierInputTimer = 0;
-    let assetSearchTimer = 0;
     mount.addEventListener('click', (event) => handleDossierMountClick(event, editorDeps));
     mount.addEventListener('change', (event) => handleDossierMountChange(event, editorDeps));
     mount.addEventListener('focusin', (event) => {
@@ -1183,18 +1178,6 @@ export function bindDossierEditor(deps) {
       if (event.target.matches('[data-section-title]')) {
         const preview = event.target.closest('[data-dossier-section]')?.querySelector('[data-section-title-preview]');
         if (preview) preview.textContent = event.target.value.trim() || 'Untitled';
-      }
-      if (event.target.id === 'dossierAssetSearch') {
-        window.clearTimeout(assetSearchTimer);
-        assetSearchTimer = window.setTimeout(() => {
-          const picker = mount.querySelector('.dossier-asset-picker');
-          if (picker) {
-            const q = event.target.value;
-            const next = renderDossierAssetPicker(deps, q);
-            picker.outerHTML = next;
-          }
-        }, 200);
-        return;
       }
       if (event.target.matches('[data-link-href]')) {
         const row = event.target.closest('[data-link-row]');

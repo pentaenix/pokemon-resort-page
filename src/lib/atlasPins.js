@@ -10,12 +10,18 @@ export function normalizeAtlasPins(raw) {
     : Object.entries(ATLAS_PIN_COLORS).map(([id, meta]) => ({ id, label: meta.label }));
   const colorIds = new Set(pinColors.map((c) => c.id));
   const pins = (raw?.pins || []).map((pin) => {
+    const coverPath = String(pin.coverImage?.path || pin.coverImage || '').trim();
     const normalized = {
       ...pin,
       color: colorIds.has(pin.color) ? pin.color : 'yellow',
       x: clamp01(pin.x),
       y: clamp01(pin.y),
       summary: String(pin.summary || '').trim(),
+      coverImage: coverPath ? {
+        path: coverPath,
+        label: String(pin.coverImage?.label || '').trim(),
+        caption: String(pin.coverImage?.caption || '').trim(),
+      } : null,
     };
     const tilt = clampPinTilt(pin.tilt);
     if (tilt !== null) normalized.tilt = tilt;

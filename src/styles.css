@@ -809,7 +809,10 @@ main { width: min(1480px, calc(100% - 36px)); margin: 0 auto; padding: 34px 0 80
 .carousel-card { margin: 0; border-radius: 28px; overflow: hidden; background: #fff; border: 1px solid rgba(255,255,255,.8); box-shadow: var(--shadow-soft); scroll-snap-align: start; }
 .carousel-card img, .carousel-card video { width: 100%; height: 240px; object-fit: cover; display: block; }
 .carousel-card figcaption { display: grid; gap: 4px; padding: 15px 16px 18px; }
-.carousel-card figcaption span { color: var(--muted); font-size: 14px; line-height: 1.45; }
+.carousel-card-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0; color: rgba(14,70,88,.55); font-size: 12px; font-weight: 800; letter-spacing: .04em; }
+.carousel-card-episode, .carousel-card-time { color: rgba(14,70,88,.55); }
+.carousel-card-meta-sep { opacity: .65; }
+.carousel-card figcaption span:not(.carousel-card-meta) { color: var(--muted); font-size: 14px; line-height: 1.45; }
 
 .current-milestone-card { margin: 0 0 26px; padding: 28px; border-radius: 32px; background: linear-gradient(135deg, rgba(255,255,255,.84), rgba(255,244,214,.74)); border: 1px solid rgba(255,255,255,.8); box-shadow: var(--shadow); }
 .current-milestone-card h2 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 48px); letter-spacing: -.04em; }

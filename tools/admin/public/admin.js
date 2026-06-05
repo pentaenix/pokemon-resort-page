@@ -12,6 +12,7 @@ import {
   readFeatureDossierFromDom,
 } from './feature-dossier-editor.js';
 import { openAssetUploadModal } from './asset-upload.js';
+import { openAssetPickerModal } from './asset-picker-modal.js';
 
 const state = {
   data: null,
@@ -530,10 +531,32 @@ function filterImageAssets(query = '', limit = 80) {
 function refreshAssetList(assets) {
   if (Array.isArray(assets)) state.assets = assets;
 }
+function openPickerForInput(input, { uploadFolder = 'media/uploads', uploadSubdir = '', title = 'Choose image', defaultFolder, onSelect } = {}) {
+  const folder = uploadFolder || 'media/uploads';
+  const subdir = uploadSubdir || '';
+  openAssetPickerModal({
+    esc,
+    log,
+    adminAssetUrl,
+    getAssets: imageAssetOptions,
+    refreshAssets: refreshAssetList,
+    title,
+    defaultFolder: defaultFolder || (subdir ? `${folder}/${subdir}` : folder),
+    uploadFolder: folder,
+    uploadSubdir: subdir,
+    onSelect: onSelect || ((path) => {
+      if (!input) return;
+      input.value = path;
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }),
+  });
+}
 function assetUploadDeps(extra = {}) {
   return {
     esc,
     log,
+    adminAssetUrl,
     refreshAssets: refreshAssetList,
     openAssetUploadModal: (opts) => openAssetUploadModal({
       esc,
@@ -541,18 +564,39 @@ function assetUploadDeps(extra = {}) {
       refreshAssets: refreshAssetList,
       ...opts,
     }),
+    openAssetPickerModal: (opts) => openAssetPickerModal({
+      esc,
+      log,
+      adminAssetUrl,
+      getAssets: imageAssetOptions,
+      refreshAssets: refreshAssetList,
+      ...opts,
+    }),
+    openPickerForInput,
     ...extra,
   };
 }
-function pathInputWithUploadHtml({ label, inputHtml, uploadFolder, uploadSubdir = '' }) {
+function pathInputWithUploadHtml({ label, inputHtml, uploadFolder, uploadSubdir = '', browseFolder }) {
+  const pickFolder = browseFolder || uploadFolder;
   return `<label class="path-input-with-upload">${label}
     <span class="dossier-path-input-row">
       ${inputHtml}
+      <button type="button" class="btn ghost small" data-standalone-browse data-browse-folder="${esc(pickFolder)}" data-upload-folder="${esc(uploadFolder)}" data-upload-subdir="${esc(uploadSubdir)}">Browse</button>
       <button type="button" class="btn small" data-standalone-upload data-upload-folder="${esc(uploadFolder)}" data-upload-subdir="${esc(uploadSubdir)}">Upload</button>
     </span>
   </label>`;
 }
-function bindStandaloneUploadButtons(root) {
+function bindStandaloneAssetButtons(root) {
+  root?.querySelectorAll('[data-standalone-browse]').forEach((btn) => {
+    btn.onclick = () => {
+      const input = btn.parentElement?.querySelector('input');
+      openPickerForInput(input, {
+        uploadFolder: btn.dataset.uploadFolder || 'media/uploads',
+        uploadSubdir: btn.dataset.uploadSubdir || '',
+        defaultFolder: btn.dataset.browseFolder || btn.dataset.uploadFolder || 'media',
+      });
+    };
+  });
   root?.querySelectorAll('[data-standalone-upload]').forEach((btn) => {
     btn.onclick = () => {
       const input = btn.parentElement?.querySelector('input');
@@ -567,6 +611,7 @@ function bindStandaloneUploadButtons(root) {
         onSuccess: (path) => {
           input.value = path;
           input.dispatchEvent(new Event('change', { bubbles: true }));
+          input.dispatchEvent(new Event('input', { bubbles: true }));
         },
       });
     };
@@ -709,7 +754,6 @@ function readRecordImagesFromDom(idPrefix) {
 const RECORD_IMAGE_FOLDERS = { bug: 'media/bugs', feature: 'media/features' };
 function recordImagesSectionHtml(images, idPrefix) {
   const normalized = normalizeRecordImages(images);
-  const assets = imageAssetOptions();
   const uploadFolder = RECORD_IMAGE_FOLDERS[idPrefix] || 'media/uploads';
   return `<section class="record-images-section">
     <h3>Evidence images <span class="hint">${normalized.length}</span></h3>
@@ -718,21 +762,17 @@ function recordImagesSectionHtml(images, idPrefix) {
         <img src="${adminAssetUrl(img.path)}" alt="" loading="lazy" />
         <label>Caption<input data-image-caption value="${esc(img.caption)}" placeholder="What does this show?" /></label>
         <button type="button" class="btn ghost small" data-remove-image="${idx}">Remove</button>
-      </figure>`).join('') : '<p class="hint record-images-empty">No images yet — upload one or pick from assets below.</p>'}</div>
+      </figure>`).join('') : '<p class="hint record-images-empty">No images yet — use Browse or Upload below.</p>'}</div>
     <div class="record-images-add row">
       ${pathInputWithUploadHtml({
     label: 'Image path',
-    inputHtml: `<input id="${idPrefix}ImagePath" list="${idPrefix}AssetList" placeholder="media/…" />`,
+    inputHtml: `<input id="${idPrefix}ImagePath" placeholder="media/…" />`,
     uploadFolder,
   })}
       <label>Caption<input id="${idPrefix}ImageCaption" placeholder="Optional" /></label>
       <button type="button" class="btn ghost small" id="${idPrefix}AddImagePath">Add image</button>
     </div>
-    <datalist id="${idPrefix}AssetList">${assets.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
-    <details class="record-images-pick"><summary>Pick from project assets (${assets.length})</summary>
-      <div class="record-images-asset-grid">${assets.length ? assets.map((p) => `<button type="button" class="record-asset-pick" data-pick-path="${esc(p)}" title="${esc(p)}"><img src="${adminAssetUrl(p)}" alt="" loading="lazy" /></button>`).join('') : '<p class="hint">No images in project yet — use Upload from computer above.</p>'}
-      </div>
-    </details>
+    <p class="hint">Use <strong>Browse</strong> to pick from folders, or <strong>Upload</strong> to add a new file.</p>
   </section>`;
 }
 function recordImageCount(record) {
@@ -836,6 +876,18 @@ function bindRecordImagesEditor(getRecord, idPrefix, fileKey) {
         onSuccess: (path) => {
           const pathInput = $(`#${idPrefix}ImagePath`);
           if (pathInput) pathInput.value = path;
+          addImage(path, $(`#${idPrefix}ImageCaption`)?.value?.trim() || '');
+          refresh();
+        },
+      });
+    };
+  });
+  host.querySelectorAll('[data-standalone-browse]').forEach((btn) => {
+    btn.onclick = () => {
+      openPickerForInput($(`#${idPrefix}ImagePath`), {
+        uploadFolder: btn.dataset.uploadFolder || RECORD_IMAGE_FOLDERS[idPrefix] || 'media/uploads',
+        title: 'Choose evidence image',
+        onSelect: (path) => {
           addImage(path, $(`#${idPrefix}ImageCaption`)?.value?.trim() || '');
           refresh();
         },
@@ -2512,11 +2564,10 @@ function researchDetailHtml(entry) {
         <label>Related bugs<input name="relatedBugs" value="${esc((entry.relatedBugs || []).join(', '))}"></label>
         ${pathInputWithUploadHtml({
     label: 'Legacy evidence image',
-    inputHtml: `<input name="evidenceImage" list="researchAssets" value="${esc(entry.evidence?.[0]?.image || '')}">`,
+    inputHtml: `<input name="evidenceImage" value="${esc(entry.evidence?.[0]?.image || '')}">`,
     uploadFolder: 'media/research',
   })}
         <label>Evidence note<textarea name="evidenceNote" rows="2">${esc(entry.evidence?.[0]?.note || '')}</textarea></label>
-        <datalist id="researchAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
       </details>
       <div id="researchDossierMount">${dossierEditorHtml(entry, featureDossierDeps(), researchDossierConfig())}</div>
     </div>
@@ -2605,11 +2656,10 @@ function poiDetailHtml(poi) {
         <label>Related bugs<input name="relatedBugs" value="${esc((poi.relatedBugs || []).join(', '))}"></label>
         ${pathInputWithUploadHtml({
     label: 'Legacy evidence image',
-    inputHtml: `<input name="evidenceImage" list="poiAssets" value="${esc(poi.evidence?.[0]?.image || '')}">`,
+    inputHtml: `<input name="evidenceImage" value="${esc(poi.evidence?.[0]?.image || '')}">`,
     uploadFolder: 'media/atlas',
   })}
         <label>Evidence note<textarea name="evidenceNote" rows="2">${esc(poi.evidence?.[0]?.note || '')}</textarea></label>
-        <datalist id="poiAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
       </details>
       <div id="poiDossierMount">${dossierEditorHtml(poi, featureDossierDeps(), poiDossierConfig())}</div>
     </div>
@@ -2668,7 +2718,7 @@ function gameForm(game, data) {
     <div class="row"><label>ID<input name="id" value="${esc(game.id)}"></label><label>Title<input name="title" value="${esc(game.title)}"></label></div>
     <div class="row three"><label>Generation<select name="generation">${data.generations.map(g => `<option value="${g.id}" ${game.generation===g.id?'selected':''}>${g.label}</option>`).join('')}</select></label><label>Short title<input name="shortTitle" value="${esc(game.shortTitle)}"></label><label>Platform<input name="platform" value="${esc(game.platform)}"></label></div>
     <div class="row"><label>Release year<input name="releaseYear" type="number" value="${game.releaseYear}"></label><label>Family<input name="family" value="${esc(game.family)}"></label></div>
-    <label>Box art path<input name="boxArt" list="assets" value="${esc(game.boxArt)}"></label><datalist id="assets">${state.assets.map(a => `<option value="${esc(a)}"></option>`).join('')}</datalist>
+    ${pathInputWithUploadHtml({ label: 'Box art path', inputHtml: `<input name="boxArt" value="${esc(game.boxArt)}">`, uploadFolder: 'media/games/box-art', browseFolder: 'media/games/box-art' })}
   </div>`;
 }
 
@@ -2727,9 +2777,8 @@ function milestoneDetailHtml(item, data) {
     <div class="form" data-form="milestone">
       <label class="feature-title-field">Title<input name="title" value="${esc(item.title)}"></label>
       <div class="row"><label>ID<input name="id" value="${esc(item.id)}"></label><label>Status<select name="status">${['past', 'current', 'next', 'future', 'paused'].map((s) => `<option ${item.status === s ? 'selected' : ''}>${s}</option>`).join('')}</select></label></div>
-      <div class="row"><label>Current milestone<select name="current">${['no', 'yes'].map((v) => `<option ${((data.currentMilestoneId === item.id && v === 'yes') || (data.currentMilestoneId !== item.id && v === 'no')) ? 'selected' : ''}>${v}</option>`).join('')}</select></label>${pathInputWithUploadHtml({ label: 'Hero image path', inputHtml: `<input name="image" value="${esc(item.image || '')}" list="milestoneAssets">`, uploadFolder: 'media/milestones' })}</div>
+      <div class="row"><label>Current milestone<select name="current">${['no', 'yes'].map((v) => `<option ${((data.currentMilestoneId === item.id && v === 'yes') || (data.currentMilestoneId !== item.id && v === 'no')) ? 'selected' : ''}>${v}</option>`).join('')}</select></label>${pathInputWithUploadHtml({ label: 'Hero image path', inputHtml: `<input name="image" value="${esc(item.image || '')}">`, uploadFolder: 'media/milestones' })}</div>
       <label>Card summary<textarea name="summary" rows="3">${esc(item.summary)}</textarea></label>
-      <datalist id="milestoneAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
       <div id="milestoneDossierMount">${dossierEditorHtml(item, featureDossierDeps(), milestoneDossierConfig())}</div>
     </div>
   </div>`;
@@ -2812,8 +2861,7 @@ function docDetailHtml(record, categories) {
       <label>Tags<input name="tags" value="${esc((record.tags || []).join(', '))}"></label>
       <label>Card summary<textarea name="summary" rows="3">${esc(record.summary)}</textarea></label>
       <div class="row"><label>Author<input name="author" value="${esc(record.author || '')}"></label><label>Published<input name="publishedAt" value="${esc(record.publishedAt || '')}" placeholder="2026-05-27"></label><label>Updated<input name="updatedAt" value="${esc(record.updatedAt || '')}"></label></div>
-      <div class="row">${pathInputWithUploadHtml({ label: 'Hero image path', inputHtml: `<input name="heroPath" value="${esc(hero.path || '')}" list="docAssets">`, uploadFolder: 'media/docs', uploadSubdir: record.slug || '' })}<label>Hero caption<input name="heroCaption" value="${esc(hero.caption || '')}"></label></div>
-      <datalist id="docAssets">${state.assets.slice(0, 300).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>
+      <div class="row">${pathInputWithUploadHtml({ label: 'Hero image path', inputHtml: `<input name="heroPath" value="${esc(hero.path || '')}">`, uploadFolder: 'media/docs', uploadSubdir: record.slug || '' })}<label>Hero caption<input name="heroCaption" value="${esc(hero.caption || '')}"></label></div>
       <p class="hint">Public URL: <code>#/docs?article=${esc(record.slug)}</code></p>
       <div id="docDossierMount">${dossierEditorHtml(record, featureDossierDeps(), docDossierConfig())}</div>
     </div>
@@ -2957,6 +3005,7 @@ function bind() {
     try { updateRouteFromForm(); log('Manual route edits applied in memory.', 'ok'); syncCompatUIFromState(); }
     catch (e) { log(e.message, 'error'); }
   };
+  bindStandaloneAssetButtons($('#app'));
   if (state.tab === 'Compatibility') syncCompatUIFromState();
   if (state.tab === 'Bugs') bindBugDesk();
   if (state.tab === 'Workshop') bindWorkshopDesk();
@@ -2971,7 +3020,6 @@ function bind() {
   if (state.tab === 'Map Editor') bindMapEditor(state, { api, log, esc, render });
   if (state.tab === 'Milestones') bindMilestonesDesk();
   if (state.tab === 'Docs') bindDocsDesk();
-  bindStandaloneUploadButtons($('#app'));
   const saveGames = $('#saveGames'); if (saveGames) saveGames.onclick = () => { updateGame(); saveFile(files.compatibility, state.data['compatibility.json']); };
   const saveDesign = $('#saveDesign'); if (saveDesign) saveDesign.onclick = () => { updateDesign(); Promise.all([saveFile(files.theme, state.data['theme.json']), saveFile(files.homepage, state.data['homepage.json'])]); };
   const saveJsonEditor = $('#saveJsonEditor'); if (saveJsonEditor) saveJsonEditor.onclick = () => { const fileMap = { 'Media Library':files.gallery, Models:files.models, Characters:files.characters, Milestones:files.roadmap, Ideas:files.ideas }; const file = fileMap[state.tab]; try { state.data[file] = JSON.parse($('#jsonEditor').value); markDirty(file); saveFile(file, state.data[file]); } catch(e) { toast('Invalid JSON: ' + e.message); } };
