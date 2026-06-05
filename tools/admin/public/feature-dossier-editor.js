@@ -294,18 +294,30 @@ function linkRowHtml(item, idx, esc) {
   </div>`;
 }
 
+function resolveDossierUploadTarget(deps) {
+  const folder = deps.getUploadFolder?.() || deps.uploadFolder || 'media/uploads';
+  const subdir = deps.getUploadSubdir?.() || deps.uploadSubdir || '';
+  return { folder, subdir };
+}
+
 function renderDossierAssetPicker(deps, query = '') {
   const { esc, adminAssetUrl, filterImageAssets, imageAssetOptions } = deps;
   const assets = typeof filterImageAssets === 'function'
     ? filterImageAssets(query, 80)
     : imageAssetOptions().slice(0, 80);
   const total = imageAssetOptions().length;
+  const { folder, subdir } = resolveDossierUploadTarget(deps);
+  const targetLabel = subdir ? `${folder}/${subdir}` : folder;
   return `<details class="dossier-asset-picker" open>
-    <summary>Pick from project assets (<span id="dossierAssetCount">${total}</span> total · showing ${assets.length})</summary>
-    <label class="dossier-asset-search">Filter<input type="search" id="dossierAssetSearch" value="${esc(query)}" placeholder="Filter by path…" autocomplete="off"></label>
+    <summary>Images &amp; media (<span id="dossierAssetCount">${total}</span> in project · showing ${assets.length})</summary>
+    <div class="dossier-asset-upload-row">
+      <button type="button" class="btn small" data-dossier-upload-asset>Upload from computer</button>
+      <span class="hint">→ <code>public/${esc(targetLabel)}/</code></span>
+    </div>
+    <label class="dossier-asset-search">Filter existing assets<input type="search" id="dossierAssetSearch" value="${esc(query)}" placeholder="Filter by path…" autocomplete="off"></label>
     <div class="dossier-asset-grid" id="dossierAssetGrid">${assets.length
     ? assets.map((p) => `<button type="button" class="dossier-asset-pick" data-pick-asset-path="${esc(p)}" title="${esc(p)}"><img src="${esc(adminAssetUrl(p))}" alt="" loading="lazy" /></button>`).join('')
-    : '<p class="hint">No assets match this filter.</p>'}</div>
+    : '<p class="hint">No assets match this filter — upload one above.</p>'}</div>
   </details>`;
 }
 
@@ -529,8 +541,11 @@ export function dossierEditorHtml(record, deps, config = {}) {
     hint = 'Sections and blocks appear in the public modal. Collapse blocks while editing to reduce clutter.',
     showMap = false,
     showResearchMilestones = false,
+    uploadFolder = deps.uploadFolder,
+    uploadSubdir = deps.uploadSubdir,
     open = true,
   } = config;
+  const editorDeps = { ...deps, uploadFolder, uploadSubdir };
   const dossier = normalizeFeatureDossierRaw(record, { forEditor: true });
   const assets = deps.imageAssetOptions().slice(0, 300);
   const pinList = getPins().length ? getPins() : getPois();
@@ -553,10 +568,10 @@ export function dossierEditorHtml(record, deps, config = {}) {
       ${mapBlock}
       ${milestoneBlock}
       <h4>Sections</h4>
-      <div data-dossier-sections>${dossier.sections.map((section, index) => dossierSectionHtml(section, index, deps)).join('') || '<p class="hint">No sections yet — add one below.</p>'}</div>
+      <div data-dossier-sections>${dossier.sections.map((section, index) => dossierSectionHtml(section, index, editorDeps)).join('') || '<p class="hint">No sections yet — add one below.</p>'}</div>
       <button type="button" class="btn ghost small" data-add-dossier-section>Add section</button>
       <datalist id="dossierAssets">${assets.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
-      ${renderDossierAssetPicker(deps)}
+      ${renderDossierAssetPicker(editorDeps)}
       <div data-dossier-undo-bar class="dossier-undo-bar hidden" role="status">
         <span>Removed section “<strong data-undo-section-title>Untitled</strong>”.</span>
         <button type="button" class="btn small" data-dossier-undo-section>Undo</button>
@@ -572,6 +587,7 @@ export function featureDossierEditorHtml(feature, deps) {
     hint: 'Build notes, media, comparisons, galleries, and custom HTML. Map pin is optional — expand only when linking to a POI on the atlas.',
     showMap: true,
     showResearchMilestones: true,
+    uploadFolder: 'media/features',
     open: true,
   });
 }
@@ -905,6 +921,32 @@ function handleDossierMountClick(event, deps) {
       updatePathPreviewForInput(target, deps);
       persist();
     }
+    return;
+  }
+
+  if (btn.matches('[data-dossier-upload-asset]')) {
+    event.preventDefault();
+    if (typeof deps.openAssetUploadModal !== 'function') return;
+    const { folder, subdir } = resolveDossierUploadTarget(deps);
+    deps.openAssetUploadModal({
+      folder,
+      subdir,
+      title: 'Upload image or clip',
+      onSuccess: (path) => {
+        const target = mount.querySelector('[data-dossier-last-path-target]')
+          || mount.querySelector('[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]');
+        if (target && path) {
+          target.value = path;
+          updatePathPreviewForInput(target, deps);
+        }
+        const picker = mount.querySelector('.dossier-asset-picker');
+        if (picker) {
+          const q = mount.querySelector('#dossierAssetSearch')?.value || '';
+          picker.outerHTML = renderDossierAssetPicker(deps, q);
+        }
+        persist();
+      },
+    });
     return;
   }
 

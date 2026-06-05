@@ -11,6 +11,7 @@ import {
   readDossierFromDom,
   readFeatureDossierFromDom,
 } from './feature-dossier-editor.js';
+import { openAssetUploadModal } from './asset-upload.js';
 
 const state = {
   data: null,
@@ -526,16 +527,32 @@ function filterImageAssets(query = '', limit = 80) {
   if (q) list = list.filter((p) => p.toLowerCase().includes(q));
   return list.slice(0, limit);
 }
-function featureDossierDeps() {
+function refreshAssetList(assets) {
+  if (Array.isArray(assets)) state.assets = assets;
+}
+function assetUploadDeps(extra = {}) {
   return {
     esc,
+    log,
+    refreshAssets: refreshAssetList,
+    openAssetUploadModal: (opts) => openAssetUploadModal({
+      esc,
+      log,
+      refreshAssets: refreshAssetList,
+      ...opts,
+    }),
+    ...extra,
+  };
+}
+function featureDossierDeps() {
+  return assetUploadDeps({
     $,
     adminAssetUrl,
     imageAssetOptions,
     filterImageAssets,
     getPins: () => (state.data['atlas-pins.json']?.pins || []).map((pin) => ({ id: pin.id, name: pin.name })),
     getMilestones: () => (state.data['roadmap.json']?.milestones || []),
-  };
+  });
 }
 function pruneRecordDossier(record) {
   if (!record?.dossier) return;
@@ -560,6 +577,7 @@ function researchDossierConfig() {
     hint: 'Rich sections for Concierge Research — characters, Pokémon, locations, mechanics, and more.',
     showMap: false,
     showResearchMilestones: false,
+    uploadFolder: 'media/research',
     open: true,
   };
 }
@@ -577,6 +595,7 @@ function poiDossierConfig() {
     hint: 'Optional rich notes shown when visitors inspect this map pin (atlas panel).',
     showMap: false,
     showResearchMilestones: false,
+    uploadFolder: 'media/atlas',
     open: true,
   };
 }
@@ -586,6 +605,7 @@ function ideaDossierConfig() {
     hint: 'Extended write-up for the public Ideas section (Ideas & Milestones tab).',
     showMap: false,
     showResearchMilestones: false,
+    uploadFolder: 'media/ideas',
     open: true,
   };
 }
@@ -595,15 +615,19 @@ function milestoneDossierConfig() {
     hint: 'Extra context visitors see when opening a milestone on the public plan page.',
     showMap: false,
     showResearchMilestones: false,
+    uploadFolder: 'media/milestones',
     open: true,
   };
 }
 function docDossierConfig() {
+  const meta = getSelectedDocMeta();
   return {
     title: 'Article body',
     hint: 'Rich blocks for the public Docs article. Saved to public/docs/articles/{category}/{slug}.json.',
     showMap: false,
     showResearchMilestones: false,
+    uploadFolder: 'media/docs',
+    uploadSubdir: meta?.slug || '',
     open: true,
   };
 }
@@ -654,25 +678,28 @@ function readRecordImagesFromDom(idPrefix) {
     caption: fig.querySelector('[data-image-caption]')?.value?.trim() || '',
   })).filter((item) => item.path);
 }
+const RECORD_IMAGE_FOLDERS = { bug: 'media/bugs', feature: 'media/features' };
 function recordImagesSectionHtml(images, idPrefix) {
   const normalized = normalizeRecordImages(images);
   const assets = imageAssetOptions();
+  const uploadFolder = RECORD_IMAGE_FOLDERS[idPrefix] || 'media/uploads';
   return `<section class="record-images-section">
     <h3>Evidence images <span class="hint">${normalized.length}</span></h3>
-    <p class="hint">Paths under <code>public/</code> (e.g. <code>media/bugs/screenshot.webp</code>). Shown on the Operations page with a gallery modal.</p>
+    <p class="hint">Paths under <code>public/</code> (e.g. <code>${esc(uploadFolder)}/screenshot.webp</code>). Shown on the Operations page with a gallery modal.</p>
     <div class="record-images-grid" id="${idPrefix}ImagesGrid">${normalized.length ? normalized.map((img, idx) => `<figure class="record-image-thumb" data-image-path="${esc(img.path)}">
         <img src="${adminAssetUrl(img.path)}" alt="" loading="lazy" />
         <label>Caption<input data-image-caption value="${esc(img.caption)}" placeholder="What does this show?" /></label>
         <button type="button" class="btn ghost small" data-remove-image="${idx}">Remove</button>
-      </figure>`).join('') : '<p class="hint record-images-empty">No images yet — add a path or pick from assets below.</p>'}</div>
+      </figure>`).join('') : '<p class="hint record-images-empty">No images yet — upload one or pick from assets below.</p>'}</div>
     <div class="record-images-add row">
       <label>Image path<input id="${idPrefix}ImagePath" list="${idPrefix}AssetList" placeholder="media/…" /></label>
       <label>Caption<input id="${idPrefix}ImageCaption" placeholder="Optional" /></label>
       <button type="button" class="btn ghost small" id="${idPrefix}AddImagePath">Add image</button>
+      <button type="button" class="btn small" id="${idPrefix}UploadImage" data-upload-folder="${esc(uploadFolder)}">Upload from computer</button>
     </div>
     <datalist id="${idPrefix}AssetList">${assets.map((p) => `<option value="${esc(p)}">`).join('')}</datalist>
     <details class="record-images-pick"><summary>Pick from project assets (${assets.length})</summary>
-      <div class="record-images-asset-grid">${assets.length ? assets.map((p) => `<button type="button" class="record-asset-pick" data-pick-path="${esc(p)}" title="${esc(p)}"><img src="${adminAssetUrl(p)}" alt="" loading="lazy" /></button>`).join('') : '<p class="hint">No images found under public/. Add files to public/media first.</p>'}
+      <div class="record-images-asset-grid">${assets.length ? assets.map((p) => `<button type="button" class="record-asset-pick" data-pick-path="${esc(p)}" title="${esc(p)}"><img src="${adminAssetUrl(p)}" alt="" loading="lazy" /></button>`).join('') : '<p class="hint">No images in project yet — use Upload from computer above.</p>'}
       </div>
     </details>
   </section>`;
@@ -764,6 +791,21 @@ function bindRecordImagesEditor(getRecord, idPrefix, fileKey) {
     if (!path) { log('Enter an image path first.', 'warn'); return; }
     addImage(path, caption);
     refresh();
+  });
+  $(`#${idPrefix}UploadImage`)?.addEventListener('click', () => {
+    const folder = $(`#${idPrefix}UploadImage`)?.dataset.uploadFolder || RECORD_IMAGE_FOLDERS[idPrefix] || 'media/uploads';
+    openAssetUploadModal({
+      esc,
+      log,
+      folder,
+      title: 'Upload evidence image',
+      refreshAssets: refreshAssetList,
+      onSuccess: (path) => {
+        const captionInput = $(`#${idPrefix}ImageCaption`);
+        addImage(path, captionInput?.value?.trim() || '');
+        refresh();
+      },
+    });
   });
   const host = $(`#${idPrefix}ImagesHost`);
   if (!host) return;

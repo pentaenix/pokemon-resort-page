@@ -2,7 +2,7 @@
   <rect width="960" height="540" fill="#f3f7f9"/>
   <rect x="0" y="0" width="960" height="48" fill="#0f3340"/>
   <text x="20" y="30" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="#e8f4f8">Resort Operations Desk</text>
-  <text x="520" y="30" font-family="system-ui,sans-serif" font-size="11" fill="#9fd4e6">Dashboard · Workshop · Map Editor · Docs · Publish</text>
+  <text x="520" y="30" font-family="system-ui,sans-serif" font-size="11" fill="#9fd4e6">Dashboard ï¿½ Workshop ï¿½ Map Editor ï¿½ Docs ï¿½ Publish</text>
   <rect x="20" y="68" width="220" height="452" rx="12" fill="#fff" stroke="#c5e8ef"/>
   <text x="36" y="98" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#075b78">Articles</text>
   <rect x="28" y="112" width="204" height="44" rx="8" fill="#e8f4f8" stroke="#37a7db"/>
@@ -12,11 +12,11 @@
   <rect x="260" y="68" width="680" height="452" rx="12" fill="#fff" stroke="#c5e8ef"/>
   <text x="280" y="104" font-family="system-ui,sans-serif" font-size="22" font-weight="800" fill="#0a3d4d">Article body</text>
   <rect x="280" y="124" width="520" height="28" rx="6" fill="#f0fafc" stroke="#c5e8ef"/>
-  <text x="292" y="143" font-family="system-ui,sans-serif" font-size="12" fill="#5a8a96">UML diagram · Edit diagram& · Add section</text>
+  <text x="292" y="143" font-family="system-ui,sans-serif" font-size="12" fill="#5a8a96">UML diagram ï¿½ Edit diagram& ï¿½ Add section</text>
   <rect x="280" y="170" width="620" height="120" rx="10" fill="#f8fdfe" stroke="#c5e8ef"/>
   <text x="296" y="200" font-family="ui-monospace,monospace" font-size="11" fill="#075b78">stateDiagram-v2</text>
   <text x="296" y="220" font-family="ui-monospace,monospace" font-size="11" fill="#5a8a96">  Idle --&gt; Following: player moves</text>
   <rect x="280" y="310" width="140" height="36" rx="8" fill="#075b78"/>
   <text x="308" y="333" font-family="system-ui,sans-serif" font-size="13" font-weight="700" fill="#fff">Save docs</text>
-  <text x="280" y="490" font-family="ui-monospace,monospace" font-size="11" fill="#5a8a96">mock screenshot · replace with npm run admin capture</text>
+  <text x="280" y="490" font-family="ui-monospace,monospace" font-size="11" fill="#5a8a96">mock screenshot ï¿½ replace with npm run admin capture</text>
 </svg>

@@ -9,6 +9,7 @@ const ATLAS_DOSSIER_CONFIG = {
   hint: 'Show screenshots, diagrams, in-game captures, boat model links, and notes for this pin.',
   showMap: false,
   showResearchMilestones: false,
+  uploadFolder: 'media/atlas',
   open: true,
 };
 
@@ -324,7 +325,12 @@ function bindAtlasPinDossier(state, deps) {
   bindDossierEditor({
     ...deps,
     mountSelector: '#atlasPinDossierMount',
-    renderEditorHtml: (record, dossierDeps) => dossierEditorHtml(record, dossierDeps, ATLAS_DOSSIER_CONFIG),
+    renderEditorHtml: (record, dossierDeps) => dossierEditorHtml(record, dossierDeps, {
+      ...ATLAS_DOSSIER_CONFIG,
+      uploadSubdir: record?.id || '',
+    }),
+    getUploadFolder: () => 'media/atlas',
+    getUploadSubdir: () => getSelectedAtlasPin(state)?.id || '',
     getRecord: () => getSelectedAtlasPin(state),
     onDirty: () => deps.markDirty('atlas-pins.json'),
   });

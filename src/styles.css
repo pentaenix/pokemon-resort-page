@@ -110,8 +110,16 @@ main { width: min(1480px, calc(100% - 36px)); margin: 0 auto; padding: 34px 0 80
 .nav-card-icon { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 16px; color: white; background: linear-gradient(135deg, var(--sea-deep), var(--palm)); font-size: 24px; margin-bottom: 28px; }
 .nav-card strong { font-size: 22px; letter-spacing: -.04em; }
 .nav-card p { color: var(--muted); line-height: 1.55; }
-.digest-panel { display: grid; grid-template-columns: .9fr 1.1fr; gap: 28px; align-items: center; }
-.digest-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.digest-panel { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+.digest-spotlight-kind { margin: 0 0 6px; font-size: 12px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: rgba(14,70,88,.62); }
+.digest-spotlight-copy h2 { margin-top: 0; }
+.digest-spotlight-also { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(14,70,88,.08); }
+.digest-spotlight-also a { font-size: 14px; font-weight: 800; color: #075b78; text-decoration: none; }
+.digest-spotlight-also a:hover { text-decoration: underline; }
+.digest-spotlight-side { display: grid; gap: 14px; align-content: start; }
+.digest-spotlight-media { display: block; border-radius: 24px; overflow: hidden; border: 1px solid rgba(255,255,255,.86); box-shadow: var(--shadow-soft); background: rgba(255,255,255,.55); }
+.digest-spotlight-media img { display: block; width: 100%; height: auto; max-height: min(280px, 42vh); object-fit: cover; }
+.digest-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .digest-cards article { background: rgba(255,255,255,.72); border: 1px solid rgba(255,255,255,.9); border-radius: 24px; padding: 18px; }
 .digest-cards strong { display: block; font-size: 36px; margin: 10px 0 2px; letter-spacing: -.06em; }
 .digest-cards span:last-child { color: var(--muted); font-size: 13px; }

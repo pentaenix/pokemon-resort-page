@@ -28,7 +28,7 @@
     {
       "label": "Island Reconstruction",
       "value": "Active",
-      "detail": "3D atlas, POIs, submodels, gallery, and characters"
+      "detail": "Cork board, pins, models, and character work"
     },
     {
       "label": "Compatibility Lab",
@@ -48,39 +48,39 @@
   ],
   "navCards": [
     {
-      "title": "Island Research Atlas",
+      "title": "Island Atlas",
       "href": "#/atlas",
-      "description": "Rotate the island, inspect points of interest, review evidence, browse the media carousel, and track submodels and sprites.",
+      "description": "The cork-board map — pins, show references, and whatever we've traced so far.",
       "icon": "✦"
     },
     {
       "title": "Compatibility Ontology",
       "href": "#/ontology",
-      "description": "Focus generations, drag nodes, inspect directional routes, and connect route health to bugs and tests.",
+      "description": "Generation routes, round trips, and how Pokémon travel between games.",
       "icon": "◎"
     },
     {
       "title": "Operations Board",
       "href": "#/board",
-      "description": "Follow active features, internal bugs, and community issue links without turning the site into a blog.",
+      "description": "Features in flight, bugs on the desk, and what's being built next.",
       "icon": "✈"
     },
     {
       "title": "Milestones",
       "href": "#/milestones",
-      "description": "Walk the project timeline from the first idea to future public demo goals, centered on the current milestone.",
+      "description": "The arc from first idea to whatever we're aiming at next.",
       "icon": "✧"
     },
     {
       "title": "Resort Docs",
       "href": "#/docs",
-      "description": "Technical and design documentation — file formats, schemas, diagrams, and authoring guides.",
+      "description": "Formats, schemas, diagrams — the reference shelf for contributors.",
       "icon": "▤"
     },
     {
       "title": "Source Guide",
       "href": "#/source",
-      "description": "Learn how the static site, local Operations Desk, data files, and GitHub publish flow fit together.",
+      "description": "How the site, data files, and local desk fit together.",
       "icon": "⌁"
     }
   ],

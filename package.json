@@ -5,6 +5,7 @@
     "preview": "vite preview --host 127.0.0.1",
     "admin": "node tools/admin/server.mjs",
     "fetch:boxart": "node tools/fetch-boxart.mjs",
+    "validate": "npm run validate:data",
     "validate:data": "node tools/docs/compute-freshness.mjs && node tools/validate-data.mjs",
     "docs:freshness": "node tools/docs/compute-freshness.mjs",
     "publish": "node tools/publish.mjs",

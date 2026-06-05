@@ -13,6 +13,7 @@ import {
 } from './lib/model-ingest.mjs';
 import { isValidModelId } from './lib/model-id.mjs';
 import { readRawBody, parseMultipart, groupFolderUpload } from './lib/multipart.mjs';
+import { saveUploadedAsset } from './lib/asset-upload.mjs';
 import { ingestGlbBuffer } from './lib/glb-ingest.mjs';
 import { reorientGlbBuffer } from './lib/reorient-glb.mjs';
 import { spawn } from 'node:child_process';
@@ -324,6 +325,45 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/data') return json(res, 200, await readAllData());
     if (url.pathname === '/api/assets') return json(res, 200, { assets: await listAssets() });
+    if (url.pathname === '/api/assets/upload' && req.method === 'POST') {
+      try {
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+          return json(res, 400, { ok: false, error: 'Expected multipart upload' });
+        }
+        const raw = await readRawBody(req, 55_000_000);
+        const parts = parseMultipart(raw, contentType);
+        let filePart = null;
+        let folder = 'media/uploads';
+        let subdir = '';
+        for (const part of parts) {
+          if (part.name === 'folder' && part.bytes.length) {
+            folder = part.bytes.toString('utf8').trim();
+            continue;
+          }
+          if (part.name === 'subdir' && part.bytes.length) {
+            subdir = part.bytes.toString('utf8').trim();
+            continue;
+          }
+          if ((part.name === 'file' || part.filename) && part.bytes.length) {
+            filePart = part;
+          }
+        }
+        if (!filePart) {
+          return json(res, 400, { ok: false, error: 'No file in upload (field: file).' });
+        }
+        const path = await saveUploadedAsset(
+          publicRoot,
+          folder,
+          filePart.filename || 'upload.webp',
+          filePart.bytes,
+          subdir,
+        );
+        return json(res, 200, { ok: true, path, assets: await listAssets() });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
     if (url.pathname === '/api/boxart/status') {
       const missing = await listMissingBoxArt();
       return json(res, 200, {
@@ -784,7 +824,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-/** Default desk port (8787 is used by another app in this workspace). Override: PORT=… npm run admin */
+/** Default desk port (8787 = Headroom proxy; 8788 = SPMK — see DEV-PORTS.md). Override: PORT=… npm run admin */
 const DEFAULT_ADMIN_PORT = 9477;
 const port = Number(process.env.PORT || DEFAULT_ADMIN_PORT);
 server.listen(port, '127.0.0.1', () => {

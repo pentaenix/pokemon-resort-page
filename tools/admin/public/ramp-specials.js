@@ -130,12 +130,20 @@ export function effectiveSpecial(special, heights, width, height, tx, ty) {
   return special;
 }
 
-export function cornerHeightsForTile(special, heights, width, height, tx, ty, tileSize = 16) {
+export function cornerHeightsForTile(
+  special,
+  heights,
+  width,
+  height,
+  tx,
+  ty,
+  tileSize = 16,
+) {
   const hv = tileHeight(heights, tx, ty);
   const flat = Math.max(0, hv) * tileSize;
   const out = [flat, flat, flat, flat];
-  const effective = effectiveSpecial(special, heights, width, height, tx, ty);
 
+  const effective = effectiveSpecial(special, heights, width, height, tx, ty);
   if (effective >= SPECIAL.RAMP_N && effective <= SPECIAL.RAMP_W) {
     applyCardinalSlope(out, effective, hv, tileSize);
     return out;

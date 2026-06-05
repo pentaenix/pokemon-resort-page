@@ -1,10 +1,10 @@
 {
-  "computedAt": "2026-06-02T04:56:39.727Z",
+  "computedAt": "2026-06-05T02:33:10.324Z",
   "articles": {
     "writing-docs": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-02",
+      "newestCodeChange": "2026-06-03",
       "apps": [
         "pokemon-resort-page"
       ],
@@ -13,7 +13,7 @@
           "repo": "pokemon-resort-page",
           "path": "public/data/docs.json",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort-page",
@@ -25,19 +25,19 @@
           "repo": "pokemon-resort-page",
           "path": "src/dossier/registry.js",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort-page",
           "path": "docs/TEMPLATE.md",
           "exists": true,
-          "modifiedAt": "2026-06-01"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort-page",
           "path": "package.json",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         }
       ]
     },
@@ -77,9 +77,9 @@
       ]
     },
     "charbin-schema": {
-      "status": "current",
+      "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-01",
+      "newestCodeChange": "2026-06-03",
       "apps": [
         "pokemon-resort",
         "spmk"
@@ -89,26 +89,26 @@
           "repo": "spmk",
           "path": "spmk_app/charbin_io.py",
           "exists": true,
-          "modifiedAt": "2026-06-01"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/JsonOverworldLoader.cpp",
           "exists": true,
-          "modifiedAt": "2026-05-31"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "spmk",
           "path": "spmk_app/character_package.py",
           "exists": true,
-          "modifiedAt": "2026-06-01"
+          "modifiedAt": "2026-06-03"
         }
       ]
     },
     "owmap-format": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-02",
+      "newestCodeChange": "2026-06-03",
       "apps": [
         "pokemon-resort",
         "pokemon-resort-page"
@@ -118,7 +118,7 @@
           "repo": "pokemon-resort-page",
           "path": "tools/admin/lib/owmap-format.mjs",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort",
@@ -130,13 +130,13 @@
           "repo": "pokemon-resort-page",
           "path": "tools/admin/public/ramp-specials.js",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/SceneMetadataParser.cpp",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         }
       ]
     },
@@ -177,9 +177,9 @@
       ]
     },
     "island-dreamforge": {
-      "status": "current",
+      "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-05-31",
+      "newestCodeChange": "2026-06-05",
       "apps": [
         "island-dreamforge",
         "pokemon-resort"
@@ -189,32 +189,32 @@
           "repo": "island-dreamforge",
           "path": "frontend/src/App.jsx",
           "exists": true,
-          "modifiedAt": "2026-05-31"
+          "modifiedAt": "2026-06-05"
         },
         {
           "repo": "island-dreamforge",
           "path": "backend/app/island_export.py",
           "exists": true,
-          "modifiedAt": "2026-05-31"
+          "modifiedAt": "2026-06-04"
         },
         {
           "repo": "island-dreamforge",
           "path": "README.md",
           "exists": true,
-          "modifiedAt": "2026-05-31"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "island-dreamforge",
           "path": "backend/app/mesh_export.py",
           "exists": true,
-          "modifiedAt": "2026-05-31"
+          "modifiedAt": "2026-06-03"
         }
       ]
     },
     "follower-pokemon": {
-      "status": "current",
+      "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-01",
+      "newestCodeChange": "2026-06-03",
       "apps": [
         "pokemon-resort"
       ],
@@ -229,13 +229,13 @@
           "repo": "pokemon-resort",
           "path": "config/gameplay/followers/summon.json",
           "exists": true,
-          "modifiedAt": "2026-06-01"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort",
           "path": "config/gameplay/followers/idle_behaviours.json",
           "exists": true,
-          "modifiedAt": "2026-06-01"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort",
@@ -248,7 +248,7 @@
     "overworld-glb-models": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-02",
+      "newestCodeChange": "2026-06-03",
       "apps": [
         "pokemon-resort",
         "pokemon-resort-page"
@@ -258,19 +258,19 @@
           "repo": "pokemon-resort-page",
           "path": "tools/admin/lib/obj-compile.mjs",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort-page",
           "path": "tools/admin/lib/texture-alpha.mjs",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort-page",
           "path": "tools/admin/lib/write-glb.mjs",
           "exists": true,
-          "modifiedAt": "2026-06-02"
+          "modifiedAt": "2026-06-03"
         },
         {
           "repo": "pokemon-resort",

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { assetUrl } from '../lib/data.js';
+import { pickResortSpotlight } from '../lib/resortSpotlight.js';
 import { StatusPill } from '../components/StatusPill.jsx';
 
 function computeDigest(data) {
@@ -20,9 +21,8 @@ function HomeCarousel({ items = [] }) {
   return (
     <section className="home-carousel-section" aria-label="Pokémon Resort overview media">
       <div className="section-intro compact">
-        <p className="eyebrow">Resort Preview</p>
-        <h2>See the shape of the experience.</h2>
-        <p>A quick look at the resort fantasy: care, transfer, play, and a growing island built around the Pokémon you bring with you.</p>
+        <p className="eyebrow">Resort preview</p>
+        <h2>What we're building toward.</h2>
       </div>
       <div className="media-carousel home-media-carousel">
         {items.map((item) => (
@@ -46,6 +46,7 @@ function HomeCarousel({ items = [] }) {
 export default function Home({ data }) {
   const { site, homepage } = data;
   const digest = computeDigest(data);
+  const spotlight = useMemo(() => pickResortSpotlight(data), [data]);
   const hero = homepage.hero;
   return (
     <main className="home-page">
@@ -103,9 +104,8 @@ export default function Home({ data }) {
 
       <section className="lobby-grid">
         <div className="section-intro">
-          <p className="eyebrow">Front Desk</p>
-          <h2>Choose where you want to check in.</h2>
-          <p>The public pages are split into clear destinations so the project stays browsable as the atlas, route ontology, issues, and operations board grow.</p>
+          <p className="eyebrow">Front desk</p>
+          <h2>Where to check in.</h2>
         </div>
         <div className="nav-card-grid">
           {(homepage.navCards || []).map((card) => (
@@ -119,16 +119,42 @@ export default function Home({ data }) {
       </section>
 
       <section className="digest-panel">
-        <div>
+        <div className="digest-spotlight-copy">
           <p className="eyebrow">This week at the resort</p>
-          <h2>Automatically generated from project data.</h2>
-          <p>This section stays fresh without becoming a blog. Update features, routes, issues, or research data in the local Operations Desk and the homepage reflects the current state.</p>
+          {spotlight?.featured ? (
+            <>
+              <p className="digest-spotlight-kind">{spotlight.featured.eyebrow}</p>
+              <h2>{spotlight.featured.title}</h2>
+              <p>{spotlight.featured.summary}</p>
+              <a className="button ghost small" href={spotlight.featured.href}>{spotlight.featured.cta}</a>
+              {spotlight.alternates?.length ? (
+                <div className="digest-spotlight-also">
+                  <span className="soft-label">Also noted</span>
+                  {spotlight.alternates.map((item) => (
+                    <a key={item.id} href={item.href}>{item.title}</a>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <h2>A quiet week on the island.</h2>
+              <p>The cork board is waiting for its next pin.</p>
+            </>
+          )}
         </div>
-        <div className="digest-cards">
-          <article><StatusPill status="red" label="Needs care" /><strong>{digest.redRoutes}</strong><span>known failing routes</span></article>
-          <article><StatusPill status="gray" label="Untested" /><strong>{digest.grayRoutes}</strong><span>cross-routes awaiting tests</span></article>
-          <article><StatusPill status="on-flight" label="On-Flight" /><strong>{digest.activeFeatures}</strong><span>active features</span></article>
-          <article><StatusPill status="open" label="Issue Desk" /><strong>{digest.openBugs}</strong><span>open or blocked issues</span></article>
+        <div className="digest-spotlight-side">
+          {spotlight?.featured?.image ? (
+            <a className="digest-spotlight-media" href={spotlight.featured.href}>
+              <img src={assetUrl(spotlight.featured.image)} alt="" loading="lazy" />
+            </a>
+          ) : null}
+          <div className="digest-cards">
+            <article><StatusPill status="red" label="Needs care" /><strong>{digest.redRoutes}</strong><span>failing routes</span></article>
+            <article><StatusPill status="gray" label="Untested" /><strong>{digest.grayRoutes}</strong><span>routes still open</span></article>
+            <article><StatusPill status="on-flight" label="On-Flight" /><strong>{digest.activeFeatures}</strong><span>features in motion</span></article>
+            <article><StatusPill status="open" label="Issue desk" /><strong>{digest.openBugs}</strong><span>open threads</span></article>
+          </div>
         </div>
       </section>
     </main>
