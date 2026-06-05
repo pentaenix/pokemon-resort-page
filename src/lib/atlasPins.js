@@ -30,6 +30,20 @@ export function normalizeAtlasPins(raw) {
     }
     : null;
 
+  const carousel = (raw?.map?.carousel || [])
+    .map((item, index) => {
+      const src = String(item?.src || item?.path || '').trim();
+      if (!src) return null;
+      return {
+        id: String(item?.id || `atlas-carousel-${index + 1}`).trim(),
+        title: String(item?.title || '').trim(),
+        src,
+        caption: String(item?.caption || '').trim(),
+        type: item?.type === 'video' ? 'video' : 'image',
+      };
+    })
+    .filter(Boolean);
+
   return {
     map: {
       layers: raw?.map?.layers || {},
@@ -39,6 +53,7 @@ export function normalizeAtlasPins(raw) {
         pins: raw?.map?.defaultLayers?.pins !== false,
       },
       showReference,
+      carousel,
     },
     pinColors,
     pins,

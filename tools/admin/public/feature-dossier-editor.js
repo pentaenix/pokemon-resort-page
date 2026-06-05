@@ -294,10 +294,57 @@ function linkRowHtml(item, idx, esc) {
   </div>`;
 }
 
+const DOSSIER_PATH_INPUT_SELECTOR = '[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]';
+
 function resolveDossierUploadTarget(deps) {
   const folder = deps.getUploadFolder?.() || deps.uploadFolder || 'media/uploads';
   const subdir = deps.getUploadSubdir?.() || deps.uploadSubdir || '';
   return { folder, subdir };
+}
+
+function pathFieldRow(label, path, inputAttrString, deps) {
+  const { esc } = deps;
+  return `<div class="dossier-path-with-preview">
+    <label class="dossier-path-label">${label}
+      <span class="dossier-path-input-row">
+        <input ${inputAttrString} list="dossierAssets" value="${esc(path || '')}">
+        <button type="button" class="btn small dossier-path-upload" data-dossier-path-upload>Upload</button>
+      </span>
+    </label>
+    ${dossierPathPreview(path, deps)}
+  </div>`;
+}
+
+function markPathInputTarget(input, mount) {
+  if (!input || !mount) return;
+  mount.querySelectorAll('[data-dossier-last-path-target]').forEach((el) => el.removeAttribute('data-dossier-last-path-target'));
+  input.setAttribute('data-dossier-last-path-target', '1');
+}
+
+function runDossierUpload(deps, mount, persist, input) {
+  if (typeof deps.openAssetUploadModal !== 'function') return;
+  if (input) markPathInputTarget(input, mount);
+  const { folder, subdir } = resolveDossierUploadTarget(deps);
+  deps.openAssetUploadModal({
+    folder,
+    subdir,
+    title: 'Upload image or clip',
+    onSuccess: (path) => {
+      const target = mount.querySelector('[data-dossier-last-path-target]')
+        || input
+        || mount.querySelector(DOSSIER_PATH_INPUT_SELECTOR);
+      if (target && path) {
+        target.value = path;
+        updatePathPreviewForInput(target, deps);
+      }
+      const picker = mount.querySelector('.dossier-asset-picker');
+      if (picker) {
+        const q = mount.querySelector('#dossierAssetSearch')?.value || '';
+        picker.outerHTML = renderDossierAssetPicker(deps, q);
+      }
+      persist?.();
+    },
+  });
 }
 
 function renderDossierAssetPicker(deps, query = '') {
@@ -376,9 +423,9 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, deps) {
     return wrapDossierBlockEditor(type, sectionIndex, blockIndex, '', `
       <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
-      <div class="dossier-path-with-preview"><label>File path<input data-block-path list="dossierAssets" value="${esc(path)}" placeholder="media/… or assets/…"></label>${dossierPathPreview(path, deps)}</div>
+      ${pathFieldRow('File path', path, 'data-block-path placeholder="media/… or assets/…"', deps)}
       <label>Caption<input data-block-caption value="${commonCaption}"></label>
-      ${type === 'video' ? `<div class="dossier-path-with-preview"><label>Poster (optional)<input data-block-poster value="${esc(block?.poster || '')}" list="dossierAssets"></label>${dossierPathPreview(block?.poster, deps)}</div>` : ''}`);
+      ${type === 'video' ? pathFieldRow('Poster (optional)', block?.poster || '', 'data-block-poster', deps) : ''}`);
   }
   if (type === 'compare') {
     const items = block?.items?.length >= 2 ? block.items : DEFAULT_COMPARE_ITEMS();
@@ -391,7 +438,7 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, deps) {
       <label>Caption<input data-block-caption value="${commonCaption}"></label>
       <div class="dossier-compare-items" data-compare-items>${items.map((item, idx) => `<div class="dossier-compare-row" data-compare-row="${idx}">
         <label>Label<input data-compare-label value="${esc(item.label || '')}"></label>
-        <div class="dossier-path-with-preview"><label>Path<input data-compare-path list="dossierAssets" value="${esc(item.path || '')}" placeholder="assets/…"></label>${dossierPathPreview(item.path, deps)}</div>
+        ${pathFieldRow('Path', item.path || '', 'data-compare-path placeholder="assets/…"', deps)}
         <button type="button" class="btn ghost small" data-compare-remove ${items.length <= 2 ? 'disabled' : ''} title="Need at least 2 panels">×</button>
       </div>`).join('')}</div>
       <button type="button" class="btn ghost small" data-compare-add>Add panel</button>`);
@@ -406,7 +453,7 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, deps) {
         const path = typeof img === 'string' ? img : img?.path;
         const caption = typeof img === 'string' ? '' : img?.caption;
         return `<div class="dossier-gallery-row" data-carousel-row="${idx}">
-          <div class="dossier-path-with-preview"><label>Path<input data-carousel-path list="dossierAssets" value="${esc(path || '')}"></label>${dossierPathPreview(path, deps)}</div>
+          ${pathFieldRow('Path', path || '', 'data-carousel-path', deps)}
           <label>Caption<input data-carousel-caption value="${esc(caption || '')}"></label>
           <button type="button" class="btn ghost small" data-carousel-remove ${images.length <= 2 ? 'disabled' : ''}>×</button>
         </div>`;
@@ -423,7 +470,7 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, deps) {
         const path = typeof img === 'string' ? img : img?.path;
         const caption = typeof img === 'string' ? '' : img?.caption;
         return `<div class="dossier-gallery-row" data-gallery-row="${idx}">
-          <div class="dossier-path-with-preview"><label>Path<input data-gallery-path list="dossierAssets" value="${esc(path || '')}"></label>${dossierPathPreview(path, deps)}</div>
+          ${pathFieldRow('Path', path || '', 'data-gallery-path', deps)}
           <label>Caption<input data-gallery-caption value="${esc(caption || '')}"></label>
           <button type="button" class="btn ghost small" data-gallery-remove>×</button>
         </div>`;
@@ -446,7 +493,7 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, deps) {
       <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
       <p class="hint dossier-block-hint">Paragraph beside an image. Needs body or caption text plus a valid asset path.</p>
       <label>Body text<textarea rows="4" data-block-body>${esc(block?.body || block?.text || '')}</textarea></label>
-      <div class="dossier-path-with-preview"><label>Image path<input data-block-path list="dossierAssets" value="${esc(path)}" placeholder="media/… or assets/…"></label>${dossierPathPreview(path, deps)}</div>
+      ${pathFieldRow('Image path', path, 'data-block-path placeholder="media/… or assets/…"', deps)}
       <label>Caption (optional)<input data-block-caption value="${commonCaption}"></label>
       <label>Layout<select data-figure-layout><option value="stacked" ${layout === 'stacked' ? 'selected' : ''}>Stacked (text above image)</option><option value="side" ${layout === 'side' ? 'selected' : ''}>Side by side</option></select></label>`);
   }
@@ -924,29 +971,12 @@ function handleDossierMountClick(event, deps) {
     return;
   }
 
-  if (btn.matches('[data-dossier-upload-asset]')) {
+  if (btn.matches('[data-dossier-upload-asset], [data-dossier-path-upload]')) {
     event.preventDefault();
-    if (typeof deps.openAssetUploadModal !== 'function') return;
-    const { folder, subdir } = resolveDossierUploadTarget(deps);
-    deps.openAssetUploadModal({
-      folder,
-      subdir,
-      title: 'Upload image or clip',
-      onSuccess: (path) => {
-        const target = mount.querySelector('[data-dossier-last-path-target]')
-          || mount.querySelector('[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]');
-        if (target && path) {
-          target.value = path;
-          updatePathPreviewForInput(target, deps);
-        }
-        const picker = mount.querySelector('.dossier-asset-picker');
-        if (picker) {
-          const q = mount.querySelector('#dossierAssetSearch')?.value || '';
-          picker.outerHTML = renderDossierAssetPicker(deps, q);
-        }
-        persist();
-      },
-    });
+    const input = btn.matches('[data-dossier-path-upload]')
+      ? btn.closest('.dossier-path-with-preview')?.querySelector(DOSSIER_PATH_INPUT_SELECTOR)
+      : null;
+    runDossierUpload(deps, mount, persist, input);
     return;
   }
 

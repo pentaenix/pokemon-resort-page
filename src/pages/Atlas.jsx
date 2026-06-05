@@ -162,6 +162,34 @@ function IslandStage3D({ islandModelUrl }) {
   );
 }
 
+function AtlasCarousel({ items = [] }) {
+  if (!items.length) return null;
+  return (
+    <section className="atlas-carousel-section" id="atlas-carousel" aria-label="Island Atlas gallery">
+      <div className="section-intro compact">
+        <p className="eyebrow">Field captures</p>
+        <h2>Frames &amp; references</h2>
+        <p>Show stills, research grabs, and work-in-progress shots from the atlas desk.</p>
+      </div>
+      <div className="media-carousel atlas-media-carousel">
+        {items.map((item) => (
+          <figure key={item.id || item.src} className="carousel-card atlas-carousel-card">
+            {item.type === 'video' ? (
+              <video src={assetUrl(item.src)} muted loop playsInline controls={false} aria-label={item.title || item.caption} />
+            ) : (
+              <img src={assetUrl(item.src)} alt={item.title || item.caption || 'Island Atlas media'} />
+            )}
+            <figcaption>
+              {item.title ? <strong>{item.title}</strong> : null}
+              {item.caption ? <span>{item.caption}</span> : null}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function AtlasJumpLink({ sectionId, label }) {
   const href = atlasSectionHref(sectionId);
   return (
@@ -237,6 +265,7 @@ export default function Atlas({ data, query }) {
 
       <section className="atlas-jumpbar" aria-label="Atlas sections">
         <AtlasJumpLink sectionId="atlas-map" label="Cork board" />
+        <AtlasJumpLink sectionId="atlas-carousel" label="Gallery" />
         <AtlasJumpLink sectionId="atlas-3d" label="Island model" />
         <AtlasJumpLink sectionId="atlas-models" label="Outbuildings" />
       </section>
@@ -308,6 +337,8 @@ export default function Atlas({ data, query }) {
           onClose={() => setShowReferenceOpen(false)}
         />
       ) : null}
+
+      <AtlasCarousel items={atlas.map.carousel} />
 
       <section className="atlas-3d-section" id="atlas-3d">
         <div className="section-intro compact">

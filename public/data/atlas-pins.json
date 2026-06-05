@@ -14,7 +14,37 @@
       "path": "media/atlas/reference/concierge-show-map-ep6.jpg",
       "label": "From the show",
       "caption": "Pokémon Concierge, episode 6 (~6:18) — the frame our hand-traced map comes from."
-    }
+    },
+    "carousel": [
+      {
+        "id": "atlas-slide-1",
+        "title": "Back view",
+        "src": "media/atlas/carousel/VS-Netflix-PokmonConciergeE4WelcometothePokmonResort-12-10.jpg",
+        "caption": "Back photo of the island, entry to the dock",
+        "type": "image"
+      },
+      {
+        "id": "atlas-slide-92926",
+        "title": "Front view",
+        "src": "media/atlas/carousel/VS-Netflix-PokmonConciergeE7ImaRoleModelNow-10-28.jpg",
+        "caption": "Front photo of the island",
+        "type": "image"
+      },
+      {
+        "id": "atlas-slide-25541",
+        "title": "Second peak",
+        "src": "media/atlas/carousel/VS-Netflix-PokmonConciergeE4WelcometothePokmonResort-4-29.jpg",
+        "caption": "Second mountain peak seen from the main peak",
+        "type": "image"
+      },
+      {
+        "id": "atlas-slide-77136",
+        "title": "Map",
+        "src": "media/atlas/carousel/VS-Netflix-PokmonConciergeE6IsThatReallytheBestOption-6-18.jpg",
+        "caption": "Map from the show",
+        "type": "image"
+      }
+    ]
   },
   "pinColors": [
     {
@@ -34,21 +64,6 @@
     }
   ],
   "pins": [
-    {
-      "id": "pin-3",
-      "name": "Main hall",
-      "color": "red",
-      "x": 0.3747,
-      "y": 0.3841,
-      "summary": "This is a possible place for the main reception desk",
-      "linkedResearch": [],
-      "linkedFeatures": [],
-      "dossier": {
-        "overview": "",
-        "researchMilestones": [],
-        "sections": []
-      }
-    },
     {
       "id": "ferry-dock",
       "name": "Ferry Dock",
@@ -75,17 +90,24 @@
       "tilt": 20
     },
     {
-      "id": "lobby-tbd",
-      "name": "Lobby (placement TBD)",
-      "color": "red",
-      "x": 0.0476,
-      "y": 0.0797,
-      "summary": "Interior lobby from the show — exact island position still unknown; pin parked on the ocean until the layout locks.",
+      "id": "main-reception-pavilion",
+      "name": "Main Reception Pavilion",
+      "color": "blue",
+      "x": 0.3776,
+      "y": 0.3852,
+      "summary": "Open-air check-in building beside the pool, with the reception desk, lounge seating, hammocks, and access to the resort’s main paths.",
       "linkedResearch": [],
       "dossier": {
-        "overview": "We have show screenshots, floor diagrams, and interior references, but the lobby's exact footprint on the island map is not settled. This cork pin marks the research bundle until we slide it to the real building site.",
+        "overview": "The resort’s principal arrival building. Haru is led here after reaching the island. It sits beside the pool and contains the reception desk, waiting areas, colorful hanging lights, cushion seating, lounge chairs, egg chairs, and nearby hammocks. The front connects to a garden path, while the open poolside side links it to the central resort area.",
         "researchMilestones": [],
-        "sections": []
+        "sections": [
+          {
+            "id": "section-46003",
+            "title": "Research images",
+            "summary": "",
+            "blocks": []
+          }
+        ]
       },
       "linkedFeatures": [],
       "tilt": 0

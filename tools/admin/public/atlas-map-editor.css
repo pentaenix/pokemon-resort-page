@@ -1,5 +1,14 @@
 @import './atlas-map-shared.css';
 
+.atlas-map-media-panel { margin-top: 16px; padding: 16px; }
+.atlas-map-media-panel h3 { margin: 0 0 6px; font-size: 15px; }
+.atlas-map-media-ref { margin: 12px 0; }
+.atlas-carousel-admin-list { display: grid; gap: 12px; margin: 12px 0; }
+.atlas-carousel-admin-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 12px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.55); border: 1px solid rgba(14,117,146,.12); }
+.atlas-carousel-admin-preview { display: flex; align-items: center; justify-content: center; min-height: 72px; border-radius: 10px; background: rgba(14,117,146,.06); overflow: hidden; }
+.atlas-carousel-admin-thumb { width: 100%; height: 72px; object-fit: cover; display: block; }
+.atlas-carousel-admin-fields { display: grid; gap: 8px; }
+
 .atlas-map-editor-layout {
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(320px, 400px);

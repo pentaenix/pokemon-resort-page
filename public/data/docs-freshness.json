@@ -1,10 +1,10 @@
 {
-  "computedAt": "2026-06-05T02:33:10.324Z",
+  "computedAt": "2026-06-05T02:47:16.478Z",
   "articles": {
     "writing-docs": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-03",
+      "newestCodeChange": "2026-06-05",
       "apps": [
         "pokemon-resort-page"
       ],
@@ -37,7 +37,7 @@
           "repo": "pokemon-resort-page",
           "path": "package.json",
           "exists": true,
-          "modifiedAt": "2026-06-03"
+          "modifiedAt": "2026-06-05"
         }
       ]
     },

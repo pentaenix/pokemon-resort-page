@@ -1,4 +1,5 @@
 import { dossierEditorHtml, bindDossierEditor, readDossierFromDom } from './feature-dossier-editor.js';
+import { openAssetUploadModal } from './asset-upload.js';
 import { featureHasDossierContent } from './dossier-shared.js';
 import { normalizeFeatureDossierRaw } from './feature-dossier-editor.js';
 
@@ -287,6 +288,187 @@ function renderMapBoard(host, data, state, deps, handlers) {
 
 let onAddPin = null;
 
+function normalizeAtlasCarouselItem(item, index = 0) {
+  return {
+    id: String(item?.id || `atlas-slide-${index + 1}`).trim(),
+    title: String(item?.title || '').trim(),
+    src: String(item?.src || item?.path || '').trim(),
+    caption: String(item?.caption || '').trim(),
+    type: item?.type === 'video' ? 'video' : 'image',
+  };
+}
+
+function atlasCarouselRowHtml(item, index, esc) {
+  const slide = normalizeAtlasCarouselItem(item, index);
+  const preview = slide.src
+    ? `<img src="/${esc(slide.src.replace(/^\//, ''))}" alt="" loading="lazy" class="atlas-carousel-admin-thumb" />`
+    : '<span class="hint">No preview</span>';
+  return `<div class="atlas-carousel-admin-row" data-atlas-carousel-row="${index}">
+    <div class="atlas-carousel-admin-preview">${preview}</div>
+    <div class="atlas-carousel-admin-fields">
+      <div class="row"><label>ID<input data-atlas-carousel-id value="${esc(slide.id)}"></label><label>Title<input data-atlas-carousel-title value="${esc(slide.title)}"></label></div>
+      <label class="path-input-with-upload">Image path
+        <span class="dossier-path-input-row">
+          <input data-atlas-carousel-src value="${esc(slide.src)}" list="atlasCarouselAssets" placeholder="media/atlas/…">
+          <button type="button" class="btn small" data-atlas-carousel-upload>Upload</button>
+        </span>
+      </label>
+      <label>Caption<input data-atlas-carousel-caption value="${esc(slide.caption)}"></label>
+      <button type="button" class="btn ghost small" data-atlas-carousel-remove>Remove slide</button>
+    </div>
+  </div>`;
+}
+
+function atlasMapMediaPanelHtml(atlas, esc) {
+  const map = atlas.map || {};
+  const ref = map.showReference || {};
+  const carousel = Array.isArray(map.carousel) && map.carousel.length
+    ? map.carousel
+    : [{ id: 'atlas-slide-1', title: '', src: '', caption: '', type: 'image' }];
+  return `<section class="atlas-map-media-panel panel" id="atlasMapMediaHost">
+    <h3>Map carousel</h3>
+    <p class="hint">Horizontal gallery on the public Atlas page — sits under the cork board, above the 3D island model.</p>
+    <details class="atlas-map-media-ref"><summary>Show reference frame <span class="hint">(pin panel preview)</span></summary>
+      <label>Path
+        <span class="dossier-path-input-row">
+          <input data-atlas-ref-path value="${esc(ref.path || '')}" list="atlasCarouselAssets" placeholder="media/atlas/reference/…">
+          <button type="button" class="btn small" data-atlas-ref-upload>Upload</button>
+        </span>
+      </label>
+      <div class="row"><label>Label<input data-atlas-ref-label value="${esc(ref.label || '')}"></label><label>Caption<input data-atlas-ref-caption value="${esc(ref.caption || '')}"></label></div>
+    </details>
+    <div class="atlas-carousel-admin-list" data-atlas-carousel-list>${carousel.map((item, index) => atlasCarouselRowHtml(item, index, esc)).join('')}</div>
+    <button type="button" class="btn ghost small" data-atlas-carousel-add>Add carousel slide</button>
+    <datalist id="atlasCarouselAssets"></datalist>
+  </section>`;
+}
+
+function readAtlasMapMediaFromDom(deps) {
+  const host = deps.$('#atlasMapMediaHost');
+  if (!host) return null;
+  const carousel = [...host.querySelectorAll('[data-atlas-carousel-row]')].map((row, index) => ({
+    id: row.querySelector('[data-atlas-carousel-id]')?.value?.trim() || `atlas-slide-${index + 1}`,
+    title: row.querySelector('[data-atlas-carousel-title]')?.value?.trim() || '',
+    src: row.querySelector('[data-atlas-carousel-src]')?.value?.trim() || '',
+    caption: row.querySelector('[data-atlas-carousel-caption]')?.value?.trim() || '',
+    type: 'image',
+  })).filter((item) => item.src);
+  const refPath = host.querySelector('[data-atlas-ref-path]')?.value?.trim() || '';
+  const showReference = refPath ? {
+    path: refPath,
+    label: host.querySelector('[data-atlas-ref-label]')?.value?.trim() || 'From the show',
+    caption: host.querySelector('[data-atlas-ref-caption]')?.value?.trim() || '',
+  } : null;
+  return { carousel, showReference };
+}
+
+function applyAtlasMapMediaToData(state, deps) {
+  const atlas = state.data['atlas-pins.json'];
+  if (!atlas) return;
+  const media = readAtlasMapMediaFromDom(deps);
+  if (!media) return;
+  if (!atlas.map) atlas.map = {};
+  atlas.map.carousel = media.carousel;
+  if (media.showReference) atlas.map.showReference = media.showReference;
+  else delete atlas.map.showReference;
+}
+
+function refreshAtlasCarouselPreview(row) {
+  const src = row.querySelector('[data-atlas-carousel-src]')?.value?.trim();
+  const preview = row.querySelector('.atlas-carousel-admin-preview');
+  if (!preview) return;
+  preview.innerHTML = src
+    ? `<img src="/${src.replace(/^\//, '')}" alt="" loading="lazy" class="atlas-carousel-admin-thumb" />`
+    : '<span class="hint">No preview</span>';
+}
+
+function bindAtlasMapMediaPanel(state, deps) {
+  const host = deps.$('#atlasMapMediaHost');
+  if (!host) return;
+
+  const touch = () => {
+    applyAtlasMapMediaToData(state, deps);
+    deps.markDirty('atlas-pins.json');
+  };
+
+  host.querySelector('[data-atlas-carousel-add]')?.addEventListener('click', () => {
+    applyAtlasMapMediaToData(state, deps);
+    const atlas = state.data['atlas-pins.json'];
+    if (!atlas.map) atlas.map = {};
+    if (!Array.isArray(atlas.map.carousel)) atlas.map.carousel = [];
+    atlas.map.carousel.push({
+      id: `atlas-slide-${Date.now().toString().slice(-5)}`,
+      title: '',
+      src: '',
+      caption: '',
+      type: 'image',
+    });
+    deps.markDirty('atlas-pins.json');
+    renderAtlasMapMediaPanel(state, deps);
+  });
+
+  host.querySelectorAll('[data-atlas-carousel-remove]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      btn.closest('[data-atlas-carousel-row]')?.remove();
+      touch();
+      renderAtlasMapMediaPanel(state, deps);
+    });
+  });
+
+  host.querySelectorAll('[data-atlas-carousel-src]').forEach((input) => {
+    input.addEventListener('input', () => {
+      refreshAtlasCarouselPreview(input.closest('[data-atlas-carousel-row]'));
+      touch();
+    });
+  });
+
+  host.querySelectorAll('[data-atlas-carousel-id], [data-atlas-carousel-title], [data-atlas-carousel-caption], [data-atlas-ref-path], [data-atlas-ref-label], [data-atlas-ref-caption]').forEach((input) => {
+    input.addEventListener('change', touch);
+    input.addEventListener('input', touch);
+  });
+
+  const openUpload = (input, subdir = 'carousel') => {
+    if (!input) return;
+    openAssetUploadModal({
+      esc: deps.esc,
+      log: deps.log,
+      folder: 'media/atlas',
+      subdir,
+      title: 'Upload atlas image',
+      refreshAssets: deps.refreshAssets,
+      onSuccess: (path) => {
+        input.value = path;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        touch();
+      },
+    });
+  };
+
+  host.querySelectorAll('[data-atlas-carousel-upload]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = btn.closest('.dossier-path-input-row')?.querySelector('[data-atlas-carousel-src]');
+      openUpload(input, 'carousel');
+    });
+  });
+
+  host.querySelector('[data-atlas-ref-upload]')?.addEventListener('click', () => {
+    const input = host.querySelector('[data-atlas-ref-path]');
+    openUpload(input, 'reference');
+  });
+}
+
+function renderAtlasMapMediaPanel(state, deps) {
+  const host = deps.$('#atlasMapMediaHost');
+  if (!host) return;
+  const atlas = state.data['atlas-pins.json'] || {};
+  const assets = typeof deps.imageAssetOptions === 'function' ? deps.imageAssetOptions().slice(0, 200) : [];
+  host.outerHTML = atlasMapMediaPanelHtml(atlas, deps.esc).replace(
+    '<datalist id="atlasCarouselAssets"></datalist>',
+    `<datalist id="atlasCarouselAssets">${assets.map((a) => `<option value="${deps.esc(a)}">`).join('')}</datalist>`,
+  );
+  bindAtlasMapMediaPanel(state, deps);
+}
+
 export function atlasMapEditorHtml(state, esc, dossierDeps) {
   const atlas = state.data['atlas-pins.json'] || { pins: [] };
   const pins = atlas.pins || [];
@@ -313,6 +495,7 @@ export function atlasMapEditorHtml(state, esc, dossierDeps) {
     </aside>
     <div class="panel atlas-map-board-panel">
       <div id="atlasMapBoardHost"></div>
+      ${atlasMapMediaPanelHtml(atlas, esc).replace('<datalist id="atlasCarouselAssets"></datalist>', `<datalist id="atlasCarouselAssets">${(dossierDeps.imageAssetOptions?.() || []).slice(0, 200).map((a) => `<option value="${esc(a)}">`).join('')}</datalist>`)}
     </div>
     <article class="panel feature-main atlas-map-detail-panel" id="atlasPinDetailHost">${pin ? pinDetailHtml(pin, dossierDeps, atlas.pinColors) : '<p class="hint">Select or add a pin.</p>'}</article>
   </section>`;
@@ -540,6 +723,7 @@ function syncAtlasMapUI(state, deps) {
 
   renderMapBoard(boardHost, state.data, state, deps, handlers);
   bindMapBoardControls(boardHost, state, deps, handlers);
+  bindAtlasMapMediaPanel(state, deps);
 
   bindAtlasPinListHandlers(state, deps, handlers);
 }
@@ -549,6 +733,7 @@ export function bindAtlasMapEditor(state, deps) {
 
   deps.$('#saveAtlasPins')?.addEventListener('click', async () => {
     applyPinFromForm(state, deps);
+    applyAtlasMapMediaToData(state, deps);
     (state.data['atlas-pins.json'].pins || []).forEach((pin) => {
       if (pin.dossier && !featureHasDossierContent(pin, normalizeFeatureDossierRaw)) delete pin.dossier;
     });
