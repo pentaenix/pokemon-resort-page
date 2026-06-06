@@ -169,7 +169,7 @@ export default function Board({ data, query }) {
   return (
     <main>
       <PageTitle eyebrow="Resort Operations" title="Active features, internal bugs, and community issues.">
-        The operations page stays focused: what is currently moving, what is broken internally, and what the community has reported. Use the main nav for Milestones.
+        What is moving on the resort build, what is broken internally, and what came in from GitHub. Milestones live under Ideas and Milestones.
       </PageTitle>
 
       <nav className="operations-jumpbar" aria-label="Operations sections">
@@ -181,8 +181,8 @@ export default function Board({ data, query }) {
       <section className="operations-section" id="operations-board">
         <div className="section-intro compact">
           <p className="eyebrow">On-Flight Board</p>
-          <h2>What is moving right now.</h2>
-          <p>Within each column, features are ordered by priority then progress. Only the top few show until you expand — so a busy board stays scannable.</p>
+          <h2>What is moving now</h2>
+          <p>Sorted by priority, then progress. Only the first few cards show until you hit Show more.</p>
         </div>
         <section className="board-toolbar">
           <div className="segmented">{areas.map((value) => <button key={value} type="button" className={area === value ? 'active' : ''} onClick={() => setArea(value)}>{value}</button>)}</div>
@@ -237,7 +237,7 @@ export default function Board({ data, query }) {
       <section className="operations-section" id="operations-community">
         <div className="section-intro compact">
           <p className="eyebrow">Community Issues</p>
-          <h2>GitHub issue links stay separate from internal bugs.</h2>
+          <h2>GitHub issues (separate from internal bugs)</h2>
           <p>When the project is ready, public GitHub issues can be curated here and linked back to internal bugs, routes, or features.</p>
         </div>
         {communityIssues.length ? (
@@ -245,7 +245,7 @@ export default function Board({ data, query }) {
         ) : (
           <div className="empty-state">
             <h3>No community issues are currently linked.</h3>
-            <p>Internal bugs remain visible above. Add GitHub issue links from the local Operations Desk when community reports should appear publicly.</p>
+            <p>Internal bugs are above. Link a GitHub issue from the desk when you want it shown here.</p>
           </div>
         )}
       </section>

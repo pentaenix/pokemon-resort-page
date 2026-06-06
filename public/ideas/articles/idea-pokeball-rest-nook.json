@@ -1,0 +1,57 @@
+{
+  "dossier": {
+    "overview": "**Rough idea.** Not specced for build yet.\n\nSmall **rest nooks** placed around the island (not full rooms). Each nook is a compact map fixture: a few **Pokéballs on display** with sleeping Pokémon visible inside (sprite in ball). Pokémon that are resting off the public overworld can be shown here instead of abstract \"went to room\" logic.\n\nThe player can **interact with the nook** to browse who is resting and **take a Pokémon out** (exact flow TBD).\n\nMany nooks across the resort; each footprint stays **small** (a tile cluster or short wall shelf, not a building interior).",
+    "sections": [
+      {
+        "id": "intent",
+        "title": "What we think this is",
+        "summary": "Visible rest, not invisible offstage only.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Known</th><th>Not decided</th></tr></thead><tbody><tr><td>Rest happens <strong>in Pokéballs</strong>, not resort bedrooms</td><td>How many balls per nook</td></tr><tr><td>Small props, many copies on the island</td><td>Which Pokémon get assigned to which nook</td></tr><tr><td>Sleeping sprite visible inside each ball</td><td>Whether the player stores Pokémon here or only views resort guests resting</td></tr><tr><td>Interact to open a picker and release one</td><td>UI pattern (menu, dialogue, radial)</td></tr><tr><td>Footprint is modest (shelf, bench nook, wall rack)</td><td>Art variant set (beach rack, villa shelf, etc.)</td></tr></tbody></table>"
+          },
+          {
+            "type": "text",
+            "body": "Tone: cozy and readable at a glance. You walk past and see **who is napping** without opening a heavy management screen. Nooks are **set dressing plus function**, similar scale to a bench smart object, not a new map zone type."
+          }
+        ]
+      },
+      {
+        "id": "sketch",
+        "title": "Rough interaction sketch",
+        "summary": "Placeholder flow until we pick UI.",
+        "blocks": [
+          {
+            "type": "diagram",
+            "title": "Player at a rest nook",
+            "caption": "Draft only; details will change",
+            "source": "sequenceDiagram\n    participant P as Player\n    participant N as RestNook\n    participant PR as ResortData\n    P->>N: Interact\n    N->>PR: List pkrid resting here\n    N->>P: Show sleeping balls\n    P->>N: Pick one\n    N->>PR: Clear rest assign spawn on map\n    N->>P: Pokemon exits ball nearby"
+          },
+          {
+            "type": "text",
+            "body": "Open questions to answer before this leaves spark:\n\n• Does a nook show **only** Pokémon linked to that map, or any island-wide rest pool?\n• When a Pokémon rests, does it **walk here** as an activity (NPC AI) or **teleport into** a free ball slot?\n• Is taking a Pokémon out the same as **calling** them to follow, or only **waking** them onto the current map?\n• Do empty ball slots appear when nobody is resting?"
+          }
+        ]
+      },
+      {
+        "id": "links",
+        "title": "Related pins",
+        "summary": "Touches rest and overworld presence, not partner follow.",
+        "blocks": [
+          {
+            "type": "links",
+            "items": [
+              { "label": "Overworld NPC AI (offstage and rest reasons)", "href": "#/ideas?idea=idea-overworld-npc-ai" },
+              { "label": "Partner idle behaviour (separate system)", "href": "#/ideas?idea=idea-partner-idle-behaviour" }
+            ]
+          },
+          {
+            "type": "text",
+            "body": "Likely implementation shape later: a **smart object** or **smart node** type (`rest_nook`) with ball slots, rest occupancy from `PokemonPresenceRegistry`, and a simple interact menu. No C++ per nook; data-driven variants per biome."
+          }
+        ]
+      }
+    ]
+  }
+}

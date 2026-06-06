@@ -11,6 +11,8 @@ import Plan from './pages/Plan.jsx';
 import ConciergeResearch from './pages/ConciergeResearch.jsx';
 import SourceGuide from './pages/SourceGuide.jsx';
 import Docs from './pages/Docs.jsx';
+import Ideas from './pages/Ideas.jsx';
+import Milestones from './pages/Milestones.jsx';
 import Legal from './pages/Legal.jsx';
 
 const pages = {
@@ -20,6 +22,8 @@ const pages = {
   '/board': Board,
   '/milestones': Plan,
   '/plan': Plan,
+  '/ideas': Ideas,
+  '/build': Milestones,
   '/research': ConciergeResearch,
   '/concierge': ConciergeResearch,
   '/docs': Docs,
@@ -30,8 +34,7 @@ const pages = {
 function normalizeRoute(route) {
   const aliases = {
     '/issues': '/board',
-    '/roadmap': '/milestones',
-    '/ideas': '/milestones',
+    '/roadmap': '/build',
     '/gallery': '/atlas',
     '/models': '/atlas',
     '/characters': '/atlas',
@@ -71,7 +74,7 @@ function App() {
   }, []);
 
   if (error) return <div className="boot-state error"><h1>Unable to load resort data</h1><p>{error}</p></div>;
-  if (!data) return <div className="boot-state"><span className="loader" /><p>Preparing the resort…</p></div>;
+  if (!data) return <div className="boot-state"><span className="loader" /><p>Opening the resort…</p></div>;
 
   const Page = pages[route.path] || Home;
   return (

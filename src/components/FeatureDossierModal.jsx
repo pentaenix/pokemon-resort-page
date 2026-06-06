@@ -142,7 +142,7 @@ export function FeatureDossierModal({ feature, bugs = [], onClose }) {
           ))}
 
           {!dossier.overview && !dossier.sections.length && !dossier.map && !dossier.researchMilestones.length && tasksTotal === 0 && (
-            <p className="feature-dossier-empty">No research dossier content yet. Add sections, media, and notes from the Operations Desk.</p>
+            <p className="feature-dossier-empty">Empty dossier. Add sections and media from the operations desk.</p>
           )}
 
           {(linkedBugRecords.length > 0 || feature.linkedRoutes?.length > 0) && (

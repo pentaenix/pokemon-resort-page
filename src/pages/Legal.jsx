@@ -5,8 +5,8 @@ export default function Legal({ data }) {
   const site = data.site;
   return (
     <main>
-      <PageTitle eyebrow="Legal & Credits" title="Clear fan-project boundaries, repeated in plain language.">
-        This page should stay easy to find from every section of the site.
+      <PageTitle eyebrow="Legal & Credits" title="Legal and credits">
+        Same disclaimer on every page; full text is here.
       </PageTitle>
       <section className="legal-page-card">
         {site.legalFull.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}

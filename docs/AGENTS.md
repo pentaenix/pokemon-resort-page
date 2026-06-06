@@ -1,10 +1,18 @@
-# Resort Docs — guide for coding agents
+# Pokémon Resort site — guide for coding agents
 
-Read this file first, then the linked guides in **`pokemon-resort-page/`** (not the workspace root).
+Read this file first when working in **`pokemon-resort-page/`** (not the workspace root).
 
-The public Docs hub (`#/docs`) is written for human contributors — no agent/LLM wording on the site. This file and the other repo markdown guides hold the automation details.
+The public site is written for human contributors and fans — no agent/LLM wording on the page. This file and the other repo markdown guides hold automation details.
 
-## Canonical markdown files
+## UI copy (read before changing blurbs or page text)
+
+| File | When to read it |
+|------|-----------------|
+| [`docs/UI-COPY.md`](./UI-COPY.md) | **All user-facing copy**: homepage, ideas, features, pages, spotlight labels. Resort voice, no em dashes, no contractions, no LLM phrasing. |
+
+`npm run validate:data` runs **UI copy lint** on known fields and page components. See [`tools/ui-copy-lint.mjs`](../tools/ui-copy-lint.mjs).
+
+## Docs authoring
 
 | File | When to read it |
 |------|-----------------|
@@ -139,7 +147,10 @@ Renders directly under the article heading on the public site (not buried under 
 ## Do not
 
 - Put all articles in `public/docs/articles/` without a category subfolder
-- Put “LLM”, “agent”, or “AI-generated” wording in public JSON articles
+- Put “LLM”, “agent”, or “AI-generated” wording in public JSON or JSX
+- Use em dashes (—) in UI copy ([`UI-COPY.md`](./UI-COPY.md))
+- Use contractions in UI copy (write **do not**, **we will**, not don’t, we’ll)
+- Write idea/feature/homepage blurbs as marketing pitch lines (see ideas section in [`UI-COPY.md`](./UI-COPY.md))
 - Generate fake UI screenshots with AI — use `npm run docs:screenshots` ([MEDIA.md](./MEDIA.md))
 - Hotlink external images — commit under `public/media/docs/` or `public/assets/docs/`
 - Skip validation — `npm run validate:data` must pass before publish

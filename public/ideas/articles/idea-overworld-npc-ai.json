@@ -1,0 +1,435 @@
+{
+  "dossier": {
+    "overview": "**Overworld NPC AI** is the architecture for **free-roaming actors** on Resort maps: guest Pokémon, staff Pokémon, and trainer NPCs that are **not** attached to the player. Maps and smart objects publish **activity offers**; each actor runs hard filters, soft scoring, and weighted random selection. No monolithic brain, no per-species decision trees, no full life sim.\n\n**Out of scope for this idea:** partner Pokémon that follow the player, temporary follow bubbles, and Nature idle when the player stands still. Those live in the separate **Partner idle behaviour** idea and the shipped follower prototype.\n\nCore pattern: **the world offers activities; free NPCs choose from those offers** using Nature, traits, relationships, map context, and randomness. Smart objects, zones, nearby actors, staff roles, and the player publish possible activities.\n\nRuntime goal: believable personalities with **predictable, efficient** per-map simulation (hot, warm, cold tiers). Canonical dev handoff: `pokemon-resort/docs/gameplay/overworld_pokemon_architecture_handoff.md`.",
+    "sections": [
+      {
+        "id": "vision",
+        "title": "System overview",
+        "summary": "Affordance-based NPC AI: providers, offers, filter, score, execute.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Design goals:\n\n• **Feel alive, stay cheap**: only the current map is fully simulated; adjacent maps activate near connectors; unloaded maps keep snapshots.\n• **Data-driven content**: smart objects and zones are the main authoring unit; designers define offers and sequences, not C++ per object.\n• **Global animation primitives**: sprite-based Pokémon reuse walk, face, wait, jump, emote, sleep; balls and props animate as overlays.\n• **Durable identity**: `pkrid` everywhere; never box index; one Pokémon in one place at a time.\n• **Ambient offers**: not every actor should be dramatic; default stand/wander activities compete in the same selector."
+          },
+          {
+            "type": "diagram",
+            "title": "End-to-end mental model",
+            "caption": "Resort data defines who; the simulation decides what they do on a map",
+            "source": "flowchart TB\n    RD[\"Resort data pkrid species nature\"] --> PR[\"PokemonPresenceRegistry\"]\n    PR --> MAP[\"MapPokemonSimulation\"]\n    ZONES[\"Spawn zones\"] --> MAP\n    SO[\"Smart objects\"] --> MAP\n    MAP --> ACT[\"PokemonActor\"]\n    ACT --> SEL[\"Filter score pick\"]\n    SEL --> EX[\"ActivityExecutor\"]\n    MAP --> SNAP[\"MapSnapshotStore\"]\n    SNAP --> REL[\"ReloadPredictionResolver\"]\n    MEM[\"Memories and friendship\"] -.-> SEL"
+          },
+          {
+            "type": "diagram",
+            "title": "Affordance selection pipeline",
+            "caption": "Collect offers, filter, score, reserve, execute",
+            "source": "flowchart LR\n    P1[\"ActivityProviders\"] --> OFF[\"ActivityOffers\"]\n    OFF --> FIL[\"Hard filters\"]\n    FIL --> SCR[\"Soft scoring\"]\n    SCR --> WRS[\"Weighted random pick\"]\n    WRS --> RES[\"ReservationManager\"]\n    RES --> HS[\"HandshakeCoordinator\"]\n    HS --> EXEC[\"ActivityExecutor\"]"
+          }
+        ]
+      },
+      {
+        "id": "scope",
+        "title": "Actor scope",
+        "summary": "Free-roaming map actors only. Same decision pipeline for all three.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Actor</th><th>Binding</th><th>Decision loop</th></tr></thead><tbody><tr><td><strong>Guest Pokémon</strong></td><td>One map at a time via <code>pkrid</code>; migration is an explicit activity</td><td>Activity offers from zones, smart objects, nearby actors</td></tr><tr><td><strong>Staff Pokémon</strong></td><td>Job anchor zone (pool, café, garden)</td><td>Same selector; staff role provider adds work offers with higher weight</td></tr><tr><td><strong>Trainer NPC</strong></td><td>Map-authored human overworld character</td><td>Same selector; can use simple smart objects (bench sit, inspect)</td></tr></tbody></table><p><strong>Not covered here:</strong> partner follow, temporary follow, player-attached idle. See <a href=\"#/ideas?idea=idea-partner-idle-behaviour\">Partner idle behaviour</a>.</p>"
+          },
+          {
+            "type": "text",
+            "body": "All free actors share `MapPokemonSimulation`, `ActivitySelector`, and `ActivityExecutor`. **Do not** route guest or staff logic through `FollowerController`. Partner systems are player-attached; this idea is map-bound autonomy."
+          }
+        ]
+      },
+      {
+        "id": "simulation",
+        "title": "Map simulation tiers",
+        "layout": "tabs-primary",
+        "summary": "Hot, warm, and cold maps; presence states; reload prediction.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "tiers",
+                "label": "Hot / warm / cold",
+                "blocks": [
+                  {
+                    "type": "diagram",
+                    "title": "Simulation tiers",
+                    "caption": "Only hot maps update every frame; warm retains detail; cold is compact presence",
+                    "source": "flowchart TD\n    HOT[\"Hot map: full sim every frame\"] -->|player leaves| WARM[\"Warm map: snapshot retained 300s\"]\n    WARM -->|player returns soon| HOT\n    WARM -->|retention expired| COLD[\"Cold map: compact presence only\"]\n    COLD -->|reload| HOT"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Adjacent maps become hot only when the player is near a connector (entrance, edge, warp)."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/overworld/simulation_defaults.json",
+                    "language": "json",
+                    "caption": "Default map simulation tier config (target shape)",
+                    "body": "{\n  \"simulation\": {\n    \"currentMapIsHot\": true,\n    \"simulateAdjacentMapsNearConnectors\": true,\n    \"adjacentConnectorActivationDistanceTiles\": 12\n  },\n  \"warmMapRetentionSeconds\": 300,\n  \"coldMapRefreshSeconds\": 900\n}"
+                  }
+                ]
+              },
+              {
+                "id": "presence",
+                "label": "Presence states",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<p>Every free-roam Resort Pokémon has one <code>presenceState</code>. Live actors are <strong>projections</strong>; destroy on unload, rebuild from snapshot or spawn decision on load.</p><table><thead><tr><th>State</th><th>Meaning</th></tr></thead><tbody><tr><td><code>available_offstage</code></td><td>In Resort, not on a public map (room, rest, private wander)</td></tr><tr><td><code>guest_on_map</code> / <code>staff_on_map</code></td><td>Active on a specific map, running this AI loop</td></tr><tr><td><code>migrating_between_maps</code></td><td>Explicit migration activity in progress</td></tr><tr><td><code>warm_snapshot</code> / <code>cold_snapshot</code></td><td>Unloaded map memory</td></tr><tr><td><code>away_in_game</code> / <code>pending_return</code></td><td>Transfer / OpenHome presence (existing Resort model)</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "docs/gameplay/overworld_pokemon_architecture_handoff.md",
+                    "lines": "42-52",
+                    "language": "markdown",
+                    "caption": "Identity rule from current handoff",
+                    "body": "Critical identity rule: pkrid is the durable Resort identity.\nOverworld runtime state must treat live actors as projections of current Resort records, not as permanent owners of Pokemon data."
+                  }
+                ]
+              },
+              {
+                "id": "reload",
+                "label": "Reload prediction",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "When a map becomes hot again, `elapsedSeconds = now - snapshot.lastUpdatedAt` drives believable continuity."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Elapsed</th><th>Behavior</th></tr></thead><tbody><tr><td>0 to 20 s</td><td>Resume activity exactly (same ball pass, same step)</td></tr><tr><td>20 to 90 s</td><td>Predict position within activity timeline</td></tr><tr><td>90 to 180 s</td><td>Complete activity offscreen; relationship and memory hooks</td></tr><tr><td>180 to 300 s</td><td>Fast-forward to ambient placement in zone</td></tr><tr><td>300 to 900 s</td><td>Reroll activities; same Pokémon may still be on map</td></tr><tr><td>900 s or more</td><td>Population refresh allowed (swap guests, offstage moves)</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/overworld/reload_prediction.json",
+                    "language": "json",
+                    "caption": "Reload prediction thresholds (seconds)",
+                    "body": "{\n  \"mapReloadPrediction\": {\n    \"resumeExactlyMaxSeconds\": 20,\n    \"predictWithinActivityMaxSeconds\": 90,\n    \"completeActivityMaxSeconds\": 180,\n    \"fastForwardToAmbientMaxSeconds\": 300,\n    \"rerollActivitiesMaxSeconds\": 900,\n    \"allowPopulationRefreshAfterSeconds\": 900\n  }\n}"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Unload and reload",
+                    "caption": "Snapshot is compact, not per-frame animation state",
+                    "source": "sequenceDiagram\n    participant Hot as HotMap\n    participant Snap as SnapshotStore\n    participant Reg as PresenceRegistry\n    Hot->>Snap: On unload save per pkrid\n    Hot->>Reg: Update presence state\n    Note over Hot: Destroy PokemonActor\n    Snap->>Hot: On load pass elapsedSeconds\n    Hot->>Hot: ReloadPredictionResolver\n    Hot->>Hot: Resume predict complete or reroll"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "activities",
+        "title": "Activity system",
+        "layout": "tabs-primary",
+        "summary": "Offers, filters, scoring, reservations, and global primitives.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "offers",
+                "label": "Offers and providers",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "**ActivityProvider** sources: map zone, smart object, nearby Pokémon, nearby NPC, player, staff role, default self behavior, memory/favorite-place provider, migration provider.\n\nEach returns **ActivityOffer** records with `activityId`, `baseWeight`, `tags`, `requiredRoles`, `durationSeconds`, `minimumDurationSeconds`, and cooldowns."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p><strong>Main runtime components</strong> (target modules, not one file):</p><ul><li><code>PokemonPresenceRegistry</code>: one pkrid, one place</li><li><code>MapPokemonSimulation</code>: per hot map</li><li><code>PokemonActor</code>: runtime-only; no permanent memories on actor</li><li><code>ActivityFilter</code> / <code>ActivityScorer</code> / <code>ActivitySelector</code></li><li><code>ReservationManager</code> / <code>HandshakeCoordinator</code></li><li><code>ActivityExecutor</code> + <code>SmartObjectRuntime</code></li><li><code>MapSnapshotStore</code> / <code>ReloadPredictionResolver</code> / <code>MigrationPlanner</code></li></ul>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Multi-actor handshake",
+                    "caption": "Two Pokémon passing a ball must reserve roles before animating",
+                    "source": "flowchart TD\n    A[\"Initiator picks ball_two_pokemon_pass\"] --> B[\"ReservationManager checks tiles roles object\"]\n    B --> C[\"Ask candidate participant\"]\n    C --> D{\"All accept\"}\n    D -->|yes| E[\"Commit reservation and run ActivityExecutor\"]\n    D -->|no| F[\"Release all reservations retry cooldown\"]"
+                  }
+                ]
+              },
+              {
+                "id": "scoring",
+                "label": "Filtering and scoring",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "**Hard filters** remove impossible offers: object occupied, no path, wrong size, type forbidden in zone, cooldown, map at capacity.\n\n**Soft score** is clamped 0 to 100, then weighted random selection (not always the highest score). Nature and characteristic tables bias which offers win (assertive, steady, curious, composed, energetic, neutral). Characteristics like \"Takes plenty of naps\" or \"Highly curious\" are **data tables**, not hardcoded."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/overworld/activity_scoring.json",
+                    "language": "json",
+                    "caption": "Soft scoring inputs (target shape)",
+                    "body": "{\n  \"activityScoring\": {\n    \"terms\": [\n      \"baseWeight\",\n      \"natureScore\",\n      \"characteristicScore\",\n      \"speciesScore\",\n      \"friendshipScore\",\n      \"memoryScore\",\n      \"staffRoleScore\",\n      \"mapZoneScore\",\n      \"repetitionPenalty\",\n      \"randomnessJitter\"\n    ],\n    \"scoreClampMin\": 0,\n    \"scoreClampMax\": 100,\n    \"randomJitterMin\": -5,\n    \"randomJitterMax\": 5,\n    \"selection\": \"weighted_random\"\n  }\n}"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p><strong>Default ambient offers</strong> (self-provider; prevent overactivity). These are normal activities in the selector, not a separate idle system:</p><table><thead><tr><th>Activity</th><th>Base weight</th></tr></thead><tbody><tr><td><code>idle_stand</code></td><td>25</td></tr><tr><td><code>idle_look_around</code></td><td>30</td></tr><tr><td><code>wander_small_radius</code></td><td>35</td></tr><tr><td><code>idle_watch_others</code></td><td>20</td></tr><tr><td><code>idle_nap</code></td><td>15</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "lifecycle",
+                "label": "Lifecycle and timing",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>State</th><th>Notes</th></tr></thead><tbody><tr><td><code>candidate</code> → <code>reserved</code> → <code>starting</code> → <code>active</code></td><td>Minimum duration before natural end</td></tr><tr><td><code>minimum_time_reached</code> → <code>ending</code> → <code>complete</code></td><td>Or <code>cancelled</code> / <code>failed</code></td></tr></tbody></table><p>Recommended minimums: idle 2s, wander 4s, inspect 4s, nap 10s, play 8s, ball game 10s, staff work 8s.</p>"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Activities compose **global animation primitives** only. No per-species ball sprites. The **ball object** runs arc and bounce; Pokémon only face, emote, and nudge."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "docs/gameplay/overworld_pokemon_life_system.md",
+                    "language": "text",
+                    "caption": "Global animation primitives (shared across all smart objects)",
+                    "body": "walk_to\nface_direction\nface_target\nwait\njump\nhop_to_tile\nsprite_nudge_forward\nsprite_nudge_back\nemote\nsleep\nwake\ncircle_target\nreturn_to_anchor\nsoft_snap_if_needed"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "smart-objects",
+        "title": "Smart objects and zones",
+        "layout": "tabs-primary",
+        "summary": "Map objects that publish activities. The Sims is the reference model; Resort maps use the same pattern for Pokémon and trainer NPCs.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "what",
+                "label": "What is a smart object?",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "A **smart object** is a map-placed thing that **publishes activity offers** to nearby NPCs. It owns:\n\n• which activities are available (`sit`, `cook`, `play`, `inspect`, …)\n• role points (where the actor stands and faces)\n• requirements (size, type, occupancy)\n• animation sequences built from **global primitives**\n• cooldowns and completion effects\n\nThe NPC does **not** embed object logic. It queries providers, scores offers, and runs the sequence the object defines. Scenery with no offers is not a smart object."
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/The-Sims-1.webp",
+                    "caption": "The Sims 1: canonical smart-object model",
+                    "body": "In *The Sims*, the **pool** publishes *Dive* and *Swim*. The **stove** publishes *Cook*. The **bookcase** publishes *Read*. The **fish tank** publishes *Watch*. Sims (NPCs) score those offers and walk to the object; the object drives the interaction animation.\n\nResort **Overworld NPC AI** uses the same split: smart objects publish, Pokémon and trainer NPCs pick. We add map simulation tiers (hot/warm/cold) so we do not simulate every room every frame.",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Object publishes, actor executes",
+                    "caption": "Logic lives on the object, not inside PokemonActor",
+                    "source": "flowchart LR\n    OBJ[\"Smart object data\"] -->|offers| PROV[\"ActivityProvider\"]\n    ACT[\"Pokemon or trainer NPC\"] -->|query| PROV\n    ACT -->|score and pick| SEL[\"ActivitySelector\"]\n    SEL -->|reserve| RES[\"ReservationManager\"]\n    RES -->|run| EXEC[\"ActivityExecutor\"]\n    OBJ -->|overlay motion| EXEC"
+                  }
+                ]
+              },
+              {
+                "id": "simple",
+                "label": "Simple objects",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Not every smart object needs a long sequence. **Simple objects** publish one or two offers with a single role point. A **bench** tells any valid actor: you can **sit here**.\n\nBoth **trainer NPCs** (human overworld characters) and **Pokémon** can accept the same `bench_sit` offer if hard filters pass (path clear, seat free, size allowed). The bench does not care which species sits; it only exposes the affordance."
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-black-pokemon-benches.png",
+                    "caption": "Benches as simple smart objects (Pokémon Black reference)",
+                    "body": "Three benches in a park zone. In Resort authoring, each bench would be a smart object with offers such as `bench_sit` (rest, 20 to 60s) and maybe `bench_social` when two actors are nearby. Trainer NPCs standing with their Pokémon are separate actors; either could use an empty bench independently.\n\nThe fenced zone around them is a **spawn zone** (capacity, roam radius), not the bench itself.",
+                    "layout": "side"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/smart_objects/bench.json",
+                    "language": "json",
+                    "caption": "Simple bench smart object (single role, one sit offer)",
+                    "body": "{\n  \"smartObjectId\": \"bench_park_01\",\n  \"type\": \"bench\",\n  \"tags\": [\"rest\", \"sit\"],\n  \"rolePoints\": [{ \"id\": \"seat_a\", \"x\": 10, \"y\": 14, \"facing\": \"south\" }],\n  \"activities\": [\n    {\n      \"activityId\": \"bench_sit\",\n      \"roles\": [\"sitter\"],\n      \"baseWeight\": 40,\n      \"minimumDurationSeconds\": 10,\n      \"durationSeconds\": { \"min\": 20, \"max\": 60 },\n      \"allowedActors\": [\"pokemon\", \"trainer_npc\"],\n      \"sequence\": [\n        { \"action\": \"walk_to_role_point\" },\n        { \"action\": \"face_direction\" },\n        { \"action\": \"sleep\" }\n      ]\n    }\n  ]\n}"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/platinum-villa.webp",
+                    "caption": "Interior props as smart objects (Platinum villa reference)",
+                    "body": "Player villa interior from *Platinum*: kitchen counter, table, chairs, TV, piano, bookshelves, bed. In the original game most of these are scenery. In Resort they would be authored as smart objects where gameplay needs them:\n\n• **chair / sofa** → `sit`, `nap_if_allowed`\n• **bed** → `rest` (longer duration)\n• **piano / TV** → `inspect`, `idle_watch` (optional emote)\n• **kitchen counter** → staff-only `prepare_food` during work shifts\n\nSame room, same tiles; data defines which props publish offers.",
+                    "layout": "stacked"
+                  }
+                ]
+              },
+              {
+                "id": "interactive",
+                "label": "Interactive objects",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "**Interactive smart objects** run multi-step sequences and may involve overlays (balls, food) or multiple actors (two Pokémon passing a ball). The Pokémon sprite stays generic; the object handles prop motion."
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/chimchar_ball_play.gif",
+                    "caption": "Ball smart object: solo play sequence",
+                    "body": "Gen 4-style reference: Chimchar balances a ball on its head. In Resort the **ball** is the smart object. It publishes `ball_solo_bounce` with approach points and a sequence (`face_object`, `jump`, `sprite_nudge_forward`). The ball overlay handles bounce timing; Chimchar only runs global primitives.\n\nDesigner workflow: object id, tags, approach points, role points, offers, requirements, cooldowns, completion effects. No custom C++ per object.",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/smart_objects/beach_ball.json",
+                    "language": "json",
+                    "caption": "Two-Pokémon beach ball activity offer (data shape only)",
+                    "body": "{\n  \"activityId\": \"ball_two_pokemon_pass\",\n  \"roles\": [\"pokemon_a\", \"pokemon_b\"],\n  \"baseWeight\": 45,\n  \"minimumDurationSeconds\": 10,\n  \"durationSeconds\": { \"min\": 20, \"max\": 45 },\n  \"sequence\": [\n    { \"action\": \"walk_to_role_points\" },\n    { \"action\": \"face_each_other\" },\n    { \"action\": \"object_arc_between_roles\", \"repeat\": { \"min\": 3, \"max\": 8 } }\n  ],\n  \"completion\": {\n    \"relationshipGain\": 2,\n    \"memoryChance\": 0.25,\n    \"memoryType\": \"played_ball_together\"\n  }\n}"
+                  }
+                ]
+              },
+              {
+                "id": "dev-plan",
+                "label": "Development plan",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Smart objects need a **declarative lifecycle** for authoring and a **timeline projection** API for map reload. Goal: when the player enters a map, some Pokémon are already mid-activity (sitting, mid ball pass, about to stand up), not walking in from a cold spawn every time."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Hook</th><th>When it runs</th><th>Typical use</th></tr></thead><tbody><tr><td><code>onEnter</code></td><td>Activity starts; actor reached role point</td><td>Occupy slot, play latch anim, enable object overlay</td></tr><tr><td><code>onStep</code></td><td>Each sequence step begins</td><td>Ball toss, emote, sound cue</td></tr><tr><td><code>onExit</code></td><td>Activity ending (natural or forced)</td><td>Release reservations, stand up, clear overlay</td></tr><tr><td><code>onComplete</code></td><td>After <code>onExit</code> when finished normally</td><td>Friendship, memory chance, object cooldown</td></tr><tr><td><code>onCancel</code></td><td>Interrupted (player warp, handshake fail)</td><td>Safe cleanup, short retry cooldown</td></tr></tbody></table><p>Hooks are data on the activity offer, not C++ per object. <code>ActivityExecutor</code> dispatches them; the smart object definition lists which effects fire.</p>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Map reload: cold spawn vs mid-activity",
+                    "caption": "ReloadPredictionResolver picks per actor from snapshot + elapsedSeconds",
+                    "source": "flowchart TD\n    LOAD[\"Map becomes hot\"] --> ELAPSED[\"elapsedSeconds = now - snapshot.lastUpdatedAt\"]\n    ELAPSED --> HAS{\"Snapshot has active activity?\"}\n    HAS -->|no| COLD[\"Ambient spawn wander or idle offer\"]\n    HAS -->|yes| PROJ[\"SmartObjectRuntime.projectActivityElapsed\"]\n    PROJ --> PHASE{\"Projected phase\"}\n    PHASE -->|entering| ENTER[\"Skip walk-in place at enter pose\"]\n    PHASE -->|in_progress| MID[\"Join mid-sequence at step + overlay state\"]\n    PHASE -->|exiting| EXIT[\"About to leave object post-activity\"]\n    PHASE -->|complete| DONE[\"onComplete already applied offscreen\"]"
+                  },
+                  {
+                    "type": "text",
+                    "body": "**`projectActivityElapsed`** is the primary method for joining an activity already in progress after simulated time away. Called on `SmartObjectRuntime`; orchestrated by `ReloadPredictionResolver` on map load."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "docs/gameplay/overworld_pokemon_life_system.md",
+                    "language": "text",
+                    "caption": "projectActivityElapsed (API sketch)",
+                    "body": "ProjectedActivityState SmartObjectRuntime::projectActivityElapsed(\n    const ActivitySnapshot& activitySnapshot,\n    float elapsedSeconds\n);\n\n// Input: unload snapshot activity block\n//   activityId, smartObjectId, sequenceStep, startedAt,\n//   plannedDurationSeconds, participants, activitySeed\n//\n// Output: ProjectedActivityState\n//   phase: entering | in_progress | exiting | complete\n//   sequenceStep, stepProgress (0..1)\n//   role positions, facings, object overlay state\n//   skipWalkIn: true when actors snap mid-activity\n//\n// Map spawns actors directly into this state.\n// No replay of walk-to from zone spawn."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/smart_objects/beach_ball.json",
+                    "language": "json",
+                    "caption": "Activity offer with lifecycle hooks and elapsed projection flags",
+                    "body": "{\n  \"activityId\": \"ball_two_pokemon_pass\",\n  \"elapsedProjectable\": true,\n  \"sequence\": [\n    { \"action\": \"walk_to_role_points\", \"phase\": \"entering\", \"durationSeconds\": 4 },\n    { \"action\": \"face_each_other\", \"phase\": \"entering\", \"durationSeconds\": 1 },\n    { \"action\": \"object_arc_between_roles\", \"phase\": \"in_progress\", \"durationSeconds\": 3, \"repeat\": { \"min\": 3, \"max\": 8 } },\n    { \"action\": \"emote\", \"phase\": \"exiting\", \"durationSeconds\": 2 }\n  ],\n  \"lifecycle\": {\n    \"onEnter\": [\"occupy_smart_object\", \"start_ball_overlay\"],\n    \"onExit\": [\"release_roles\", \"stop_ball_overlay\"],\n    \"onComplete\": { \"relationshipGain\": 2, \"memoryChance\": 0.25 }\n  }\n}"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/overworld/map_unload_snapshot.example.json",
+                    "language": "json",
+                    "caption": "Unload snapshot: enough to project mid-activity on return",
+                    "body": "{\n  \"pkrid\": \"pkr_000123\",\n  \"mapId\": \"beach_01\",\n  \"activity\": {\n    \"activityId\": \"ball_two_pokemon_pass\",\n    \"state\": \"in_progress\",\n    \"smartObjectId\": \"beach_ball_01\",\n    \"sequenceStep\": 4,\n    \"startedAt\": 123430.0,\n    \"plannedDurationSeconds\": 28.0,\n    \"activitySeed\": 882144\n  },\n  \"lastUpdatedAt\": 123456.0\n}"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/overworld/projected_activity_state.example.json",
+                    "language": "json",
+                    "caption": "Result of projectActivityElapsed (player away 35s, activity still running)",
+                    "body": "{\n  \"phase\": \"in_progress\",\n  \"sequenceStep\": 6,\n  \"stepProgress\": 0.72,\n  \"participants\": [\n    { \"pkrid\": \"pkr_000123\", \"roleId\": \"pokemon_a\", \"position\": { \"x\": 10, \"y\": 14 }, \"facing\": \"east\" },\n    { \"pkrid\": \"pkr_000456\", \"roleId\": \"pokemon_b\", \"position\": { \"x\": 14, \"y\": 14 }, \"facing\": \"west\" }\n  ],\n  \"objectOverlay\": { \"ball\": { \"arcT\": 0.55, \"fromRole\": \"pokemon_a\", \"toRole\": \"pokemon_b\" } },\n  \"skipWalkIn\": true\n}"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p><strong>Authoring rules for elapsed projection</strong></p><ul><li>Every projectable step needs a <code>durationSeconds</code> (or derivable from repeat count) so the timeline can be walked without replaying frames.</li><li>Mark looping steps (<code>object_arc_between_roles</code>) with how many repeats fit in <code>plannedDurationSeconds</code>; <code>activitySeed</code> picks the repeat count at start so offscreen projection stays deterministic.</li><li><code>entering</code> steps are skipped on reload when <code>skipWalkIn: true</code>; actors snap to role points in pose.</li><li><code>exiting</code> phase: player may see Pokémon standing up or walking away from the bench as if activity just ended.</li><li>Activities with <code>elapsedProjectable: false</code> fall back to complete-offscreen or ambient placement after threshold.</li></ul>"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Player experience targets:\n\n• **Brief absence (under 20s):** resume exact step.\n• **Medium absence:** `projectActivityElapsed` lands in `in_progress` (mid sit, mid pass, mid inspect).\n• **Longer absence:** phase may be `exiting` or `complete`; some actors already left the object, others still winding down.\n• **Mix on one map:** not every actor projects; some cold-start ambient offers so the scene is not synchronized."
+                  }
+                ]
+              },
+              {
+                "id": "zones",
+                "label": "Zones and authoring",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Authoring unit</th><th>Purpose</th><th>Example</th></tr></thead><tbody><tr><td><strong>Smart object</strong></td><td>Publishes activities, role points, sequences</td><td>Bench, ball, pool edge, piano</td></tr><tr><td><strong>Spawn zone</strong></td><td>Who can appear, capacity, roam radius, zone tags</td><td>Pool guest zone, villa interior</td></tr><tr><td><strong>Exclusion zone</strong></td><td>Block placement and pathing</td><td>Doorways, warps, player spawn</td></tr><tr><td><strong>Smart node</strong></td><td>Lightweight POI without a full object mesh</td><td><code>look_at_ocean</code>, <code>sit_at_pool_edge</code></td></tr></tbody></table><p>Future owmap or sidecar metadata extension; not in owmap v1 today. See <code>owmap-format</code> docs and handoff map spawn contract gap.</p>"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Common Resort smart object types to author: `ball`, `pool`, `chair`, `bench`, `toy`, `food_bowl`, `garden_patch`, `stage`, `fountain`, `photo_spot`, `training_dummy`, `beach_umbrella`, `staff_counter`."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "memories",
+        "title": "Memories, friendship, migration",
+        "summary": "Curated tokens, not an event log; purposeful map moves.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "**Memories** are curated tokens (`played_ball_together`, `napped_near_friend`, `received_photo`, …) with participants, mapId, smartObjectId, importance, tone. Photo gifts can link to a treasured memory for interaction flavor without speech.\n\n**Friendship graph** keyed by `pkrid` biases spawn-together and social scoring; it does not force behavior.\n\n**Migration** is an explicit activity (go_to_friend, go_to_favorite_place, wander_to_nearby_map), capacity-aware, max hops configurable. If the player does not follow and the Pokémon is 2+ maps away, offscreen complete or offstage chance applies."
+          },
+          {
+            "type": "diagram",
+            "title": "Player approach flow",
+            "caption": "At most one Pokémon approaching the player at once; opt-out required",
+            "source": "flowchart LR\n    SEE[\"Player nearby\"] --> SCORE[\"Score approach offer\"]\n    SCORE --> SLOT[\"Reserve interaction slot\"]\n    SLOT --> APP[\"Walk and emote\"]\n    APP --> WAIT{\"Player responds\"}\n    WAIT -->|yes| INT[\"Dialogue or minigame\"]\n    WAIT -->|timeout| LEAVE[\"Return to wander\"]"
+          }
+        ]
+      },
+      {
+        "id": "phases",
+        "title": "Development phases",
+        "summary": "Six phases for free-roam NPC decision architecture. Reservations before multi-actor play.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Phase</th><th>Build</th><th>Success criterion</th></tr></thead><tbody><tr><td><strong>1</strong></td><td>Presence registry, spawn zones, guest actors, unload/reload snapshots, ambient wander offers</td><td>Free Pokémon appear from Resort data and survive map transitions</td></tr><tr><td><strong>2</strong></td><td>Activity offers, filters, scoring, Nature/characteristic tables</td><td>Different actors pick different activities on the same map</td></tr><tr><td><strong>3</strong></td><td>Smart objects, solo sequences, global primitives</td><td>Chairs, balls, pool edges, toys work</td></tr><tr><td><strong>4</strong></td><td>Reservations, handshakes, multi-actor activities</td><td>Ball pass without desync</td></tr><tr><td><strong>5</strong></td><td>Map graph, migration, offstage</td><td>Purposeful leave and later believable arrival</td></tr><tr><td><strong>6</strong></td><td>Friendship, memory tokens, photo gifts</td><td>Meaningful events bias future offers</td></tr></tbody></table>"
+          },
+          {
+            "type": "diagram",
+            "title": "Phase dependency",
+            "caption": "Linear build order for free-roam NPC AI",
+            "source": "flowchart LR\n    P1[\"Phase 1 presence\"] --> P2[\"Phase 2 selector\"]\n    P2 --> P3[\"Phase 3 smart objects\"]\n    P3 --> P4[\"Phase 4 handshakes\"]\n    P4 --> P5[\"Phase 5 migration\"]\n    P5 --> P6[\"Phase 6 memories\"]"
+          }
+        ]
+      },
+      {
+        "id": "guardrails",
+        "title": "Guardrails and related docs",
+        "summary": "Non-negotiable boundaries from architecture review.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<ul><li>Do <strong>not</strong> build one giant Pokémon controller.</li><li>Do <strong>not</strong> put smart object logic inside Pokémon actors.</li><li>Do <strong>not</strong> simulate unloaded maps every frame.</li><li>Do <strong>not</strong> let live actors own permanent Resort data.</li><li>Do <strong>not</strong> require species-specific animations for shared activities.</li><li>Do <strong>not</strong> use box slots as identity.</li><li>Do <strong>not</strong> allow one pkrid in two maps at once.</li><li>Do <strong>not</strong> let every Pokémon approach the player at once.</li><li>Do <strong>not</strong> make migration random noise; it must feel purposeful.</li><li>Do <strong>not</strong> store memories as a raw event log.</li><li>Do <strong>not</strong> end activities instantly unless cancelled.</li></ul>"
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "Overworld Pokémon spawn (who appears where)", "href": "#/ideas?idea=idea-overworld-pokemon-spawn" },
+              { "label": "Partner idle behaviour (separate idea)", "href": "#/ideas?idea=idea-partner-idle-behaviour" },
+              { "label": "owmap format (terrain and map metadata today)", "href": "#/docs?article=owmap-format" },
+              { "label": "charbin schema (character sprites on maps)", "href": "#/docs?article=charbin-schema" }
+            ]
+          },
+          {
+            "type": "text",
+            "body": "In-repo targets for implementation docs:\n\n• `pokemon-resort/docs/gameplay/overworld_pokemon_life_system.md` (full architecture draft)\n• `pokemon-resort/docs/gameplay/overworld_pokemon_architecture_handoff.md` (current code boundaries)\n\nStaging folder for behaviour captures: `public/media/npc-behaviour/` (gifs, sprites, screenshots)."
+          }
+        ]
+      }
+    ]
+  }
+}

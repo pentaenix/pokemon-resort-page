@@ -6,6 +6,7 @@ This guide is for humans and coding agents adding articles to the **Resort Docs*
 
 | Also read | Purpose |
 |-----------|---------|
+| [`docs/UI-COPY.md`](./UI-COPY.md) | Public UI voice (homepage, ideas, hub card summaries) |
 | [`docs/AGENTS.md`](./AGENTS.md) | Agent checklist & file index |
 | [`docs/TEMPLATE.md`](./TEMPLATE.md) | Article skeleton, `code` + `tabs` |
 | [`docs/MEDIA.md`](./MEDIA.md) | Playwright screenshots (no AI) |

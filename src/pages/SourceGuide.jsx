@@ -14,8 +14,8 @@ const tree = `pokemon-resort/
 export default function SourceGuide() {
   return (
     <main>
-      <PageTitle eyebrow="Source Code Guide" title="The public page stays static; the local tool edits the data.">
-        There are no download links here. This page explains how the source is structured and where your real media resources belong.
+      <PageTitle eyebrow="Source Code Guide" title="Static site, local desk for edits">
+        No downloads here. How the repo is laid out and where media files go.
       </PageTitle>
       <section className="source-layout">
         <article className="source-card"><h2>Repo structure</h2><pre>{tree}</pre></article>

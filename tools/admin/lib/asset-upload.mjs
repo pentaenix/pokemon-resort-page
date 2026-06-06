@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, basename, extname } from 'node:path';
 
@@ -54,12 +54,40 @@ export function resolveUploadDirectory(publicRoot, folder, subdir = '') {
   return join(publicRoot, ...parts, ...extra);
 }
 
+async function walkBasename(dir, targetBasename, baseRel = '') {
+  if (!existsSync(dir)) return null;
+  const entries = await readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const rel = baseRel ? `${baseRel}/${entry.name}` : entry.name;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const found = await walkBasename(full, targetBasename, rel);
+      if (found) return found;
+      continue;
+    }
+    if (basename(entry.name).toLowerCase() === targetBasename) return rel;
+  }
+  return null;
+}
+
+/** Find an existing asset anywhere under public/media or public/assets by filename. */
+export async function findExistingAssetByBasename(publicRoot, filename) {
+  const safeName = sanitizeUploadFilename(filename);
+  const targetBasename = basename(safeName).toLowerCase();
+  for (const root of ['media', 'assets']) {
+    const found = await walkBasename(join(publicRoot, root), targetBasename, root);
+    if (found) return found;
+  }
+  return null;
+}
+
 /**
  * @param {string} publicRoot
  * @param {string} folder
  * @param {string} filename
  * @param {Buffer} bytes
  * @param {string} [subdir]
+ * @returns {Promise<{ path: string, deduped: boolean }>}
  */
 export async function saveUploadedAsset(publicRoot, folder, filename, bytes, subdir = '') {
   const safeName = sanitizeUploadFilename(filename);
@@ -70,18 +98,20 @@ export async function saveUploadedAsset(publicRoot, folder, filename, bytes, sub
   if (!bytes?.length) throw new Error('Empty upload.');
   if (bytes.length > 50_000_000) throw new Error('File too large (max 50 MB).');
 
-  const dir = resolveUploadDirectory(publicRoot, folder, subdir);
-  let targetName = safeName;
-  let full = join(dir, targetName);
-  if (existsSync(full)) {
-    const stem = targetName.slice(0, targetName.length - ext.length);
-    targetName = `${stem}-${Date.now().toString().slice(-6)}${ext}`;
-    full = join(dir, targetName);
+  const existing = await findExistingAssetByBasename(publicRoot, safeName);
+  if (existing) {
+    return { path: existing, deduped: true };
   }
+
+  const dir = resolveUploadDirectory(publicRoot, folder, subdir);
+  const full = join(dir, safeName);
   await mkdir(dir, { recursive: true });
   await writeFile(full, bytes);
 
   const relParts = String(folder).replace(/\\/g, '/').split('/').filter(Boolean);
   const extra = String(subdir || '').replace(/\\/g, '/').split('/').filter(Boolean);
-  return [...relParts, ...extra, targetName].join('/');
+  return {
+    path: [...relParts, ...extra, safeName].join('/'),
+    deduped: false,
+  };
 }

@@ -141,6 +141,8 @@ public/data/roadmap.json           vertical milestone roadmap
 public/data/ideas.json             idea board
 ```
 
+User-facing blurbs and page chrome follow **`docs/UI-COPY.md`** (resort voice, no em dashes, no contractions). `npm run validate:data` runs UI copy lint on these fields.
+
 ## Media folders
 
 Real media lives under `public/media`. The site is already wired for box art, screenshots, renders, diagrams, GIFs, video, and GLB models. See `RESOURCE-TO-ADD.md` for the full list and exact target paths.

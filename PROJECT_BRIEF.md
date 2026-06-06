@@ -8,6 +8,17 @@ Build a beautiful resort-themed public portal that feels like a polished tropica
 
 The public site is not a blog and not a comments platform. It is a curated, data-driven display of research, game progress, compatibility status, internal bugs, curated community issue links, milestone timeline items, models, sprites, and media.
 
+## UI copy (agents)
+
+All public blurbs and page chrome follow **`docs/UI-COPY.md`**:
+
+- Resort desk theme (cork board, concierge, on-flight) without generic marketing tone.
+- No em dashes in UI strings.
+- No contractions in UI strings.
+- Idea card summaries in `public/data/ideas.json` must state the idea plainly in one or two sentences.
+
+`npm run validate:data` enforces UI copy lint via `tools/ui-copy-lint.mjs`.
+
 ## Core principles
 
 1. Keep the public app static and safe for GitHub Pages.

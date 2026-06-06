@@ -58,9 +58,9 @@ export default function ConciergeResearch({ data }) {
     <main className="concierge-research-page">
       <PageTitle
         eyebrow="Concierge Research"
-        title="Everything we learn about the series — not just map pins."
+        title="Research beyond the map pins"
       >
-        Characters, Pokémon, locations, mechanics, and lore notes curated for the resort project. Cork pins on the Island Atlas mark where each topic lives on the 2D map.
+        Notes on characters, Pokémon, locations, and mechanics for this resort build. When we know where something sits on the island, it gets a cork pin on the atlas.
       </PageTitle>
 
       <div className="concierge-research-actions">

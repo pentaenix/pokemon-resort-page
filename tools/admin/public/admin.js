@@ -27,11 +27,12 @@ const state = {
   github: { status: null, issues: [], state: 'open', loading: false, error: '' },
   featureFilter: 'active',
   featureSearch: '',
-  workshopPanes: { features: true, research: false, ideas: false },
+  workshopPanes: { features: true, research: false },
   docArticles: {},
+  ideaArticles: {},
 };
 const files = { compatibility:'compatibility.json', bugs:'bugs.json', features:'features.json', research:'research.json', atlasPins:'atlas-pins.json', theme:'theme.json', homepage:'homepage.json', gallery:'gallery.json', models:'models.json', characters:'characters.json', roadmap:'roadmap.json', ideas:'ideas.json', docs:'docs.json' };
-const tabs = ['Dashboard','Compatibility','Bugs','Workshop','Island Atlas','Map Editor','Milestones','Docs','Game Library','Media Library','Models','Characters','Design Lab','Publish'];
+const tabs = ['Dashboard','Compatibility','Bugs','Workshop','Island Atlas','Map Editor','Milestones','Ideas','Docs','Game Library','Media Library','Models','Characters','Design Lab','Publish'];
 const RESEARCH_CATEGORIES = ['Location', 'Character', 'Pokémon', 'Species', 'Mechanic', 'Region', 'Timeline', 'Asset', 'Other'];
 const $ = (sel) => document.querySelector(sel);
 const esc = (value='') => String(value).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -112,6 +113,7 @@ async function boot() {
   const payload = await api('/api/data');
   state.data = payload.files || payload;
   state.docArticles = payload.docArticles || {};
+  state.ideaArticles = payload.ideaArticles || {};
   state.assets = (await api('/api/assets')).assets;
   renderTabs();
   render();
@@ -182,10 +184,16 @@ function bindSaveCompatibilityButtons() {
     };
   });
 }
+function logValidationWarnings(result, label) {
+  if (result?.validationOk !== false) return;
+  log(result.validationWarning || `${label}: validation warnings`, 'warn');
+  if (result.validation) log(result.validation, 'warn');
+}
 async function saveFile(file, data) {
   const result = await api('/api/save', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ file, data }) });
   state.dirty.delete(file);
-  toast(`Saved ${file} — ${(result.validation || 'validated').replace(/\n/g, ' ')}`);
+  logValidationWarnings(result, `Saved ${file}`);
+  toast(result.validationOk === false ? `Saved ${file}. Validation warnings (see log).` : `Saved ${file}. Validated.`);
 }
 function dashboard() {
   const routes = state.data['compatibility.json'].routes;
@@ -241,7 +249,6 @@ function captureWorkshopPaneState() {
 function workshopPaneBodyHtml(paneKey) {
   if (paneKey === 'features') return workshopFeaturesPane();
   if (paneKey === 'research') return workshopResearchPane();
-  if (paneKey === 'ideas') return workshopIdeasPane();
   return '';
 }
 function renderWorkshopPaneBody(paneKey) {
@@ -262,7 +269,6 @@ function unmountWorkshopPaneBody(paneKey) {
 function persistWorkshopPaneDraft(paneKey) {
   if (paneKey === 'features') applyFeatureFromForm();
   else if (paneKey === 'research') applyResearchFromForm();
-  else if (paneKey === 'ideas') applyIdeaFromForm();
 }
 function workshopPane(title, hint, bodyHtml, paneKey) {
   const open = Boolean(state.workshopPanes?.[paneKey]);
@@ -275,7 +281,6 @@ function updateWorkshopSaveHints() {
   const map = [
     ['features', files.features, 'Save features'],
     ['research', files.research, 'Save research'],
-    ['ideas', files.ideas, 'Save ideas'],
   ];
   map.forEach(([key, file, label]) => {
     const pane = document.querySelector(`[data-workshop-pane="${key}"]`);
@@ -288,7 +293,6 @@ function updateWorkshopSaveHints() {
   const dirtyNote = [
     state.dirty.has(files.features) && 'features',
     state.dirty.has(files.research) && 'research',
-    state.dirty.has(files.ideas) && 'ideas',
   ].filter(Boolean);
   const toolbarHint = document.querySelector('.workshop-toolbar .feature-unsaved, .workshop-toolbar .feature-disk-ok');
   if (toolbarHint) {
@@ -654,9 +658,17 @@ function researchDossierConfig() {
     open: true,
   };
 }
-function getSelectedIdea() {
+function getSelectedIdeaMeta() {
   const items = state.data['ideas.json']?.items || [];
-  return items.find((i) => i.id === state.selected.idea) || null;
+  const slug = state.selected.idea || items[0]?.slug || items[0]?.id;
+  state.selected.idea = slug;
+  return items.find((i) => i.slug === slug || i.id === slug) || items[0];
+}
+function getIdeaEditorRecord(meta) {
+  if (!meta) return null;
+  const slug = meta.slug || meta.id;
+  const stored = state.ideaArticles[slug] || { dossier: { overview: '', sections: [] } };
+  return { ...meta, dossier: clone(stored.dossier || { overview: '', sections: [] }) };
 }
 function getSelectedMilestone() {
   const milestones = state.data['roadmap.json']?.milestones || [];
@@ -673,12 +685,14 @@ function poiDossierConfig() {
   };
 }
 function ideaDossierConfig() {
+  const meta = getSelectedIdeaMeta();
   return {
-    title: 'Idea brief',
-    hint: 'Extended write-up for the public Ideas section (Ideas & Milestones tab).',
+    title: 'Idea body',
+    hint: 'Rich sections for the public Ideas page. Saved to public/ideas/articles/{slug}.json. Use a tabs-primary section for top-level tabs.',
     showMap: false,
     showResearchMilestones: false,
     uploadFolder: 'media/ideas',
+    uploadSubdir: meta?.slug || meta?.id || '',
     open: true,
   };
 }
@@ -2058,95 +2072,161 @@ function bindAtlasPoisDesk() {
   bindAtlasPoiList();
   bindPoiDetail();
 }
+function ideaListHtml(items, selectedSlug) {
+  return `<div class="list feature-list">${items.length ? items.map((item) => {
+    const slug = item.slug || item.id;
+    return `<button type="button" class="${selectedSlug === slug ? 'active' : ''}" data-idea-slug="${esc(slug)}"><strong>${esc(item.title)}</strong><span class="feature-list-meta">${esc(item.status)} · ${esc(slug)}</span></button>`;
+  }).join('') : '<p class="hint feature-list-empty">No ideas yet.</p>'}</div>`;
+}
 function applyIdeaFromForm() {
-  const idea = getSelectedIdea();
-  if (!idea) return null;
+  const meta = getSelectedIdeaMeta();
+  if (!meta) return null;
   const d = formData('[data-form="idea"]');
-  const dossier = readDossierFromDom($, { mountSelector: '#ideaDossierMount' });
-  Object.assign(idea, {
-    id: (d.id || idea.id).trim(),
-    title: d.title ?? idea.title,
-    status: d.status ?? idea.status,
-    summary: d.summary ?? idea.summary,
+  const slug = (d.slug || meta.slug || meta.id).trim();
+  Object.assign(meta, {
+    id: (d.id || meta.id).trim(),
+    slug,
+    title: d.title ?? meta.title,
+    status: d.status ?? meta.status,
+    summary: d.summary ?? meta.summary,
     tags: csv(d.tags),
-    ...(dossier !== null ? { dossier } : {}),
+    updatedAt: d.updatedAt ?? meta.updatedAt,
+    heroImage: {
+      path: (d.heroPath || meta.heroImage?.path || '').trim(),
+      caption: (d.heroCaption || meta.heroImage?.caption || '').trim(),
+    },
   });
-  state.selected.idea = idea.id;
+  const dossier = readDossierFromDom($, { mountSelector: '#ideaDossierMount' });
+  state.ideaArticles[slug] = { dossier: dossier || { overview: '', sections: [] } };
+  state.selected.idea = slug;
   markDirty(files.ideas);
-  return idea;
+  return meta;
+}
+function ideaDetailHtml(record) {
+  const hasDossier = featureHasDossierContent(record, normalizeFeatureDossierRaw);
+  const hero = record.heroImage || {};
+  return `<div class="feature-detail">
+    <div class="feature-detail-badges">
+      <span class="badge">${esc(record.slug || record.id)}</span>
+      <span class="badge">${esc(record.status)}</span>
+      ${hasDossier ? '<span class="badge record-detail-dossier">Body</span>' : ''}
+    </div>
+    <div class="form" data-form="idea">
+      <label class="feature-title-field">Title<input name="title" value="${esc(record.title)}"></label>
+      <div class="row"><label>ID<input name="id" value="${esc(record.id)}"></label><label>Slug<input name="slug" value="${esc(record.slug || record.id)}"></label></div>
+      <div class="row"><label>Status<input name="status" value="${esc(record.status)}" placeholder="spark, promising, …"></label><label>Updated<input name="updatedAt" value="${esc(record.updatedAt || '')}" placeholder="2026-05-27"></label></div>
+      <label>Tags<input name="tags" value="${esc((record.tags || []).join(', '))}"></label>
+      <label>Card summary<textarea name="summary" rows="3">${esc(record.summary)}</textarea></label>
+      <div class="row">${pathInputWithUploadHtml({ label: 'Hero image path', inputHtml: `<input name="heroPath" value="${esc(hero.path || '')}">`, uploadFolder: 'media/ideas', uploadSubdir: record.slug || record.id || '' })}<label>Hero caption<input name="heroCaption" value="${esc(hero.caption || '')}"></label></div>
+      <p class="hint">Public URL: <code>#/ideas?idea=${esc(record.slug || record.id)}</code></p>
+      <div id="ideaDossierMount">${dossierEditorHtml(record, featureDossierDeps(), ideaDossierConfig())}</div>
+    </div>
+  </div>`;
+}
+function syncIdeasUI({ detailOnly = false } = {}) {
+  const items = state.data['ideas.json']?.items || [];
+  const meta = getSelectedIdeaMeta();
+  const record = getIdeaEditorRecord(meta);
+  const listHost = $('#ideaListHost');
+  if (listHost) {
+    listHost.innerHTML = ideaListHtml(items, meta?.slug || meta?.id);
+    bindIdeaList();
+  }
+  const detailHost = $('#ideaDetailHost');
+  if (detailHost && !detailOnly) {
+    detailHost.innerHTML = record ? ideaDetailHtml(record) : '<p class="hint">Select or create an idea.</p>';
+    bindIdeaDetail();
+  }
+}
+function bindIdeaList() {
+  $('#ideaListHost')?.querySelectorAll('[data-idea-slug]').forEach((btn) => {
+    btn.onclick = () => {
+      applyIdeaFromForm();
+      state.selected.idea = btn.dataset.ideaSlug;
+      syncIdeasUI();
+    };
+  });
 }
 function bindIdeaDetail() {
-  const form = document.querySelector('[data-form="idea"]');
-  if (!form) return;
-  const onFieldChange = () => {
-    applyIdeaFromForm();
-    updateWorkshopSaveHints();
-  };
-  form.querySelectorAll('input, select, textarea').forEach((field) => {
-    field.onchange = onFieldChange;
-  });
-  const mount = document.querySelector('#ideaDossierMount');
+  const mount = $('#ideaDossierMount');
   if (mount) {
     delete mount.dataset.dossierBound;
     bindDossierEditor({
       ...featureDossierDeps(),
       mountSelector: '#ideaDossierMount',
       renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, ideaDossierConfig()),
-      getRecord: getSelectedIdea,
-      onDirty: () => {
-        markDirty(files.ideas);
-        updateWorkshopSaveHints();
-      },
+      getRecord: () => getIdeaEditorRecord(getSelectedIdeaMeta()),
+      onDirty: () => markDirty(files.ideas),
     });
   }
 }
-function syncWorkshopIdeasUI({ detailOnly = false } = {}) {
-  const items = state.data['ideas.json'].items || [];
-  if (!state.selected.idea || !items.find((i) => i.id === state.selected.idea)) {
-    state.selected.idea = items[0]?.id || null;
+async function saveIdeasToDisk() {
+  applyIdeaFromForm();
+  const items = state.data['ideas.json']?.items || [];
+  for (const item of items) {
+    const slug = item.slug || item.id;
+    const body = state.ideaArticles[slug];
+    if (!body) continue;
+    const articleResult = await api('/api/ideas/save-article', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug, data: body }),
+    });
+    logValidationWarnings(articleResult, `Idea article ${slug}`);
   }
-  const idea = getSelectedIdea();
-  const listHost = $('#ideaListHost');
-  if (listHost) {
-    listHost.innerHTML = workshopPickerList('idea', items, state.selected.idea, (i) => i.title, (i) => `${i.status} · ${i.id}`);
-    bindWorkshopIdeaList();
-  }
-  const detailHost = $('#ideaDetailHost');
-  if (detailHost && !detailOnly) {
-    detailHost.innerHTML = idea ? ideaDetailHtml(idea) : '<p class="hint">Select an idea.</p>';
-    bindIdeaDetail();
-  }
-  updateWorkshopSaveHints();
+  await saveFile(files.ideas, state.data['ideas.json']);
+  log('Written ideas.json and article files.', 'ok');
+  syncIdeasUI({ detailOnly: true });
 }
 function bindIdeasDesk() {
+  bindIdeaList();
+  bindIdeaDetail();
   const saveBtn = $('#saveIdeas');
-  if (saveBtn) saveBtn.onclick = async () => {
-    applyIdeaFromForm();
-    (state.data['ideas.json'].items || []).forEach(pruneRecordDossier);
-    await saveFile(files.ideas, state.data['ideas.json']);
-    log('Written to public/data/ideas.json.', 'ok');
-    updateWorkshopSaveHints();
-  };
+  if (saveBtn) saveBtn.onclick = () => saveIdeasToDisk().catch((e) => log(e.message, 'error'));
   const newBtn = $('#newIdea');
   if (newBtn) newBtn.onclick = () => {
     applyIdeaFromForm();
-    const ideas = state.data['ideas.json'];
-    if (!ideas.items) ideas.items = [];
+    const slug = `idea-${Date.now().toString().slice(-5)}`;
+    const today = new Date().toISOString().slice(0, 10);
     const item = {
-      id: `idea-${Date.now().toString().slice(-5)}`,
+      id: slug,
+      slug,
       title: 'New idea',
       status: 'spark',
-      summary: 'Describe the idea.',
+      summary: 'One-line summary for the ideas hub card.',
       tags: [],
+      updatedAt: today,
     };
-    ideas.items.unshift(item);
-    state.selected.idea = item.id;
-    state.workshopPanes.ideas = true;
+    state.data['ideas.json'].items.unshift(item);
+    state.ideaArticles[slug] = { dossier: { overview: '', sections: [] } };
+    state.selected.idea = slug;
     markDirty(files.ideas);
-    openWorkshopPane('ideas');
-    syncWorkshopIdeasUI();
-    log(`Created ${item.id}. Save ideas when ready.`, 'ok');
+    syncIdeasUI();
+    log(`Created ${slug}. Save ideas when ready.`, 'ok');
   };
+}
+function ideasEditor() {
+  const manifest = state.data['ideas.json'] || { items: [] };
+  const items = manifest.items || [];
+  const meta = getSelectedIdeaMeta();
+  const record = getIdeaEditorRecord(meta);
+  const dirty = state.dirty.has(files.ideas);
+  return `<section class="toolbar feature-toolbar">
+    <div><h2>Ideas</h2><p>Extended sparks for <strong>#/ideas</strong>. Index in <code>ideas.json</code>; bodies in <code>public/ideas/articles/{slug}.json</code>.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
+  </section>
+  <section class="panel feature-desk">
+    <div class="feature-action-bar">
+      <div class="feature-action-buttons">
+        <button type="button" class="btn" id="saveIdeas">Save ideas</button>
+        <button type="button" class="btn ghost" id="newIdea">New idea</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <div class="feature-layout">
+      <aside class="panel feature-sidebar"><div id="ideaListHost">${ideaListHtml(items, meta?.slug || meta?.id)}</div></aside>
+      <article class="panel feature-main" id="ideaDetailHost">${record ? ideaDetailHtml(record) : '<p class="hint">Select or create an idea.</p>'}</article>
+    </div>
+  </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
 }
 function resolveSelectedMilestoneId(milestones, data) {
   if (state.selected.milestone && milestones.find((m) => m.id === state.selected.milestone)) {
@@ -2329,11 +2409,12 @@ async function saveDocsToDisk() {
   for (const article of articles) {
     const body = state.docArticles[article.slug];
     if (!body) continue;
-    await api('/api/docs/save-article', {
+    const articleResult = await api('/api/docs/save-article', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug: article.slug, data: body }),
     });
+    logValidationWarnings(articleResult, `Doc article ${article.slug}`);
   }
   await saveFile(files.docs, state.data['docs.json']);
   log('Written docs.json and article files.', 'ok');
@@ -2392,21 +2473,6 @@ function bindWorkshopResearchList() {
     };
   });
 }
-function bindWorkshopIdeaList() {
-  const root = document.querySelector('[data-workshop-pane="ideas"]');
-  if (!root) return;
-  root.querySelectorAll('[data-workshop-kind="idea"]').forEach((btn) => {
-    btn.onclick = (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      applyIdeaFromForm();
-      state.selected.idea = btn.dataset.id;
-      openWorkshopPane('ideas');
-      syncWorkshopIdeasUI();
-      document.querySelector('[data-workshop-pane="ideas"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    };
-  });
-}
 function bindWorkshopPaneToggles() {
   document.querySelectorAll('[data-workshop-pane]').forEach((el) => {
     if (el.dataset.workshopPaneBound === '1') return;
@@ -2431,15 +2497,11 @@ function bindWorkshopPaneSection(paneKey) {
     bindResearchDesk();
     bindResearchDetail();
     bindWorkshopResearchList();
-  } else if (paneKey === 'ideas') {
-    bindIdeasDesk();
-    bindIdeaDetail();
-    bindWorkshopIdeaList();
   }
 }
 function bindWorkshopDesk() {
   bindWorkshopPaneToggles();
-  ['features', 'research', 'ideas'].forEach((paneKey) => {
+  ['features', 'research'].forEach((paneKey) => {
     const pane = document.querySelector(`[data-workshop-pane="${paneKey}"]`);
     if (pane?.open && pane.querySelector('.workshop-pane-body')) bindWorkshopPaneSection(paneKey);
   });
@@ -2619,16 +2681,14 @@ function atlasPoisEditor() {
 function workshop() {
   const featuresDirty = state.dirty.has(files.features);
   const researchDirty = state.dirty.has(files.research);
-  const ideasDirty = state.dirty.has(files.ideas);
-  const dirtyNote = [featuresDirty && 'features', researchDirty && 'research', ideasDirty && 'ideas'].filter(Boolean);
+  const dirtyNote = [featuresDirty && 'features', researchDirty && 'research'].filter(Boolean);
   return `<section class="toolbar feature-toolbar workshop-toolbar">
-    <div><h2>Workshop</h2><p>Features, concierge research entries (any topic), and ideas. Cork map pins are edited under <strong>Island Atlas</strong>.</p>
+    <div><h2>Workshop</h2><p>Features and concierge research entries. Extended ideas live under the <strong>Ideas</strong> tab; cork map pins under <strong>Island Atlas</strong>.</p>
     ${dirtyNote.length ? `<p class="hint feature-unsaved"><strong>Unsaved:</strong> ${dirtyNote.join(', ')}</p>` : '<p class="hint feature-disk-ok">All workshop files in sync with disk.</p>'}</div>
   </section>
   <section class="panel workshop-page">
     ${workshopPane('Features', 'On-flight board cards + dossier modals', workshopFeaturesPane(), 'features')}
     ${workshopPane('Research', 'Characters, Pokémon, locations, mechanics — Concierge Research', workshopResearchPane(), 'research')}
-    ${workshopPane('Ideas', 'Sparks for Ideas &amp; Milestones on the public site', workshopIdeasPane(), 'ideas')}
   </section>`;
 }
 function poiDetailHtml(poi) {
@@ -2783,43 +2843,6 @@ function milestoneDetailHtml(item, data) {
     </div>
   </div>`;
 }
-function workshopIdeasPane() {
-  const items = state.data['ideas.json'].items || [];
-  const id = state.selected.idea || items[0]?.id;
-  state.selected.idea = id;
-  const item = items.find((i) => i.id === id) || items[0];
-  const dirty = state.dirty.has(files.ideas);
-  return `<div class="workshop-pane-inner feature-desk">
-    <div class="feature-action-bar workshop-action-bar">
-      <div class="feature-action-buttons">
-        <button type="button" class="btn" id="saveIdeas">Save ideas</button>
-        <button type="button" class="btn ghost" id="newIdea">New idea</button>
-      </div>
-      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
-    </div>
-    <div class="feature-layout workshop-layout">
-      <aside class="panel feature-sidebar workshop-sidebar"><div id="ideaListHost">${workshopPickerList('idea', items, id, (i) => i.title, (i) => `${i.status} · ${i.id}`)}</div></aside>
-      <article class="panel feature-main workshop-main" id="ideaDetailHost">${item ? ideaDetailHtml(item) : '<p class="hint">Select an idea.</p>'}</article>
-    </div>
-  </div>`;
-}
-function ideaDetailHtml(item) {
-  const hasDossier = featureHasDossierContent(item, normalizeFeatureDossierRaw);
-  return `<div class="feature-detail">
-    <div class="feature-detail-badges">
-      <span class="badge">${esc(item.id)}</span>
-      <span class="badge">${esc(item.status)}</span>
-      ${hasDossier ? '<span class="badge record-detail-dossier">Brief</span>' : ''}
-    </div>
-    <div class="form" data-form="idea">
-      <label class="feature-title-field">Title<input name="title" value="${esc(item.title)}"></label>
-      <div class="row"><label>ID<input name="id" value="${esc(item.id)}"></label><label>Status<input name="status" value="${esc(item.status)}"></label></div>
-      <label>Tags<input name="tags" value="${esc((item.tags || []).join(', '))}"></label>
-      <label>Card summary<textarea name="summary" rows="3">${esc(item.summary)}</textarea></label>
-      <div id="ideaDossierMount">${dossierEditorHtml(item, featureDossierDeps(), ideaDossierConfig())}</div>
-    </div>
-  </div>`;
-}
 function docsEditor() {
   const manifest = state.data['docs.json'] || { categories: [], articles: [] };
   const articles = manifest.articles || [];
@@ -2888,7 +2911,7 @@ async function render() {
   const app = $('#app');
   if (state.tab === 'Box Art') state.tab = 'Game Library';
   if (state.tab === 'Community Issues') state.tab = 'Bugs';
-  if (['Features', 'Research', 'Ideas'].includes(state.tab)) state.tab = 'Workshop';
+  if (['Features', 'Research'].includes(state.tab)) state.tab = 'Workshop';
   if (document.querySelector('[data-workshop-pane]')) captureWorkshopPaneState();
   if (state.tab === 'Game Library' && !state.boxart) {
     try { await refreshBoxartStatus(); } catch (e) {
@@ -2909,7 +2932,7 @@ async function render() {
     document.body.classList.remove('map-editor-active');
     document.body.classList.remove('atlas-map-active');
   }
-  app.innerHTML = ({ Dashboard:dashboard, Compatibility:compatibility, Bugs:bugsEditor, Workshop:workshop, 'Island Atlas':() => atlasMapEditorHtml(state, esc, featureDossierDeps()), 'Map Editor':() => mapEditorHtml(state, esc), Milestones:milestonesEditor, Docs:docsEditor, 'Game Library':gameLibrary, 'Media Library':mediaLibrary, Models:modelsEditor, Characters:charactersEditor, 'Design Lab':designLab, Publish:publish }[state.tab] || dashboard)();
+  app.innerHTML = ({ Dashboard:dashboard, Compatibility:compatibility, Bugs:bugsEditor, Workshop:workshop, 'Island Atlas':() => atlasMapEditorHtml(state, esc, featureDossierDeps()), 'Map Editor':() => mapEditorHtml(state, esc), Milestones:milestonesEditor, Ideas:ideasEditor, Docs:docsEditor, 'Game Library':gameLibrary, 'Media Library':mediaLibrary, Models:modelsEditor, Characters:charactersEditor, 'Design Lab':designLab, Publish:publish }[state.tab] || dashboard)();
   bind();
 }
 async function runBatchBoxartFetch({ force = false, label = 'Batch fetch' } = {}) {
@@ -3019,6 +3042,7 @@ function bind() {
   }
   if (state.tab === 'Map Editor') bindMapEditor(state, { api, log, esc, render });
   if (state.tab === 'Milestones') bindMilestonesDesk();
+  if (state.tab === 'Ideas') bindIdeasDesk();
   if (state.tab === 'Docs') bindDocsDesk();
   const saveGames = $('#saveGames'); if (saveGames) saveGames.onclick = () => { updateGame(); saveFile(files.compatibility, state.data['compatibility.json']); };
   const saveDesign = $('#saveDesign'); if (saveDesign) saveDesign.onclick = () => { updateDesign(); Promise.all([saveFile(files.theme, state.data['theme.json']), saveFile(files.homepage, state.data['homepage.json'])]); };

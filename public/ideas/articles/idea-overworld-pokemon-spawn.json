@@ -1,0 +1,310 @@
+{
+  "dossier": {
+    "overview": "**Overworld Pokémon spawn** answers only: which Pokémon appears, where, when, and how consistently.\n\n**Weighted natural spawning:** maps define tags, capacity, type affinities, and no-spawn zones; the resolver picks candidates and tiles. No fixed \"Bulbasaur at tile 12,8\" for normal guests.\n\n**Out of scope:** roaming behavior, smart objects, activities, dialogue, partner follow, staff job loops. Those systems consume spawned actors later. See **Overworld NPC AI** for decision architecture after spawn.\n\nInputs are game-native only: typing, Nature, Characteristic, size/weight class, availability, player placement assignment. Do not hand-author per-species favorite places.",
+    "sections": [
+      {
+        "id": "philosophy",
+        "title": "Purpose and scope",
+        "summary": "Spawn owns population and placement. Not behavior.",
+        "blocks": [
+          {
+            "type": "diagram",
+            "title": "Spawn pipeline",
+            "caption": "Designers author constraints; the system picks Pokémon and tiles",
+            "source": "flowchart TD\n    AVAIL[\"Available Resort Pokemon\"] --> PROFILE[\"Map spawn profile\"]\n    PROFILE --> SNAP{\"Warm snapshot?\"}\n    SNAP -->|yes| RESTORE[\"Restore continuity\"]\n    SNAP -->|no| SCORE[\"Score candidates\"]\n    RESTORE --> SCORE\n    SCORE --> FILL[\"Fill capacity priority order\"]\n    FILL --> TILES[\"Score valid tiles\"]\n    TILES --> PICK[\"Weighted random tile\"]\n    PICK --> SAVE[\"Presence and spawn snapshot\"]"
+          },
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>This system owns</th><th>Not owned here</th></tr></thead><tbody><tr><td>Map population selection, eligibility, timing, scoring</td><td>Roaming, smart objects, minigames</td></tr><tr><td>Tile placement, no-spawn zones, capacity</td><td>Friendship activities, dialogue</td></tr><tr><td>Player map assignment, offstage visibility</td><td>Partner follow, staff job behavior</td></tr><tr><td>Warm/cold reload continuity, spawn snapshots</td><td>Multi-Pokemon interaction logic</td></tr></tbody></table>"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "config/gameplay/spawn/pokemon_spawn_snapshot.example.json",
+            "language": "json",
+            "caption": "Gameplay-facing spawn candidate snapshot (per pkrid)",
+            "body": "{\n  \"pkrid\": \"pkr_000123\",\n  \"speciesId\": 152,\n  \"speciesName\": \"Chikorita\",\n  \"formId\": \"normal\",\n  \"primaryType\": \"Grass\",\n  \"secondaryType\": null,\n  \"nature\": \"Gentle\",\n  \"characteristic\": \"Likes to relax\",\n  \"heightClass\": \"small\",\n  \"weightClass\": \"light\",\n  \"availability\": \"available_in_resort\",\n  \"presenceState\": \"available_offstage\"\n}"
+          }
+        ]
+      },
+      {
+        "id": "natures",
+        "title": "Natures",
+        "layout": "tabs-primary",
+        "summary": "25 game Natures in six spawn groups. Missing Nature = no modifier.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "nature-groups",
+                "label": "Spawn groups",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<p>Most Natures raise one stat and lower another; five are neutral. For spawn, map tags apply <strong>group</strong> modifiers (not per-Nature tiles).</p><table><thead><tr><th>Nature group</th><th>Natures</th><th>Spawn tendency</th></tr></thead><tbody><tr><td><code>assertive</code></td><td>Lonely, Brave, Adamant, Naughty</td><td>Open areas, training-like areas, visible edges, less passive areas</td></tr><tr><td><code>steady</code></td><td>Bold, Relaxed, Impish, Lax</td><td>Rest areas, quiet areas, shade, familiar zones</td></tr><tr><td><code>curious</code></td><td>Modest, Mild, Quiet, Rash</td><td>POI-dense maps, gardens, shops, unusual areas</td></tr><tr><td><code>composed</code></td><td>Calm, Gentle, Sassy, Careful</td><td>Scenic areas, calm public spaces, organized maps</td></tr><tr><td><code>energetic</code></td><td>Timid, Hasty, Jolly, Naive</td><td>Paths, beaches, plazas, play-friendly maps, active spaces</td></tr><tr><td><code>neutral</code></td><td>Hardy, Docile, Serious, Bashful, Quirky</td><td>Balanced / default</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/spawn/nature_group_affinity.example.json",
+                    "language": "json",
+                    "caption": "Map tag to Nature group modifiers (clamp -25 to +25)",
+                    "body": "{\n  \"natureGroupAffinityByMapTag\": {\n    \"play_area\": {\n      \"energetic\": 18, \"assertive\": 8, \"curious\": 6,\n      \"steady\": -8, \"composed\": -4, \"neutral\": 0\n    },\n    \"rest_area\": {\n      \"steady\": 18, \"composed\": 10, \"neutral\": 4,\n      \"curious\": -2, \"assertive\": -6, \"energetic\": -12\n    },\n    \"scenic\": {\n      \"composed\": 18, \"curious\": 8, \"steady\": 8,\n      \"neutral\": 4, \"assertive\": -4, \"energetic\": -6\n    }\n  },\n  \"natureAffinityClamp\": { \"min\": -25, \"max\": 25 }\n}"
+                  }
+                ]
+              },
+              {
+                "id": "nature-full",
+                "label": "Full list (25)",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Valid Nature strings for spawn parsing. Invalid or missing Nature: Pokémon may still spawn with zero Nature affinity."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/spawn/valid_natures.json",
+                    "language": "json",
+                    "caption": "All 25 Natures and their spawn group",
+                    "body": "{\n  \"natures\": [\n    { \"name\": \"Hardy\", \"group\": \"neutral\" },\n    { \"name\": \"Lonely\", \"group\": \"assertive\" },\n    { \"name\": \"Brave\", \"group\": \"assertive\" },\n    { \"name\": \"Adamant\", \"group\": \"assertive\" },\n    { \"name\": \"Naughty\", \"group\": \"assertive\" },\n    { \"name\": \"Bold\", \"group\": \"steady\" },\n    { \"name\": \"Docile\", \"group\": \"neutral\" },\n    { \"name\": \"Relaxed\", \"group\": \"steady\" },\n    { \"name\": \"Impish\", \"group\": \"steady\" },\n    { \"name\": \"Lax\", \"group\": \"steady\" },\n    { \"name\": \"Timid\", \"group\": \"energetic\" },\n    { \"name\": \"Hasty\", \"group\": \"energetic\" },\n    { \"name\": \"Serious\", \"group\": \"neutral\" },\n    { \"name\": \"Jolly\", \"group\": \"energetic\" },\n    { \"name\": \"Naive\", \"group\": \"energetic\" },\n    { \"name\": \"Modest\", \"group\": \"curious\" },\n    { \"name\": \"Mild\", \"group\": \"curious\" },\n    { \"name\": \"Quiet\", \"group\": \"curious\" },\n    { \"name\": \"Bashful\", \"group\": \"neutral\" },\n    { \"name\": \"Rash\", \"group\": \"curious\" },\n    { \"name\": \"Calm\", \"group\": \"composed\" },\n    { \"name\": \"Gentle\", \"group\": \"composed\" },\n    { \"name\": \"Sassy\", \"group\": \"composed\" },\n    { \"name\": \"Careful\", \"group\": \"composed\" },\n    { \"name\": \"Quirky\", \"group\": \"neutral\" }\n  ]\n}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "characteristics",
+        "title": "Characteristics",
+        "layout": "tabs-primary",
+        "summary": "30 fixed in-game phrases (IV-derived). Flavor bias, weaker than typing.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Characteristic is the summary phrase (\"Likes to run\", \"Highly curious\"). Parser should accept known aliases from older games. Contribution tiers: strong +15 to +30, medium +5 to +15, minor -5 to +8."
+          },
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "char-hp",
+                "label": "HP",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Characteristic</th><th>Spawn use</th></tr></thead><tbody><tr><td>Loves to eat</td><td>Food, café, berry maps; relaxed public areas</td></tr><tr><td>Takes plenty of siestas</td><td>Rest, shade, evening/night; lower morning priority</td></tr><tr><td>Nods off a lot</td><td>Rest/quiet areas; lower busy-map priority</td></tr><tr><td>Scatters things often</td><td>Busy/playful/object-dense maps; mild chaos flavor</td></tr><tr><td>Likes to relax</td><td>Rest, scenic, garden, shade, quiet maps</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "char-atk",
+                "label": "Attack",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Characteristic</th><th>Spawn use</th></tr></thead><tbody><tr><td>Proud of its power</td><td>Open/training-like maps</td></tr><tr><td>Likes to thrash about</td><td>Active/open maps; less quiet areas</td></tr><tr><td>A little quick tempered</td><td>Open maps; less crowded calm maps</td></tr><tr><td>Likes to fight</td><td>Training-like/open active maps</td></tr><tr><td>Quick tempered</td><td>Training-like/open maps; lower rest-area fit</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "char-def",
+                "label": "Defense",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Characteristic</th><th>Spawn use</th></tr></thead><tbody><tr><td>Sturdy body</td><td>Rocky, stable, work-like, outdoor maps</td></tr><tr><td>Capable of taking hits</td><td>Training-like, outdoor, sturdy areas</td></tr><tr><td>Highly persistent</td><td>Larger maps, routine-friendly areas</td></tr><tr><td>Good endurance</td><td>Paths, large maps, patrol-friendly spaces</td></tr><tr><td>Good perseverance</td><td>Stable, familiar, work-like areas</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "char-spe",
+                "label": "Speed",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Characteristic</th><th>Spawn use</th></tr></thead><tbody><tr><td>Likes to run</td><td>Paths, beaches, plazas, large maps</td></tr><tr><td>Alert to sounds</td><td>Busy areas, plaza edges, near-but-not-on entrances</td></tr><tr><td>Impetuous and silly</td><td>Playful/social/open maps</td></tr><tr><td>Somewhat of a clown</td><td>Public/social/performance-like maps</td></tr><tr><td>Quick to flee</td><td>Quiet edges; lower crowding; near safe exits but not blocking them</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "char-spa",
+                "label": "Sp. Atk",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Characteristic</th><th>Spawn use</th></tr></thead><tbody><tr><td>Highly curious</td><td>POI-dense maps, shops, gardens, unusual sections</td></tr><tr><td>Mischievous</td><td>Object-dense, playful, social maps</td></tr><tr><td>Thoroughly cunning</td><td>Quiet observation spaces, puzzle-like/interesting maps</td></tr><tr><td>Often lost in thought</td><td>Scenic, quiet, water-edge, garden areas</td></tr><tr><td>Very finicky</td><td>Clean/scenic/high-quality areas; lower random noisy placement</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "char-spd",
+                "label": "Sp. Def",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Characteristic</th><th>Spawn use</th></tr></thead><tbody><tr><td>Strong willed</td><td>Anchored, organized, training-like, staff-like areas</td></tr><tr><td>Somewhat vain</td><td>Scenic areas, photo spots, public plazas</td></tr><tr><td>Strongly defiant</td><td>Training-like/open edge positions</td></tr><tr><td>Hates to lose</td><td>Active/play/training-like maps</td></tr><tr><td>Somewhat stubborn</td><td>Familiar/resident maps; lower random relocation</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "char-time",
+                "label": "Time affinity",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Time block</th><th>Hours</th></tr></thead><tbody><tr><td><code>dawn</code></td><td>05:00 to 07:00</td></tr><tr><td><code>morning</code></td><td>07:00 to 11:00</td></tr><tr><td><code>midday</code></td><td>11:00 to 15:00</td></tr><tr><td><code>evening</code></td><td>15:00 to 19:00</td></tr><tr><td><code>night</code></td><td>19:00 to 23:00</td></tr><tr><td><code>late_night</code></td><td>23:00 to 05:00</td></tr></tbody></table><p>Late night means more offstage/rest, not an empty resort.</p>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/spawn/characteristic_time_affinity.example.json",
+                    "language": "json",
+                    "caption": "Characteristic spawn modifiers by time block",
+                    "body": "{\n  \"characteristicTimeAffinity\": {\n    \"Takes plenty of siestas\": {\n      \"dawn\": -15, \"morning\": -25, \"midday\": 10,\n      \"evening\": 10, \"night\": 15, \"late_night\": -20\n    },\n    \"Nods off a lot\": {\n      \"dawn\": -10, \"morning\": -20, \"midday\": 5,\n      \"evening\": 5, \"night\": 10, \"late_night\": -25\n    },\n    \"Likes to relax\": {\n      \"dawn\": 5, \"morning\": -5, \"midday\": 10,\n      \"evening\": 15, \"night\": 10, \"late_night\": -10\n    },\n    \"Likes to run\": {\n      \"dawn\": 10, \"morning\": 20, \"midday\": 15,\n      \"evening\": 10, \"night\": -5, \"late_night\": -25\n    },\n    \"Highly curious\": {\n      \"dawn\": 0, \"morning\": 10, \"midday\": 15,\n      \"evening\": 15, \"night\": 5, \"late_night\": -10\n    }\n  }\n}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "maps",
+        "title": "Map authoring and placement",
+        "layout": "tabs-primary",
+        "summary": "Constraints and zones, not fixed guest pins.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "profile",
+                "label": "Spawn profile",
+                "blocks": [
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/spawn/maps/garden_01.spawn.json",
+                    "language": "json",
+                    "caption": "Map spawn profile (tags, capacity, type affinity)",
+                    "body": "{\n  \"mapId\": \"garden_01\",\n  \"spawnProfile\": {\n    \"tags\": [\"garden\", \"grass\", \"flowers\", \"quiet\", \"scenic\", \"rest_area\"],\n    \"capacity\": {\n      \"guestMax\": 10,\n      \"minimumVisiblePokemon\": 2,\n      \"assignedReserveSlots\": 3\n    },\n    \"preferredTypes\": {\n      \"Grass\": 35, \"Bug\": 20, \"Fairy\": 15, \"Poison\": 8\n    },\n    \"discouragedTypes\": {\n      \"Fire\": -8, \"Rock\": -5\n    }\n  }\n}"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p><strong>Exact spawn policy</strong></p><ul><li><strong>Normal guests:</strong> weighted natural placement only.</li><li><strong>Player residents:</strong> map/section anchor; tile still varies.</li><li><strong>Staff/story:</strong> may use exact authored anchors (exceptions).</li></ul><p>Dual-type affinity: <code>primary + secondary * 0.75</code>. Water typing raises beach/pool map score; placement stays on valid land/edge tiles (never spawn in water by default).</p>"
+                  }
+                ]
+              },
+              {
+                "id": "zones",
+                "label": "No-spawn and soft-avoid",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<p><strong>Hard no-spawn</strong> (never relax): collision, structures, walls, warps, doors, player spawn, cutscene/battle triggers, smart-object entrances and role points, one-tile chokes, occupied tiles, too close to player on load.</p><table><thead><tr><th>Rule</th><th>Default tiles</th></tr></thead><tbody><tr><td>Min distance from player on load</td><td>8</td></tr><tr><td>Min distance from map entry</td><td>5</td></tr><tr><td>Min distance from building door</td><td>4</td></tr><tr><td>Min distance from warp</td><td>4</td></tr><tr><td>Min distance from smart-object entrance</td><td>3</td></tr><tr><td>Min distance between Pokémon</td><td>3</td></tr></tbody></table><p>If the map is small, relax Pokémon spacing first. Never relax collision, warp, structure, or player tile.</p><p><strong>Soft-avoid</strong> (score penalty only): main paths, near-door buffers, connectors, camera-critical tiles, crowding. Pokémon can still appear on paths sometimes.</p>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/spawn/placement_rules.json",
+                    "language": "json",
+                    "caption": "Hard distances and soft penalties",
+                    "body": "{\n  \"hardPlacementRules\": {\n    \"minDistanceFromPlayerOnMapLoadTiles\": 8,\n    \"minDistanceFromMapEntryTiles\": 5,\n    \"minDistanceFromBuildingDoorTiles\": 4,\n    \"minDistanceFromWarpTiles\": 4,\n    \"minDistanceFromSmartObjectEntranceTiles\": 3,\n    \"minDistanceBetweenPokemonTiles\": 3,\n    \"neverSpawnOnWaterByDefault\": true\n  },\n  \"softPlacementPenalties\": {\n    \"mainPath\": -20,\n    \"nearEntranceBuffer\": -35,\n    \"nearOtherPokemon\": -15,\n    \"cameraCritical\": -25,\n    \"highTraffic\": -20\n  }\n}"
+                  }
+                ]
+              },
+              {
+                "id": "tile-score",
+                "label": "Tile selection",
+                "blocks": [
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "docs/gameplay/overworld_pokemon_spawn.md",
+                    "language": "text",
+                    "caption": "Tile score formula (after Pokémon selected for map)",
+                    "body": "tileScore =\n  baseTileScore\n  + sectionAffinity\n  + mapTagAffinity\n  + typeTileAffinity\n  + natureTileAffinity\n  + characteristicTileAffinity\n  + playerAssignmentSectionBonus\n  + spacingBonus\n  - softAvoidPenalty\n  - crowdingPenalty\n  - playerProximityPenalty\n\nclamp 0..100, then weighted-random pick tile"
+                  },
+                  {
+                    "type": "text",
+                    "body": "**Placement fallback order:** relax distance from other Pokémon, then soft-avoid, then player distance (never below 3 tiles), try another section, skip Pokémon if impossible, try another candidate if below minimum population. Never relax collision, warp, door, structure, occupied tile, player tile, or hard no-spawn zones."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "scoring",
+        "title": "Spawn scoring and fill order",
+        "summary": "Who appears on the map, in what priority.",
+        "blocks": [
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "docs/gameplay/overworld_pokemon_spawn.md",
+            "language": "text",
+            "caption": "Pokémon spawn score formula",
+            "body": "spawnScore =\n  baseAvailability\n  + typeAffinity\n  + natureGroupAffinity\n  + characteristicAffinity\n  + characteristicTimeAffinity\n  + playerAssignmentBonus\n  + friendAlreadySelectedBonus\n  + spawnDebtBonus\n  - recentSpawnPenalty\n  - offstageRestPenalty\n  - overcrowdingPenalty\n\nclamp 0..100, weighted random (not always max)"
+          },
+          {
+            "type": "html",
+            "html": "<p><strong>Population fill order</strong></p><ol><li>Restore warm-map Pokémon if continuity requires</li><li>Required exact-anchor Pokémon (special cases)</li><li>Player <code>always_present</code> assignments</li><li>Player <code>resident</code> assignments (reserve slots)</li><li>Player <code>soft</code> assignments if they score well</li><li>Fill remaining capacity with natural weighted candidates</li><li>Minimum population fallback</li><li>Save presence records</li></ol><table><thead><tr><th>Placement type</th><th>Meaning</th><th>Spawn bonus</th></tr></thead><tbody><tr><td><code>soft</code></td><td>Player suggested this area</td><td>+30</td></tr><tr><td><code>resident</code></td><td>Usually on this map/section</td><td>+60</td></tr><tr><td><code>always_present</code></td><td>Find here whenever available</td><td>+100</td></tr></tbody></table>"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "config/gameplay/spawn/player_placement.example.json",
+            "language": "json",
+            "caption": "Player placement assignment (not a favorite place)",
+            "body": "{\n  \"pkrid\": \"pkr_000123\",\n  \"placement\": {\n    \"mapId\": \"garden_01\",\n    \"sectionId\": \"flower_field\",\n    \"placementType\": \"resident\"\n  }\n}"
+          },
+          {
+            "type": "html",
+            "html": "<p><strong>Spawn timing:</strong> pass on map load, cold reload, time block change (if map not hot), population refresh, assignment change, return from away. <strong>Not</strong> every frame, not in front of the player on hot visible maps (stage offscreen/edge entry).</p><table><thead><tr><th>Away time</th><th>Spawn result</th></tr></thead><tbody><tr><td>0 to 20 s</td><td>Preserve exact population and positions</td></tr><tr><td>20 to 90 s</td><td>Same Pokémon, small placement correction</td></tr><tr><td>90 s to 5 min</td><td>Same population likely, positions refreshed nearby</td></tr><tr><td>5 to 15 min</td><td>Partial preserve, some reroll</td></tr><tr><td>15 min or more</td><td>Full population refresh allowed</td></tr></tbody></table><p><strong>Offstage minimum durations</strong> (reduces spawn score until elapsed): resting 10 min, in_room 15 min, private_wander 8 min, late_night_rest until next time block, population_refresh 15 min, recently_visible_cooldown 5 min.</p><p><strong>Spawn debt:</strong> +5 per missed eligible refresh, max +25. <strong>Recent spawn penalty:</strong> -20 within 900 s (reduced for assigned residents).</p>"
+          }
+        ]
+      },
+      {
+        "id": "config",
+        "title": "Config and acceptance",
+        "summary": "Recommended defaults and pass criteria.",
+        "blocks": [
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "config/gameplay/spawn/overworld_pokemon_spawning.json",
+            "language": "json",
+            "caption": "Recommended overworldPokemonSpawning config shape",
+            "body": "{\n  \"overworldPokemonSpawning\": {\n    \"enabled\": true,\n    \"timeBlocks\": {\n      \"dawn\": [\"05:00\", \"07:00\"],\n      \"morning\": [\"07:00\", \"11:00\"],\n      \"midday\": [\"11:00\", \"15:00\"],\n      \"evening\": [\"15:00\", \"19:00\"],\n      \"night\": [\"19:00\", \"23:00\"],\n      \"late_night\": [\"23:00\", \"05:00\"]\n    },\n    \"spawnScoring\": {\n      \"baseAvailability\": 35,\n      \"minScore\": 0,\n      \"maxScore\": 100,\n      \"secondaryTypeWeight\": 0.75,\n      \"weightedRandomSelection\": true\n    },\n    \"spawnDebt\": {\n      \"enabled\": true,\n      \"bonusPerMissedEligibleRefresh\": 5,\n      \"maxBonus\": 25,\n      \"resetOnSpawn\": true\n    },\n    \"recentSpawnPenalty\": {\n      \"enabled\": true,\n      \"penalty\": -20,\n      \"recentWindowSeconds\": 900\n    },\n    \"spawnContinuity\": {\n      \"preserveExactMaxSeconds\": 20,\n      \"preservePopulationMaxSeconds\": 90,\n      \"preserveLikelyPopulationMaxSeconds\": 300,\n      \"partialRefreshMaxSeconds\": 900,\n      \"fullRefreshAfterSeconds\": 900\n    },\n    \"minimumPopulation\": {\n      \"minimumVisiblePokemonPerPublicMap\": 1,\n      \"minimumMapPopulationOverridesLowPreference\": true\n    }\n  }\n}"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "config/gameplay/spawn/map_unload_spawn_snapshot.example.json",
+            "language": "json",
+            "caption": "Spawn snapshot on map unload (not behavior state)",
+            "body": "{\n  \"mapId\": \"garden_01\",\n  \"lastUnloadedAt\": 123456.0,\n  \"spawnSnapshot\": {\n    \"pokemon\": [\n      {\n        \"pkrid\": \"pkr_000123\",\n        \"presenceState\": \"guest_on_map\",\n        \"position\": { \"x\": 18, \"y\": 12 },\n        \"facing\": \"south\",\n        \"sectionId\": \"flower_field\",\n        \"spawnReason\": \"resident_assignment\",\n        \"spawnSeed\": 88422\n      }\n    ]\n  }\n}"
+          },
+          {
+            "type": "html",
+            "html": "<p><strong>Acceptance criteria</strong></p><ul><li>No spawn on invalid tiles, doors, warps, or player spawn</li><li>Typing strongly influences map fit; Nature moderate; Characteristic light to moderate plus time</li><li>Resident assignment and reserve slots protect player choices</li><li>Sleepy Pokémon deprioritized in busy morning when alternatives exist; still spawn if map would be empty</li><li>Brief leave preserves population; long absence allows refresh</li><li>Normal guests use natural tiles, not designer pins</li><li>Seeded randomness: mapId, timeBlock, resortDay, pkrid, spawnRefreshIndex</li></ul>"
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "Overworld NPC AI (behavior after spawn)", "href": "#/ideas?idea=idea-overworld-npc-ai" },
+              { "label": "Pokéball rest nook (offstage rest visibility)", "href": "#/ideas?idea=idea-pokeball-rest-nook" },
+              { "label": "Pokémon Natures (reference)", "href": "https://pokemondb.net/mechanics/natures" },
+              { "label": "Characteristics (Bulbapedia)", "href": "https://bulbapedia.bulbagarden.net/wiki/Characteristic" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

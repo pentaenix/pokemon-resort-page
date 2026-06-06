@@ -1,0 +1,29 @@
+---
+description: Public site UI copy — resort voice, no em dashes, no LLM phrasing
+globs: pokemon-resort-page/public/data/**/*.json,pokemon-resort-page/src/pages/**/*.{jsx,js},pokemon-resort-page/src/components/Layout.jsx,pokemon-resort-page/src/lib/resortSpotlight.js,pokemon-resort-page/src/lib/milestoneEras.js,pokemon-resort-page/src/main.jsx
+alwaysApply: false
+---
+
+# Resort UI copy
+
+Before editing user-facing strings, read `docs/UI-COPY.md` in this app.
+
+## Must follow
+
+- **Resort desk theme** (cork board, concierge, on-flight, docs desk) without marketing poetry.
+- **No em dashes (—)** in UI copy. Use a comma, period, or parentheses.
+- **No contractions** in UI copy: do not, we will, it is (not don't, we'll, it's).
+- **Plain and specific**: counts, pin colors, episode refs, file paths. Not “curated”, “cozy”, “scannable”, “ritual”, “collectible-feeling”.
+- **Ideas** (`public/data/ideas.json`): card `summary` is one or two sentences; say what the idea does, not a pitch line.
+
+## Where strings live
+
+Prefer `public/data/*.json` for blurbs. JSX is for structure labels only (`PageTitle`, empty states).
+
+## Check
+
+```bash
+npm run validate:data
+```
+
+UI copy lint runs with data validation. Fix em-dash and banned-phrase failures before commit.

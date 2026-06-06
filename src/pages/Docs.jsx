@@ -427,7 +427,7 @@ export default function Docs({ data, query }) {
           eyebrow="Technical documentation"
           title="Resort Docs"
         >
-          Formats, systems, and tooling across the monorepo — searchable by topic, category, and app.
+          Formats, systems, and tooling in this repo. Search by topic, category, or app.
         </PageTitle>
       )}
 

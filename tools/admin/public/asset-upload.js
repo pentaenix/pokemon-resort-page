@@ -135,7 +135,7 @@ export function openAssetUploadModal(opts) {
       if (typeof refreshAssets === 'function' && payload.assets) {
         await refreshAssets(payload.assets);
       }
-      log(`Uploaded ${payload.path}`, 'ok');
+      log(payload.deduped ? `Linked existing ${payload.path}` : `Uploaded ${payload.path}`, 'ok');
       if (typeof onSuccess === 'function') await onSuccess(payload.path);
       close();
     } catch (error) {

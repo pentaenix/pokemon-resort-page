@@ -19,6 +19,7 @@ import { reorientGlbBuffer } from './lib/reorient-glb.mjs';
 import { spawn } from 'node:child_process';
 import { loadProjectEnv } from '../lib/load-env.mjs';
 import { docArticleRelativePath } from '../docs/article-path.mjs';
+import { ideaArticleRelativePath } from '../ideas/article-path.mjs';
 import { getGitHubStatus, listGitHubIssues } from '../lib/github-issues.mjs';
 import {
   applyBoxArt,
@@ -51,6 +52,7 @@ const publicRoot = join(root, 'public');
 const dataRoot = join(root, 'public/data');
 const allowedData = new Set(['site.json','homepage.json','theme.json','research.json','atlas-pins.json','compatibility.json','features.json','bugs.json','gallery.json','models.json','characters.json','roadmap.json','ideas.json','docs.json']);
 const docsArticlesRoot = join(root, 'public/docs/articles');
+const ideasArticlesRoot = join(root, 'public/ideas/articles');
 const mime = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -234,6 +236,20 @@ function json(res, status, payload) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(payload, null, 2));
 }
+/** Write succeeded: always HTTP 200. Validation runs for feedback; publish still blocks on failure. */
+async function respondAfterSave(res) {
+  const validation = await run('node', ['tools/validate-data.mjs']);
+  const text = (validation.out || validation.err || '').trim();
+  return json(res, 200, {
+    ok: true,
+    saved: true,
+    validationOk: validation.code === 0,
+    validation: text,
+    ...(validation.code === 0
+      ? {}
+      : { validationWarning: 'Saved. Fix validation issues before publish (see activity log).' }),
+  });
+}
 function run(command, args = []) {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd: root, shell: process.platform === 'win32' });
@@ -267,8 +283,8 @@ async function migrateLegacyResearchPois() {
     }, null, 2) + '\n');
   }
 }
-async function readDocArticles() {
-  if (!existsSync(docsArticlesRoot)) return {};
+async function readArticleBodies(rootDir) {
+  if (!existsSync(rootDir)) return {};
   async function walk(dir) {
     const entries = await readdir(dir, { withFileTypes: true });
     const out = {};
@@ -283,7 +299,13 @@ async function readDocArticles() {
     }
     return out;
   }
-  return walk(docsArticlesRoot);
+  return walk(rootDir);
+}
+async function readDocArticles() {
+  return readArticleBodies(docsArticlesRoot);
+}
+async function readIdeaArticles() {
+  return readArticleBodies(ideasArticlesRoot);
 }
 async function readAllData() {
   await migrateLegacyResearchPois();
@@ -292,7 +314,11 @@ async function readAllData() {
   if (existsSync(join(dataRoot, 'research-pois.json'))) {
     data['research-pois.json'] = await readJsonFile('research-pois.json');
   }
-  return { files: data, docArticles: await readDocArticles() };
+  return {
+    files: data,
+    docArticles: await readDocArticles(),
+    ideaArticles: await readIdeaArticles(),
+  };
 }
 async function listAssets() {
   async function walk(dir, base='') {
@@ -352,14 +378,14 @@ const server = http.createServer(async (req, res) => {
         if (!filePart) {
           return json(res, 400, { ok: false, error: 'No file in upload (field: file).' });
         }
-        const path = await saveUploadedAsset(
+        const { path, deduped } = await saveUploadedAsset(
           publicRoot,
           folder,
           filePart.filename || 'upload.webp',
           filePart.bytes,
           subdir,
         );
-        return json(res, 200, { ok: true, path, assets: await listAssets() });
+        return json(res, 200, { ok: true, path, deduped, assets: await listAssets() });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }
@@ -466,8 +492,24 @@ const server = http.createServer(async (req, res) => {
       await mkdir(dirname(target), { recursive: true });
       const body = payload.data && typeof payload.data === 'object' ? payload.data : { dossier: payload.dossier };
       await writeFile(target, JSON.stringify(body, null, 2) + '\n');
-      const validation = await run('node', ['tools/validate-data.mjs']);
-      return json(res, validation.code === 0 ? 200 : 422, { ok: validation.code === 0, validation: validation.out || validation.err });
+      return respondAfterSave(res);
+    }
+    if (url.pathname === '/api/ideas/save-article' && req.method === 'POST') {
+      const payload = JSON.parse(await readBody(req));
+      const slug = String(payload.slug || '').trim().replace(/[^a-z0-9-]/gi, '');
+      if (!slug) return json(res, 400, { ok: false, error: 'slug is required' });
+      const ideasManifest = JSON.parse(await readFile(join(dataRoot, 'ideas.json'), 'utf8'));
+      const card = (ideasManifest.items || []).find((item) => item.slug === slug || item.id === slug);
+      if (!card) {
+        return json(res, 404, { ok: false, error: `No ideas.json card for slug "${slug}". Add the card before saving the body.` });
+      }
+      const rel = ideaArticleRelativePath(card);
+      const target = join(ideasArticlesRoot, rel);
+      const { mkdir } = await import('node:fs/promises');
+      await mkdir(dirname(target), { recursive: true });
+      const body = payload.data && typeof payload.data === 'object' ? payload.data : { dossier: payload.dossier };
+      await writeFile(target, JSON.stringify(body, null, 2) + '\n');
+      return respondAfterSave(res);
     }
     if (url.pathname === '/api/save' && req.method === 'POST') {
       const payload = JSON.parse(await readBody(req));
@@ -479,8 +521,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (!allowedData.has(payload.file)) return json(res, 400, { ok: false, error: 'File is not editable by this tool.' });
       await writeFile(join(dataRoot, payload.file), JSON.stringify(payload.data, null, 2) + '\n');
-      const validation = await run('node', ['tools/validate-data.mjs']);
-      return json(res, validation.code === 0 ? 200 : 422, { ok: validation.code === 0, validation: validation.out || validation.err });
+      return respondAfterSave(res);
     }
     if (url.pathname === '/api/maps/settings') {
       const settings = await readMapSettings();

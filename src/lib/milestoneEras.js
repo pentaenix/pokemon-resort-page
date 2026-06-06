@@ -3,14 +3,14 @@ export const MILESTONE_ERAS = [
   {
     id: 'present',
     title: 'Now',
-    subtitle: 'Where the project is focused today and what comes right after.',
+    subtitle: 'Current milestone and the next one up.',
     statuses: ['current', 'next'],
     collapsible: false,
   },
   {
     id: 'past',
     title: 'Past',
-    subtitle: 'Completed steps in the build story.',
+    subtitle: 'Steps we have already landed.',
     statuses: ['past'],
     collapsible: true,
     defaultOpen: false,
@@ -18,7 +18,7 @@ export const MILESTONE_ERAS = [
   {
     id: 'future',
     title: 'Ahead',
-    subtitle: 'Later goals and paused ideas on the horizon.',
+    subtitle: 'Planned later.',
     statuses: ['future', 'paused'],
     collapsible: true,
     defaultOpen: false,

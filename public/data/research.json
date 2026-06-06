@@ -8,7 +8,7 @@
       "confidence": "Likely",
       "canonStatus": "Inferred from resort transport and map reconstruction notes",
       "devStatus": "Needed",
-      "summary": "Primary arrival and departure point for the island. Ferry transport, dock placement, and guest arrival logic are part of the project direction.",
+      "summary": "Main arrival point. Ferry in, guests out. Spawn and transport logic still to design.",
       "tags": ["transport", "arrival"],
       "linkedPins": ["ferry-dock"],
       "linkedFeatures": ["feature-model-library"],

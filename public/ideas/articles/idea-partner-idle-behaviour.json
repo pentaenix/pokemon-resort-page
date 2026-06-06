@@ -1,0 +1,79 @@
+{
+  "dossier": {
+    "overview": "**Partner idle behaviour** covers Pokémon **attached to the player**: pathfinding follow while the player moves, and **Nature-weighted idle actions** when the player stands still (circle, poke, sleep, explore near the player).\n\nThis is **not** free-roam NPC AI. Partners do not wander the map picking smart-object offers. They use `FollowerController` and `NatureIdlePlanner`, not `MapPokemonSimulation`.\n\nA shipped prototype exists on the 3D test map. See also the **Overworld NPC AI** idea for guest, staff, and trainer actors that decide what to do on their own.",
+    "sections": [
+      {
+        "id": "boundary",
+        "title": "Scope boundary",
+        "summary": "Player-attached follow and idle only.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>System</th><th>Trigger</th><th>What it decides</th></tr></thead><tbody><tr><td><strong>Partner idle behaviour</strong> (this idea)</td><td>Player stands still for N seconds</td><td>Nature-weighted idle action near the player</td></tr><tr><td><strong>Overworld NPC AI</strong></td><td>Decision interval on a hot map</td><td>Activity offers from zones, smart objects, social targets</td></tr></tbody></table>"
+          },
+          {
+            "type": "text",
+            "body": "Shared concept only: **planner picks, executor runs primitives**. Partners must not grow into the general overworld brain. Free-roam actors must not reuse `FollowerController` as their main loop."
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "Overworld NPC AI (free-roam decision architecture)", "href": "#/ideas?idea=idea-overworld-npc-ai" },
+              { "label": "Follower Pokémon (shipped docs and config)", "href": "#/docs?article=follower-pokemon" }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "prototype",
+        "title": "Shipped prototype",
+        "summary": "RESORT 3D TEST: summon, follow, Nature idle.",
+        "blocks": [
+          {
+            "type": "figure",
+            "path": "media/docs/pokemon-resort/follower-overworld.webp",
+            "caption": "Partner on the overworld 3D test map",
+            "body": "Single companion behind the player. When the player stops, idle behaviours start after `startAfterIdleSeconds` (default 5 s). Player movement cancels idle and runs `cancel_return` pathfind back to the player.",
+            "layout": "stacked"
+          },
+          {
+            "type": "diagram",
+            "title": "Idle behaviour pipeline",
+            "caption": "Planning vs execution (partner only)",
+            "source": "flowchart LR\n    CFG[\"idle_behaviours.json\"] --> PLAN[\"NatureIdlePlanner\"]\n    SESS[\"session.json nature\"] --> PLAN\n    PLAN -->|IdlePlan actions| EXEC[\"FollowerController\"]\n    EXEC -->|MovePath Face Wait| WORLD[\"Grid pathfinding\"]\n    EXEC -->|Poke Jump Sleep| ANIM[\"Sprite and VFX\"]"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "config/gameplay/followers/session.json",
+            "language": "json",
+            "caption": "Session config: species, nature, optional forced behaviour for testing",
+            "body": "{\n  \"follower\": {\n    \"enabled\": true,\n    \"pokemonSpecies\": \"psyduck\",\n    \"pokeballId\": \"poke_ball\",\n    \"nature\": \"Jolly\",\n    \"forcedBehavior\": \"circle_player\"\n  }\n}"
+          }
+        ]
+      },
+      {
+        "id": "nature",
+        "title": "Nature groups",
+        "summary": "Same Nature groups bias idle action weights.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Group</th><th>Natures</th><th>Idle bias</th></tr></thead><tbody><tr><td>Assertive</td><td>Lonely, Brave, Adamant, Naughty</td><td>Approach, guard, independent motion</td></tr><tr><td>Steady</td><td>Bold, Relaxed, Impish, Lax</td><td>Rest, stay near player, slow wander</td></tr><tr><td>Curious</td><td>Modest, Mild, Quiet, Rash</td><td>Inspect, explore radius</td></tr><tr><td>Composed</td><td>Calm, Gentle, Sassy, Careful</td><td>Observe, deliberate motion</td></tr><tr><td>Energetic</td><td>Timid, Hasty, Jolly, Naive</td><td>Play, chase, jump</td></tr><tr><td>Neutral</td><td>Hardy, Docile, Serious, Bashful, Quirky</td><td>Balanced default</td></tr></tbody></table><p>Weights live in <code>config/gameplay/followers/idle_behaviours.json</code>. Free-roam NPC AI will reuse the same Nature tables for <strong>activity offer</strong> scoring, not this idle planner.</p>"
+          }
+        ]
+      },
+      {
+        "id": "future",
+        "title": "Future extensions",
+        "summary": "Still player-attached; still not free-roam AI.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Possible later work that stays in this idea:\n\n• Multiple partner slots (up to 6) with follow formation\n• Temporary ask-to-follow bubble and release hotkey (becomes guest on current map when released)\n• Partner interaction, affection, talking, minigames\n\nWhen a temporary partner is **released**, it hands off to **Overworld NPC AI** as a `guest_on_map` actor on that map."
+          }
+        ]
+      }
+    ]
+  }
+}

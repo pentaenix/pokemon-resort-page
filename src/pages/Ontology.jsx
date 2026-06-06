@@ -506,7 +506,7 @@ export default function Ontology({ data, query }) {
   }
   return (
     <main>
-      <PageTitle eyebrow="Compatibility Ontology" title="A stable directional route lab for generation round trips.">
+      <PageTitle eyebrow="Compatibility Ontology" title="Transfer routes between generations">
         Each generation pair has two parallel arrows—one per direction. Click an arrow to inspect that route in the side panel. Click a generation circle to focus that era&apos;s game library.
       </PageTitle>
       <section className="ontology-toolbar">

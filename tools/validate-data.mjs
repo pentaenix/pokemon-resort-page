@@ -2,10 +2,26 @@ import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { docArticleRelativePath } from './docs/article-path.mjs';
+import { ideaArticleRelativePath } from './ideas/article-path.mjs';
+import {
+  assertUiCopyClean,
+  lintAtlasPinBlurbs,
+  lintCompatibilityBlurbs,
+  lintDocsHubBlurbs,
+  lintFeatureSummaries,
+  lintHomepage,
+  lintIdeas,
+  lintJsxUiFiles,
+  lintResearchSummaries,
+  lintRoadmapSummaries,
+  lintSiteChrome,
+  resetUiCopyLint,
+} from './ui-copy-lint.mjs';
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const dataRoot = join(root, 'public/data');
 const docsArticlesRoot = join(root, 'public/docs/articles');
+const ideasArticlesRoot = join(root, 'public/ideas/articles');
 const load = async (file) => JSON.parse(await readFile(join(dataRoot, file), 'utf8'));
 const fail = (message) => { throw new Error(message); };
 const assert = (condition, message) => { if (!condition) fail(message); };
@@ -189,8 +205,19 @@ try {
   assert(Array.isArray(roadmapItems), 'roadmap.json requires milestones or horizons');
   const milestoneIds = unique(roadmapItems.map((item, index) => ({ ...item, id: item.id || `roadmap-${index}` })), 'roadmap milestone');
   if (roadmap.currentMilestoneId) assert(milestoneIds.has(roadmap.currentMilestoneId), `currentMilestoneId points to unknown milestone ${roadmap.currentMilestoneId}`);
-  unique(ideas.items || [], 'idea');
-  for (const idea of ideas.items || []) assertDossierBlocks(`Idea ${idea.id}`, idea.dossier);
+  const ideaSlugs = unique((ideas.items || []).map((item) => ({ ...item, id: item.slug || item.id })), 'idea');
+  for (const idea of ideas.items || []) {
+    assert(idea.slug || idea.id, `Idea ${idea.id || '(missing id)'} needs slug`);
+    assert(idea.title, `Idea ${idea.id} needs title`);
+    assert(idea.summary, `Idea ${idea.id} needs summary`);
+    const rel = ideaArticleRelativePath(idea);
+    assert(rel, `Idea ${idea.id} could not resolve storage path`);
+    assert(rel === `${idea.slug || idea.id}.json`, `Idea ${idea.id} must live at public/ideas/articles/${idea.slug || idea.id}.json`);
+    const articlePath = join(ideasArticlesRoot, rel);
+    assert(existsSync(articlePath), `Idea ${idea.id} missing file public/ideas/articles/${rel}`);
+    const body = JSON.parse(await readFile(articlePath, 'utf8'));
+    assertDossierBlocks(`Idea ${idea.id}`, body.dossier);
+  }
   for (const item of roadmapItems) assertDossierBlocks(`Milestone ${item.id}`, item.dossier);
 
   const docCategoryIds = new Set((docs.categories || []).map((c) => c.id));
@@ -214,6 +241,19 @@ try {
     const body = JSON.parse(await readFile(articlePath, 'utf8'));
     assertDossierBlocks(`Docs article ${article.id}`, body.dossier);
   }
+
+  resetUiCopyLint();
+  lintHomepage(homepage);
+  lintIdeas(ideas);
+  lintFeatureSummaries(features);
+  lintResearchSummaries(research);
+  lintRoadmapSummaries(roadmap);
+  lintCompatibilityBlurbs(compatibility);
+  lintAtlasPinBlurbs(atlasPins);
+  lintDocsHubBlurbs(docs);
+  lintSiteChrome(site);
+  await lintJsxUiFiles(root, readFile);
+  assertUiCopyClean();
 
   console.log('Data validation passed.');
 } catch (error) {

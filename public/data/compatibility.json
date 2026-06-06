@@ -2,23 +2,23 @@
   "statuses": {
     "green": {
       "label": "Fully working",
-      "description": "The documented round trip currently passes the public checklist."
+      "description": "Round trip passes our checklist."
     },
     "blue": {
       "label": "More tests needed",
-      "description": "The route appears plausible but lacks enough test coverage."
+      "description": "Needs more test runs."
     },
     "yellow": {
       "label": "Edge cases failing",
-      "description": "The route has partial success with known edge-case failures."
+      "description": "Works sometimes; edge cases still open."
     },
     "red": {
       "label": "Not working",
-      "description": "The route currently fails the documented round-trip requirement."
+      "description": "Round trip fails."
     },
     "gray": {
       "label": "Untested",
-      "description": "No public route result has been recorded yet."
+      "description": "Not tested yet."
     }
   },
   "generations": [
@@ -28,7 +28,7 @@
       "shortLabel": "Gen I",
       "number": 1,
       "era": "Kanto / Game Boy",
-      "summary": "Kanto / Game Boy era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "summary": "Kanto / Game Boy era. No round-trip test posted for this generation yet.",
       "accent": "#ef6461"
     },
     {
@@ -37,7 +37,7 @@
       "shortLabel": "Gen II",
       "number": 2,
       "era": "Johto / Game Boy Color",
-      "summary": "Johto / Game Boy Color era. The self round-trip is currently documented as not working; every other public route remains untested until the checklist is filled in.",
+      "summary": "Johto / Game Boy Color era. Self round-trip marked failing. Other routes for this generation are not tested yet.",
       "accent": "#f6b85f"
     },
     {
@@ -46,7 +46,7 @@
       "shortLabel": "Gen III",
       "number": 3,
       "era": "Hoenn / Game Boy Advance",
-      "summary": "Hoenn / Game Boy Advance era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "summary": "Hoenn / Game Boy Advance era. No round-trip test posted for this generation yet.",
       "accent": "#4fb286"
     },
     {
@@ -55,7 +55,7 @@
       "shortLabel": "Gen IV",
       "number": 4,
       "era": "Sinnoh / Nintendo DS",
-      "summary": "Sinnoh / Nintendo DS era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "summary": "Sinnoh / Nintendo DS era. No round-trip test posted for this generation yet.",
       "accent": "#5aa9e6"
     },
     {
@@ -64,7 +64,7 @@
       "shortLabel": "Gen V",
       "number": 5,
       "era": "Unova / Nintendo DS",
-      "summary": "Unova / Nintendo DS era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "summary": "Unova / Nintendo DS era. No round-trip test posted for this generation yet.",
       "accent": "#7d5fff"
     },
     {
@@ -73,7 +73,7 @@
       "shortLabel": "Gen VI",
       "number": 6,
       "era": "Kalos / Nintendo 3DS",
-      "summary": "Kalos / Nintendo 3DS era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "summary": "Kalos / Nintendo 3DS era. No round-trip test posted for this generation yet.",
       "accent": "#f2a7c6"
     },
     {
@@ -82,7 +82,7 @@
       "shortLabel": "Gen VII",
       "number": 7,
       "era": "Alola / Nintendo 3DS + Switch",
-      "summary": "Alola / Nintendo 3DS + Switch era. The self round-trip is currently documented as not working; every other public route remains untested until the checklist is filled in.",
+      "summary": "Alola / Nintendo 3DS + Switch era. Self round-trip marked failing. Other routes for this generation are not tested yet.",
       "accent": "#f7d95c"
     },
     {
@@ -91,7 +91,7 @@
       "shortLabel": "Gen VIII",
       "number": 8,
       "era": "Galar / Switch",
-      "summary": "Galar / Switch era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "summary": "Galar / Switch era. No round-trip test posted for this generation yet.",
       "accent": "#82c4c3"
     },
     {
@@ -100,7 +100,7 @@
       "shortLabel": "Gen IX",
       "number": 9,
       "era": "Paldea / Switch",
-      "summary": "Paldea / Switch era. Routes for this generation are untested in the public ontology until a round-trip checklist is recorded.",
+      "summary": "Paldea / Switch era. No round-trip test posted for this generation yet.",
       "accent": "#c084fc"
     }
   ],

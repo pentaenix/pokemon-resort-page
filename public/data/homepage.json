@@ -1,14 +1,14 @@
 {
   "hero": {
-    "eyebrow": "Resort Operations Portal",
+    "eyebrow": "Resort operations",
     "headline": "Welcome to Pokémon Resort.",
-    "subheadline": "A cozy fan-made home between adventures: transfer, care for, and play with Pokémon from every generation while the island grows around them.",
+    "subheadline": "A fan-made resort between your adventures. Store Pokémon from every generation, help them settle in, and watch the island fill out as we build it.",
     "primaryCta": {
-      "label": "Explore the Island Atlas",
+      "label": "Island atlas",
       "href": "#/atlas"
     },
     "secondaryCta": {
-      "label": "Open Compatibility Ontology",
+      "label": "Transfer routes",
       "href": "#/ontology"
     },
     "featuredMedia": [
@@ -37,7 +37,7 @@
     },
     {
       "label": "Operations",
-      "value": "Curated",
+      "value": "Live",
       "detail": "Features, issues, roadmap, and idea board"
     },
     {
@@ -50,7 +50,7 @@
     {
       "title": "Island Atlas",
       "href": "#/atlas",
-      "description": "The cork-board map — pins, show references, and whatever we've traced so far.",
+      "description": "The cork-board map with pins, show frames, and traced layers. Still filling in gaps.",
       "icon": "✦"
     },
     {
@@ -68,13 +68,13 @@
     {
       "title": "Milestones",
       "href": "#/milestones",
-      "description": "The arc from first idea to whatever we're aiming at next.",
+      "description": "From first prototype to the current build and what comes next.",
       "icon": "✧"
     },
     {
       "title": "Resort Docs",
       "href": "#/docs",
-      "description": "Formats, schemas, diagrams — the reference shelf for contributors.",
+      "description": "Formats, schemas, and diagrams. Reference shelf for contributors.",
       "icon": "▤"
     },
     {
@@ -86,20 +86,20 @@
   ],
   "about": {
     "eyebrow": "What is this?",
-    "title": "A resort where every adventure can rest before the next one.",
+    "title": "A resort between your adventures.",
     "body": [
-      "Pokémon Resort is an unofficial, non-commercial fan project about giving the Pokémon from all of your adventures a place to rest, play, and prepare for whatever comes next.",
-      "The game is planned around an easy-to-use transfer and storage interface inspired by the DS-era Pokémon games, with support for Pokémon from every generation. Instead of feeling like a box, the resort is meant to feel alive: a warm island where Pokémon can relax, join activities, meet visitors, and become part of a small community.",
-      "You play as a concierge. Your job is to care for visiting Pokémon and guests, complete minigames, fulfill special requests, and follow a short main story that introduces the island, its staff, and its systems. Requests unlock items, skills, abilities, room customization, and new ways to personalize the resort."
+      "Pokémon Resort is an unofficial, non-commercial fan project. It gives the Pokémon from your past games a place on the island instead of leaving them in a box.",
+      "Transfers and PC storage follow the DS-era flow, but the resort itself is the main screen. Pokémon wander the island, join activities, and bump into guests. We want it to feel busy, not like a menu.",
+      "You play as the resort concierge. Check in guests, handle requests, run minigames, and unlock rooms and resort upgrades. The main story is still being scoped."
     ]
   },
   "carousel": [
     {
       "id": "home-between-adventures",
-      "title": "A home between adventures",
+      "title": "Home between adventures",
       "type": "image",
       "src": "assets/home-carousel/home-between-adventures.svg",
-      "caption": "A resort-first view of storage: your Pokémon rest, play, and prepare for the next journey.",
+      "caption": "Storage lives at the resort, not in a separate box screen.",
       "tags": [
         "home",
         "concept"
@@ -107,10 +107,10 @@
     },
     {
       "id": "home-concierge-care",
-      "title": "Care as the concierge",
+      "title": "Concierge work",
       "type": "image",
       "src": "assets/home-carousel/concierge-care.svg",
-      "caption": "Help guests, complete minigames, fulfill requests, and unlock ways to personalize the resort.",
+      "caption": "Guests, requests, minigames, and resort upgrades.",
       "tags": [
         "gameplay",
         "concierge"
@@ -118,10 +118,10 @@
     },
     {
       "id": "home-transfer-interface",
-      "title": "Generations connected",
+      "title": "Every generation welcome",
       "type": "image",
       "src": "assets/home-carousel/generations-connected.svg",
-      "caption": "A transfer-and-storage experience inspired by the DS-era flow, designed for every generation.",
+      "caption": "DS-style transfers, with a route checklist for each generation pair.",
       "tags": [
         "compatibility",
         "systems"

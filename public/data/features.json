@@ -55,7 +55,7 @@
       "stage": "Boarding Soon",
       "priority": "Medium",
       "progress": 34,
-      "summary": "Connected visual archive for screenshots, renders, frame crops, diagrams, sprites, animations, models, and compatibility assets.",
+      "summary": "One gallery for screenshots, models, sprites, and compatibility art, linked to features, pins, and routes.",
       "linkedBugs": [],
       "tasks": [
         {
@@ -187,7 +187,7 @@
       "stage": "Boarding Soon",
       "priority": "High",
       "progress": 12,
-      "summary": "Research how contest halls work across generations — visuals, mechanics, map placement, and reference media for a future resort build.",
+      "summary": "Research how contest halls work across generations: visuals, mechanics, map placement, and reference media for a future resort build.",
       "linkedBugs": [],
       "linkedRoutes": [],
       "area": "Island Build",

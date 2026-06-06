@@ -183,7 +183,7 @@
       "category": "gameplay",
       "tags": ["glb", "obj", "overworld", "textures", "alpha", "map editor"],
       "apps": ["pokemon-resort", "pokemon-resort-page"],
-      "summary": "OBJ→GLB conversion (V flip + measured-alpha MASK/OPAQUE), three.js preview, Map Editor placement with footprint/roof overlays, a placement ghost, a view-only 3D workspace, and orientation re-bake, plus the C++ GlbModelLoader/Renderer (UV-grid wrap, two-pass cutout order, configurable scene depth sort) — with the black-roof / torn-roof / black-banner / cut-off-banner / character-on-top pitfalls explained.",
+      "summary": "OBJ to GLB conversion, three.js preview, map editor placement, and C++ GlbModelLoader rendering. Covers alpha, footprint overlays, and common roof or banner pitfalls.",
       "publishedAt": "2026-06-01",
       "updatedAt": "2026-06-01",
       "heroImage": {
@@ -200,7 +200,7 @@
       "category": "gameplay",
       "tags": ["compatibility", "transfer", "openhome", "ontology", "round-trip"],
       "apps": ["pokemon-resort", "pokemon-resort-page"],
-      "summary": "What compatible means: Game A → Resort → Game B → play → Resort → Game A with identity preserved and updates merged — plus the public route matrix.",
+      "summary": "What compatible means: Game A to Resort to Game B, play, return to Resort, then back to Game A with identity preserved. Includes the public route matrix.",
       "publishedAt": "2026-06-01",
       "updatedAt": "2026-06-01",
       "heroImage": {

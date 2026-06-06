@@ -1,5 +1,5 @@
 {
-  "computedAt": "2026-06-05T03:02:06.729Z",
+  "computedAt": "2026-06-06T03:53:18.160Z",
   "articles": {
     "writing-docs": {
       "status": "stale",
@@ -13,7 +13,7 @@
           "repo": "pokemon-resort-page",
           "path": "public/data/docs.json",
           "exists": true,
-          "modifiedAt": "2026-06-03"
+          "modifiedAt": "2026-06-05"
         },
         {
           "repo": "pokemon-resort-page",
@@ -179,7 +179,7 @@
     "island-dreamforge": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-05",
+      "newestCodeChange": "2026-06-06",
       "apps": [
         "island-dreamforge",
         "pokemon-resort"
@@ -189,7 +189,7 @@
           "repo": "island-dreamforge",
           "path": "frontend/src/App.jsx",
           "exists": true,
-          "modifiedAt": "2026-06-05"
+          "modifiedAt": "2026-06-06"
         },
         {
           "repo": "island-dreamforge",
@@ -287,9 +287,9 @@
       ]
     },
     "compatibility-ontology": {
-      "status": "current",
+      "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-05-28",
+      "newestCodeChange": "2026-06-05",
       "apps": [
         "pokemon-resort",
         "pokemon-resort-page"
@@ -299,7 +299,7 @@
           "repo": "pokemon-resort-page",
           "path": "public/data/compatibility.json",
           "exists": true,
-          "modifiedAt": "2026-05-28"
+          "modifiedAt": "2026-06-05"
         },
         {
           "repo": "pokemon-resort",

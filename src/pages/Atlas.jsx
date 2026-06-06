@@ -251,7 +251,7 @@ function ModelSections({ models }) {
   const submodels = models?.submodels || [];
   return (
     <section className="resource-shell atlas-resource-block" id="atlas-models">
-      <div className="section-intro compact"><p className="eyebrow">Model shelf</p><h2>Island &amp; outbuildings</h2><p>Ferry dock, lodge, paths — each piece lands here as it’s modeled. The cork board above is still the layout we trust.</p></div>
+      <div className="section-intro compact"><p className="eyebrow">Model shelf</p><h2>Island &amp; outbuildings</h2><p>Dock, lodge, paths, and other pieces as we model them. The cork board above is still the layout we trust.</p></div>
       <article className="model-card main-model-card">
         <div className="model-preview">{models?.mainModel?.preview ? <img src={assetUrl(models.mainModel.preview)} alt={`${models.mainModel.name} preview`} /> : <span>{models?.mainModel?.file}</span>}</div>
         <div>
@@ -298,8 +298,8 @@ export default function Atlas({ data, query }) {
 
   return (
     <main>
-      <PageTitle eyebrow="Island Atlas" title="The resort island, as far as we've mapped it.">
-        Hand-traced from Pokémon Concierge, with pins for what we know, what we're still placing, and what's outright guesswork.
+      <PageTitle eyebrow="Island Atlas" title="The resort island (mapped so far)">
+        Hand-traced from Pokémon Concierge. Blue pins are researched, yellow are layout notes, red are still guesses.
       </PageTitle>
 
       <section className="atlas-jumpbar" aria-label="Atlas sections">
@@ -409,8 +409,8 @@ export default function Atlas({ data, query }) {
       <section className="atlas-3d-section" id="atlas-3d">
         <div className="section-intro compact">
           <p className="eyebrow">Island model</p>
-          <h2>The same island in three dimensions</h2>
-          <p>Early terrain mesh — rough around the edges. Layout calls still come from the cork board.</p>
+          <h2>Same island in 3D</h2>
+          <p>Early terrain mesh, still rough. Layout calls still come from the cork board.</p>
         </div>
         <div className="atlas-card atlas-card--3d">
           <IslandStage3D islandModelUrl={data.models?.mainModel?.file ? assetUrl(data.models.mainModel.file) : null} />
@@ -420,8 +420,8 @@ export default function Atlas({ data, query }) {
       <ModelSections models={data.models} />
 
       {!allPins.length && (
-        <EmptyState title="No pins on the board yet." actionHref="#/source" actionLabel="Open resource guide">
-          First locations get pinned from the Operations Desk.
+        <EmptyState title="No pins yet." actionHref="#/source" actionLabel="Open resource guide">
+          Add pins in the admin tool (npm run admin).
         </EmptyState>
       )}
 

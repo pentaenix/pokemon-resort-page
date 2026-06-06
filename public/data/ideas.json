@@ -1,22 +1,71 @@
 {
   "items": [
     {
+      "id": "idea-overworld-npc-ai",
+      "slug": "idea-overworld-npc-ai",
+      "title": "Overworld NPC AI",
+      "status": "promising",
+      "summary": "Architecture for free-roaming resort NPCs: maps publish activities; guest and staff actors filter, score, and pick. Not partner follow or idle.",
+      "tags": ["overworld", "ai", "smart-objects", "simulation"],
+      "updatedAt": "2026-06-02",
+      "heroImage": {
+        "path": "media/ideas/chimchar_ball_play.gif",
+        "caption": "Target feel: smart-object play with global sprite primitives.",
+        "fit": "contain"
+      }
+    },
+    {
+      "id": "idea-partner-idle-behaviour",
+      "slug": "idea-partner-idle-behaviour",
+      "title": "Partner idle behaviour",
+      "status": "promising",
+      "summary": "Partner Pokémon follow the player and pick Nature-weighted idle actions when the player stands still. Separate from free-roam NPC AI.",
+      "tags": ["overworld", "follower", "idle", "partner"],
+      "updatedAt": "2026-06-02",
+      "heroImage": {
+        "path": "media/docs/pokemon-resort/follower-overworld.webp",
+        "caption": "Shipped follower prototype on the 3D test map.",
+        "fit": "contain"
+      }
+    },
+    {
+      "id": "idea-overworld-pokemon-spawn",
+      "slug": "idea-overworld-pokemon-spawn",
+      "title": "Overworld Pokémon spawn",
+      "status": "promising",
+      "summary": "Which Pokémon appear on each map, when, and on which tile. Weighted natural placement from type, Nature, and Characteristic. Spawn only, not AI.",
+      "tags": ["spawn", "overworld", "placement", "nature", "characteristic"],
+      "updatedAt": "2026-06-02"
+    },
+    {
+      "id": "idea-pokeball-rest-nook",
+      "slug": "idea-pokeball-rest-nook",
+      "title": "Pokéball rest nook",
+      "status": "spark",
+      "summary": "Small island fixtures where resting Pokémon sleep inside visible Pokéballs. Player interacts to take one out. Rough idea.",
+      "tags": ["rough-idea", "rest", "pokeball", "overworld", "smart-object"],
+      "updatedAt": "2026-06-02"
+    },
+    {
       "id": "idea-ferry-arrival",
+      "slug": "idea-ferry-arrival",
       "title": "Ferry arrival presentation",
       "status": "promising",
-      "summary": "Use the ferry and dock as the player-facing arrival ritual for the resort."
+      "summary": "Player arrives by ferry. Dock is the first scene on the island."
     },
     {
       "id": "idea-visitor-passport",
+      "slug": "idea-visitor-passport",
       "title": "Visitor passport index",
       "status": "spark",
-      "summary": "A collectible-feeling index for planned resort visitors and their preferred activities."
+      "summary": "Visitor index: who might show up and what they like to do at the resort."
     },
     {
       "id": "idea-poi-detective-mode",
+      "slug": "idea-poi-detective-mode",
       "title": "POI detective mode",
       "status": "spark",
-      "summary": "Let users toggle between clean island view and evidence-heavy reconstruction view."
+      "summary": "Toggle between a clean resort view and one with frames, crops, and reconstruction notes."
     }
   ]
 }

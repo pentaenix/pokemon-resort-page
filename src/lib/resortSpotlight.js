@@ -1,6 +1,7 @@
 import { normalizeFeatureDossier, collectDossierGalleryImages } from './featureDossier.js';
 import { normalizeImages } from './images.js';
 import { routeHref } from './data.js';
+import { ideaArticleHref } from './ideas.js';
 
 function firstImageFromDossier(rawDossier) {
   const dossier = normalizeFeatureDossier({ dossier: rawDossier });
@@ -68,7 +69,7 @@ function collectSpotlightCandidates(data) {
       title: feature.title,
       summary: feature.summary || normalizeFeatureDossier(feature).overview,
       href: routeHref('/board'),
-      cta: 'See the feature',
+      cta: 'Open feature',
       image: firstImageFromRecord(feature),
     });
   });
@@ -80,8 +81,8 @@ function collectSpotlightCandidates(data) {
       eyebrow: 'Spark board',
       title: idea.title,
       summary: idea.summary,
-      href: routeHref('/plan'),
-      cta: 'View the idea',
+      href: ideaArticleHref(idea.slug || idea.id),
+      cta: 'Open idea',
       image: null,
     });
   });
@@ -94,8 +95,8 @@ function collectSpotlightCandidates(data) {
       eyebrow: isCurrent ? 'Current milestone' : 'On the timeline',
       title: item.title,
       summary: item.summary,
-      href: routeHref('/milestones'),
-      cta: 'Follow the arc',
+      href: routeHref('/build'),
+      cta: 'Open milestone',
       image: firstImageFromRecord(item),
     });
   });

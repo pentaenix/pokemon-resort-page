@@ -22,7 +22,7 @@ function HomeCarousel({ items = [] }) {
     <section className="home-carousel-section" aria-label="Pokémon Resort overview media">
       <div className="section-intro compact">
         <p className="eyebrow">Resort preview</p>
-        <h2>What we're building toward.</h2>
+        <h2>What we are building toward</h2>
       </div>
       <div className="media-carousel home-media-carousel">
         {items.map((item) => (
@@ -72,7 +72,7 @@ export default function Home({ data }) {
           ))}
           <div className="floating-status-card">
             <span>Resort Status</span>
-            <strong>{digest.activeFeatures} operations active</strong>
+            <strong>{digest.activeFeatures} features in progress</strong>
             <small>{digest.routeCount} compatibility routes · {digest.openBugs} open/blocking issues</small>
           </div>
         </div>
@@ -105,7 +105,7 @@ export default function Home({ data }) {
       <section className="lobby-grid">
         <div className="section-intro">
           <p className="eyebrow">Front desk</p>
-          <h2>Where to check in.</h2>
+          <h2>Where to check in</h2>
         </div>
         <div className="nav-card-grid">
           {(homepage.navCards || []).map((card) => (
@@ -138,8 +138,8 @@ export default function Home({ data }) {
             </>
           ) : (
             <>
-              <h2>A quiet week on the island.</h2>
-              <p>The cork board is waiting for its next pin.</p>
+              <h2>Quiet week at the resort.</h2>
+              <p>Nothing pinned yet. Add a pin from the desk when you have one.</p>
             </>
           )}
         </div>
@@ -152,8 +152,8 @@ export default function Home({ data }) {
           <div className="digest-cards">
             <article><StatusPill status="red" label="Needs care" /><strong>{digest.redRoutes}</strong><span>failing routes</span></article>
             <article><StatusPill status="gray" label="Untested" /><strong>{digest.grayRoutes}</strong><span>routes still open</span></article>
-            <article><StatusPill status="on-flight" label="On-Flight" /><strong>{digest.activeFeatures}</strong><span>features in motion</span></article>
-            <article><StatusPill status="open" label="Issue desk" /><strong>{digest.openBugs}</strong><span>open threads</span></article>
+            <article><StatusPill status="on-flight" label="On-Flight" /><strong>{digest.activeFeatures}</strong><span>on-flight features</span></article>
+            <article><StatusPill status="open" label="Issue desk" /><strong>{digest.openBugs}</strong><span>open bugs</span></article>
           </div>
         </div>
       </section>

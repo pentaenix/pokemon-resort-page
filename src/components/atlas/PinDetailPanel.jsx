@@ -55,7 +55,7 @@ export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinC
                 <RichContentBody record={{ dossier: pin.dossier }} title={pin.name} />
               </div>
             ) : (
-              <p className="feature-dossier-empty">Nothing filed under this pin yet.</p>
+              <p className="feature-dossier-empty">No notes filed under this pin yet.</p>
             )}
           </div>
         </>
