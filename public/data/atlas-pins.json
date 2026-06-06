@@ -13,7 +13,7 @@
     "showReference": {
       "path": "media/atlas/reference/concierge-show-map-ep6.jpg",
       "label": "From the show",
-      "caption": "Pokémon Concierge, episode 6 (~6:18) — the frame our hand-traced map comes from."
+      "caption": "Pokémon Concierge, episode 6 (~6:18). The frame our hand-traced map comes from."
     },
     "carousel": [
       {
@@ -74,7 +74,7 @@
     {
       "id": "red",
       "label": "Uncertain / TBD",
-      "hint": "Placeholders — location not finalized yet (e.g. lobby on the ocean)"
+      "hint": "Placeholders. Location not finalized yet (e.g. lobby on the ocean)"
     }
   ],
   "pins": [
