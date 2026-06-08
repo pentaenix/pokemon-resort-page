@@ -100,7 +100,7 @@
       "updatedAt": "2026-06-01",
       "heroImage": {
         "path": "media/docs/spmk/charbin-detail.webp",
-        "caption": "SPMK package editor — metadata, embedded sheets, and direction previews.",
+        "caption": "SPMK package editor. Metadata, embedded sheets, and direction previews.",
         "fit": "contain"
       },
       "featured": true,
@@ -118,7 +118,7 @@
       "updatedAt": "2026-06-01",
       "heroImage": {
         "path": "media/docs/map-editor/map-editor-3d-preview.webp",
-        "caption": "Map Editor 3D terrain preview — height + ramp geometry before bake.",
+        "caption": "Map Editor 3D terrain preview. Height and ramp geometry before bake.",
         "fit": "contain"
       },
       "featured": true,
@@ -136,7 +136,7 @@
       "updatedAt": "2026-06-01",
       "heroImage": {
         "path": "media/docs/pdsms/rtpks-resort-menu.webp",
-        "caption": "PDSMS — Pokémon Resort menu with Open / Save / Append RTPKS actions.",
+        "caption": "PDSMS. Pokémon Resort menu with Open / Save / Append RTPKS actions.",
         "fit": "contain"
       },
       "featured": true,
@@ -154,7 +154,7 @@
       "updatedAt": "2026-06-01",
       "heroImage": {
         "path": "media/docs/island-dreamforge-3d-export.webp",
-        "caption": "Step 5 · 3D / Export — orbit viewport and export profiles."
+        "caption": "Step 5 · 3D / Export. Orbit viewport and export profiles."
       },
       "featured": true,
       "author": "Resort Operations"

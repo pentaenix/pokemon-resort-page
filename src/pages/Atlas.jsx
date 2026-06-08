@@ -166,7 +166,7 @@ function IslandStage3D({ islandModelUrl }) {
 function buildCarouselGalleryImages(items = []) {
   return items.map((item) => {
     const display = resolveCarouselSlideDisplay(item);
-    const caption = [display.metaLine, display.description].filter(Boolean).join(' — ');
+    const caption = [display.metaLine, display.description].filter(Boolean).join(' · ');
     return {
       path: item.src,
       caption: caption || display.title || '',

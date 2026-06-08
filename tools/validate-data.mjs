@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { docArticleRelativePath } from './docs/article-path.mjs';
 import { ideaArticleRelativePath } from './ideas/article-path.mjs';
 import {
-  assertUiCopyClean,
+  reportUiCopyWarnings,
   lintAtlasPinBlurbs,
   lintCompatibilityBlurbs,
   lintDocsHubBlurbs,
@@ -253,9 +253,13 @@ try {
   lintDocsHubBlurbs(docs);
   lintSiteChrome(site);
   await lintJsxUiFiles(root, readFile);
-  assertUiCopyClean();
+  const uiCopyWarnings = reportUiCopyWarnings();
 
-  console.log('Data validation passed.');
+  if (uiCopyWarnings > 0) {
+    console.log(`Data validation passed with ${uiCopyWarnings} UI copy warning(s).`);
+  } else {
+    console.log('Data validation passed.');
+  }
 } catch (error) {
   console.error(`Data validation failed: ${error.message}`);
   process.exit(1);

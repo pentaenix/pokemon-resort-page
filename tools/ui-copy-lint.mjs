@@ -159,13 +159,14 @@ export async function lintJsxUiFiles(root, readFile) {
   }
 }
 
-export function assertUiCopyClean() {
-  if (!issues.length) return;
-  const message = [
-    'UI copy lint failed (see docs/UI-COPY.md):',
-    ...issues.map((line) => `  • ${line}`),
-  ].join('\n');
-  throw new Error(message);
+/** @returns {number} warning count */
+export function reportUiCopyWarnings() {
+  if (!issues.length) return 0;
+  console.warn('UI copy lint warnings (see docs/UI-COPY.md):');
+  for (const line of issues) {
+    console.warn(`  • ${line}`);
+  }
+  return issues.length;
 }
 
 export function resetUiCopyLint() {

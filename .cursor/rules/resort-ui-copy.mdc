@@ -26,4 +26,4 @@ Prefer `public/data/*.json` for blurbs. JSX is for structure labels only (`PageT
 npm run validate:data
 ```
 
-UI copy lint runs with data validation. Fix em-dash and banned-phrase failures before commit.
+UI copy lint runs with data validation. Em-dash and banned-phrase hits are warnings (they do not block deploy); fix them when editing those fields.

@@ -206,7 +206,7 @@
         }
       ],
       "dossier": {
-        "overview": "Contest halls are a cross-generation research target. This dossier holds generation notes, UI references, comparisons, and map placement — separate from the quick task checklist on the card.",
+        "overview": "Contest halls are a cross-generation research target. This dossier holds generation notes, UI references, comparisons, and map placement, separate from the quick task checklist on the card.",
         "map": {
           "poiId": "",
           "label": "Lilycove Contest Hall (placeholder)",

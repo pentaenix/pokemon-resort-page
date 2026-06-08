@@ -46,7 +46,7 @@ function escapeSvgText(value) {
 
 export const DEFAULT_DIAGRAM_TEMPLATES = {
   'pokemon-ai-state': {
-    label: 'Pokémon AI — state machine',
+    label: 'Pokémon AI state machine',
     source: `stateDiagram-v2
     direction LR
     [*] --> Idle

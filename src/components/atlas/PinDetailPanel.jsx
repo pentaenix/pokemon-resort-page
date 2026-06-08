@@ -65,7 +65,7 @@ export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinC
             <p className="eyebrow">This spot</p>
             <h2>Pick a pin</h2>
             <p className="atlas-pin-summary">
-              Every colored marker is a place on the island — notes, screenshots, links.
+              Every colored marker is a place on the island: notes, screenshots, links.
               Tap open water to step back.
             </p>
           </div>

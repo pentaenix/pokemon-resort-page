@@ -152,7 +152,7 @@ export function FeatureDossierModal({ feature, bugs = [], onClose }) {
                 <div className="linked-list">
                   <strong>Bugs</strong>
                   {linkedBugRecords.map((bug) => (
-                    <a key={bug.id} href={routeHref('/board', { q: bug.id })}>{bug.id} — {bug.title}</a>
+                    <a key={bug.id} href={routeHref('/board', { q: bug.id })}>{bug.id}: {bug.title}</a>
                   ))}
                 </div>
               )}

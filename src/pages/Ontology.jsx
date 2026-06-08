@@ -316,7 +316,7 @@ function nodeHealthLabel(stats) {
 }
 function NodeHealthText({ stats }) {
   const badges = nodeHealthBadges(stats);
-  if (!badges.length) return <text y="18" textAnchor="middle" className="node-subtitle">—</text>;
+  if (!badges.length) return <text y="18" textAnchor="middle" className="node-subtitle">-</text>;
   const gap = 26;
   const startX = -((badges.length - 1) * gap) / 2;
   return (
@@ -425,10 +425,10 @@ function SearchHelpModal({ open, onClose }) {
         <h3 id="ontology-search-help-title">How route search works</h3>
         <p>Search filters which arrows stay visible on the graph. It does not move or focus generations by itself.</p>
         <ul className="ontology-help-list">
-          <li><strong>One term</strong> — match a game (<em>yellow</em>), generation (<em>gen 3</em>, <em>Gen III</em>), region (<em>hoenn</em>, <em>johto</em>), route id, bug id, or status word.</li>
-          <li><strong>Regions span remakes</strong> — <em>hoenn</em> includes Gen III and Gen VI; <em>johto</em> includes Gen II and Gen IV.</li>
-          <li><strong>Two terms with a hyphen</strong> — <em>alpha-emerald</em> shows only routes between those games&apos; generations (Alpha Sapphire → Gen VI, Emerald → Gen III).</li>
-          <li><strong>Exact game ids</strong> — <em>alpha-sapphire</em> (hyphenated) stays one game, not a pair.</li>
+          <li><strong>One term</strong>: match a game (<em>yellow</em>), generation (<em>gen 3</em>, <em>Gen III</em>), region (<em>hoenn</em>, <em>johto</em>), route id, bug id, or status word.</li>
+          <li><strong>Regions span remakes</strong>: <em>hoenn</em> includes Gen III and Gen VI; <em>johto</em> includes Gen II and Gen IV.</li>
+          <li><strong>Two terms with a hyphen</strong>: <em>alpha-emerald</em> shows only routes between those games&apos; generations (Alpha Sapphire → Gen VI, Emerald → Gen III).</li>
+          <li><strong>Exact game ids</strong>: <em>alpha-sapphire</em> (hyphenated) stays one game, not a pair.</li>
         </ul>
         <p className="ontology-help-note">Status filters above still apply. Clear the field to show everything again.</p>
         <button type="button" className="button small" onClick={onClose}>Got it</button>
@@ -451,7 +451,7 @@ function OntologyPanel({ generations, games, routes, statuses, focusedId, select
     const stats = generationStats(focused.id, routes);
     return <aside className="ontology-panel"><div className="panel-header"><p className="eyebrow">Focused Generation</p><h2 className="route-leg-title"><span className="route-gen-phrase">{focused.label}</span></h2><span className="soft-label">{focused.era}</span></div><p>{focused.summary}</p><div className="health-grid">{['green','blue','yellow','red','gray'].map((key) => <button key={key} onClick={() => onSelectRoute(focusRoutes.find((r) => r.status === key))} disabled={!stats[key]}><StatusPill status={key} label={statuses[key]?.label} /><strong>{stats[key] || 0}</strong></button>)}</div><h3>Game library</h3><GameCardGrid games={games.filter((g) => g.generation === focused.id)} compact /></aside>;
   }
-  return <aside className="ontology-panel"><div className="panel-header"><p className="eyebrow">Compatibility Lab</p><h2>Focus and inspect.</h2></div><p>Each generation pair has two parallel arrows—one per direction. Click an arrow to inspect that route in this panel. Click a generation circle to focus that generation&apos;s game library and route health. Node badges use <strong>P</strong> passed, <strong>U</strong> untested, and <strong>F</strong> failing.</p><div className="legend-stack">{Object.entries(statuses).map(([key, value]) => <span key={key}><i className={`route-dot ${key}`} /> <strong>{value.label}</strong> {value.description}</span>)}</div></aside>;
+  return <aside className="ontology-panel"><div className="panel-header"><p className="eyebrow">Compatibility Lab</p><h2>Focus and inspect.</h2></div><p>Each generation pair has two parallel arrows, one per direction. Click an arrow to inspect that route in this panel. Click a generation circle to focus that generation&apos;s game library and route health. Node badges use <strong>P</strong> passed, <strong>U</strong> untested, and <strong>F</strong> failing.</p><div className="legend-stack">{Object.entries(statuses).map(([key, value]) => <span key={key}><i className={`route-dot ${key}`} /> <strong>{value.label}</strong> {value.description}</span>)}</div></aside>;
 }
 export default function Ontology({ data, query }) {
   const { generations, routes, games, statuses } = data.compatibility;
@@ -507,7 +507,7 @@ export default function Ontology({ data, query }) {
   return (
     <main>
       <PageTitle eyebrow="Compatibility Ontology" title="Transfer routes between generations">
-        Each generation pair has two parallel arrows—one per direction. Click an arrow to inspect that route in the side panel. Click a generation circle to focus that era&apos;s game library.
+        Each generation pair has two parallel arrows, one per direction. Click an arrow to inspect that route in the side panel. Click a generation circle to focus that era&apos;s game library.
       </PageTitle>
       <section className="ontology-toolbar">
         <div className="segmented" role="group" aria-label="Route status filters">
