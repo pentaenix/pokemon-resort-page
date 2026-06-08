@@ -38,6 +38,15 @@
       "updatedAt": "2026-06-02"
     },
     {
+      "id": "idea-pokemon-memories",
+      "slug": "idea-pokemon-memories",
+      "title": "Pokémon memory system",
+      "status": "promising",
+      "summary": "Memory store per pkrid: game strings, transfer emotions, resort events, and silent cartridge snapshots. Surfaces flavor when Pokémon arrive.",
+      "tags": ["memories", "transfer", "pkrid", "cartridge", "resort"],
+      "updatedAt": "2026-06-05"
+    },
+    {
       "id": "idea-pokeball-rest-nook",
       "slug": "idea-pokeball-rest-nook",
       "title": "Pokéball rest nook",

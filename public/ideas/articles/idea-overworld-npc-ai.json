@@ -418,6 +418,7 @@
           {
             "type": "links",
             "items": [
+              { "label": "Pokémon memory system (durable history per pkrid)", "href": "#/ideas?idea=idea-pokemon-memories" },
               { "label": "Overworld Pokémon spawn (who appears where)", "href": "#/ideas?idea=idea-overworld-pokemon-spawn" },
               { "label": "Partner idle behaviour (separate idea)", "href": "#/ideas?idea=idea-partner-idle-behaviour" },
               { "label": "owmap format (terrain and map metadata today)", "href": "#/docs?article=owmap-format" },

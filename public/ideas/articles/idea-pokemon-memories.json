@@ -1,0 +1,312 @@
+{
+  "dossier": {
+    "overview": "**Pokémon memory system** is the durable history layer for each Resort Pokémon (`pkrid`). It stores memory **tokens**, not a raw event log.\n\n**Two different feeling systems:**\n\n1. **Cartridge memories (Gen 6+)** use a stored **feeling index** per memory. The game does **not** infer feeling from friendship, Nature, species, or battle outcome later. Each `memoryId` has a **whitelist bitmask** of legal feelings; the index is chosen when the memory is created and then stored (OT Memory Feeling / NotOT Memory Feeling fields).\n\n2. **Resort-authored memories** (island activities, staff moments, resort-recorded transfer intake) use a **Resort feeling resolver**: activity + map context + **typing + Nature** (example: Fire type, Careful Nature, near the pool → nervous).\n\nWe also preserve **Characteristic-style memory text** (OT / current trainer strings), **transfer hop records**, **game-context deltas** (evolve, ribbon, move), and **silent cartridge snapshots** on cache miss when Resort opens.",
+    "sections": [
+      {
+        "id": "taxonomy",
+        "title": "Memory families",
+        "summary": "Four sources, one store per pkrid.",
+        "blocks": [
+          {
+            "type": "diagram",
+            "title": "Memory sources",
+            "caption": "All families merge into PokemonMemoryRegistry; actors read, never own",
+            "source": "flowchart TB\n    GN[\"cartridge memoryId intensity feeling variable\"] --> REG[\"PokemonMemoryRegistry per pkrid\"]\n    TR[\"transfer hop records\"] --> REG\n    RS[\"resort memories\"] --> RFR[\"ResortFeelingResolver type nature activity\"]\n    RFR --> REG\n    GC[\"game_context and cache snapshots\"] --> REG\n    REG --> SURF[\"Surprise flavor at resort arrival or interact\"]\n    REG --> NPC[\"NPC AI memoryScore bias\"]"
+          },
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Family</th><th>Feeling model</th><th>Example</th></tr></thead><tbody><tr><td><code>cartridge</code></td><td>Stored <code>feelingRaw</code> + per-<code>memoryId</code> bitmask (Gen 6/8 rules)</td><td>Memory 63, intensity 2, feeling 9 → \"it got nervous\"</td></tr><tr><td><code>transfer</code></td><td>Preserve imported bytes; resort intake uses Resort resolver</td><td>Link trade hop; first arrival at island</td></tr><tr><td><code>resort</code></td><td><strong>ResortFeelingResolver</strong> (activity + type + Nature + map)</td><td>Fire + Careful + pool edge → nervous</td></tr><tr><td><code>game_context</code></td><td>Context fields; optional mapped feeling for display only</td><td>Lavender Town party snapshot before badge 6</td></tr></tbody></table><p><strong>Guardrail:</strong> never re-roll cartridge feelings from personality later. Resort feelings are computed once at creation time.</p>"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "config/gameplay/memories/memory_record.example.json",
+            "language": "json",
+            "caption": "Unified memory record shape",
+            "body": "{\n  \"registryId\": \"mem_000482\",\n  \"pkrid\": \"pkr_000123\",\n  \"family\": \"resort\",\n  \"memoryType\": \"played_ball_together\",\n  \"createdAt\": 1234567890.0,\n  \"importance\": 65,\n  \"feelingSource\": \"resort_resolver\",\n  \"feelingNormalized\": 1,\n  \"renderedFeeling\": \"it had fun\",\n  \"participants\": [\"pkr_000123\", \"pkr_000456\", \"player\"],\n  \"mapId\": \"beach_01\",\n  \"smartObjectId\": \"beach_ball_01\",\n  \"displayHint\": \"The Pokémon looks excited near the beach ball.\"\n}"
+          }
+        ]
+      },
+      {
+        "id": "cartridge-feelings",
+        "title": "Cartridge memories and feelings",
+        "layout": "tabs-primary",
+        "summary": "Stored feeling index per memoryId. Not re-derived from Nature or species later.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "fields",
+                "label": "Memory fields",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "A Gen 6+ cartridge memory is not a free-text mood. It is a tuple:\n\n• **memoryId** (what happened)\n• **intensity** (remembers / clearly remembers / fondly remembers)\n• **feeling** (emotion line index)\n• **variable** (place, item, move, species, etc.)\n\nSeparate OT vs current-trainer tracks: **OT Memory Feeling** and **NotOT Memory Feeling** sit beside memory line, intensity, and text variable fields.\n\n**Do not** infer feeling from friendship, Nature, species, affection, or battle result when reading a save. Store the **raw feeling byte** for legality and Bank/HOME export."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/memories/cartridge_memory.example.json",
+                    "language": "json",
+                    "caption": "Canonical stored cartridge memory (internal format)",
+                    "body": "{\n  \"pkrid\": \"pkr_000123\",\n  \"family\": \"cartridge\",\n  \"generationFormat\": 6,\n  \"isOtMemory\": true,\n  \"cartridgeMemoryId\": 63,\n  \"intensity\": 2,\n  \"feelingRaw\": 9,\n  \"feelingNormalized\": 9,\n  \"variable\": 42,\n  \"renderedFeeling\": \"it got nervous\",\n  \"sourceGameId\": \"omega-ruby\",\n  \"firstSeenAt\": 1234000000.0,\n  \"lastSeenAt\": 1234567890.0\n}"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "docs/gameplay/pokemon_memory_feelings.md",
+                    "language": "text",
+                    "caption": "Normalize Gen 6 vs Gen 8 feeling storage",
+                    "body": "// Internal canonical: feelingNormalized 0..23\nfunction normalizeFeeling(raw, gen) {\n  return gen === 8 ? raw - 1 : raw;\n}\n\nfunction exportFeeling(normalized, gen) {\n  return gen === 8 ? normalized + 1 : normalized;\n}\n\n// Gen 8: feeling 0 is empty/invalid\n// Bank/HOME transfer bug: Gen 6 feelings may display wrong on SWSH without fixup"
+                  }
+                ]
+              },
+              {
+                "id": "bitmask",
+                "label": "How feeling is chosen",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "When the **game** creates a memory, it picks one **legal** feeling for that `memoryId` from a 24-bit whitelist (PKHeX legality model). Resort must **not** invent cartridge feelings outside that mask when exporting back to a save.\n\n**Special case:** Gen 6 memory `4` (Link Trade) with `variable === 0` (Bank-style \"came through Link Trade\") uses `rand(0,10)` and **does not** use the normal bit table."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "docs/gameplay/pokemon_memory_feelings.md",
+                    "language": "text",
+                    "caption": "chooseFeeling (game-accurate sketch)",
+                    "body": "function chooseFeeling(memoryId, generation) {\n  if (generation === 6 && memoryId === 4 && variable === 0) {\n    return randomInt(0, 9);\n  }\n  const mask = memoryFeelingMasks[memoryId];\n  while (true) {\n    const raw = randomInt(0, 23);\n    if ((mask & (1 << raw)) !== 0) {\n      return generation === 8 ? raw + 1 : raw;\n    }\n  }\n}\n\nfunction canHaveFeelingGen6(memoryId, feeling, variable) {\n  if (memoryId === 4 && variable === 0) return feeling >= 0 && feeling < 10;\n  return (memoryFeelingMasksGen6[memoryId] & (1 << feeling)) !== 0;\n}"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Generation</th><th>Stored feeling values</th></tr></thead><tbody><tr><td>Gen 6 (XY, ORAS)</td><td><code>0</code> to <code>23</code></td></tr><tr><td>Gen 8 (Sword/Shield)</td><td><code>1</code> to <code>24</code> (<code>0</code> = empty/invalid)</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "feeling-table",
+                "label": "Feeling index table",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Gen 6 index</th><th>Gen 8 index</th><th>Rendered text</th></tr></thead><tbody><tr><td>0</td><td>1</td><td>it was happy</td></tr><tr><td>1</td><td>2</td><td>it had fun</td></tr><tr><td>2</td><td>3</td><td>it was glad</td></tr><tr><td>3</td><td>4</td><td>it grinned</td></tr><tr><td>4</td><td>5</td><td>it got overwhelmed by emotion</td></tr><tr><td>5</td><td>6</td><td>its feelings were indescribable / complicated</td></tr><tr><td>6</td><td>7</td><td>it felt good</td></tr><tr><td>7</td><td>8</td><td>it got teary eyed</td></tr><tr><td>8</td><td>9</td><td>it got lighthearted</td></tr><tr><td>9</td><td>10</td><td>it got nervous</td></tr><tr><td>10</td><td>11</td><td>it felt comfortable</td></tr><tr><td>11</td><td>12</td><td>it was restless</td></tr><tr><td>12</td><td>13</td><td>it got a bit carried away</td></tr><tr><td>13</td><td>14</td><td>it felt sorry</td></tr><tr><td>14</td><td>15</td><td>it got emotional</td></tr><tr><td>15</td><td>16</td><td>it felt nostalgic</td></tr><tr><td>16</td><td>17</td><td>it had some difficulty</td></tr><tr><td>17</td><td>18</td><td>it felt exhausted</td></tr><tr><td>18</td><td>19</td><td>it could not be true to its feelings</td></tr><tr><td>19</td><td>20</td><td>it felt proud</td></tr><tr><td>20</td><td>21</td><td>they ended up in a foul mood</td></tr><tr><td>21</td><td>22</td><td>it got angry</td></tr><tr><td>22</td><td>23</td><td>it got jealous</td></tr><tr><td>23</td><td>24</td><td>it got sleepy</td></tr></tbody></table><p>Source: Bulbapedia memory/feeling indexes (Gen 6/Gen 8). Characteristic text (\"Likes to relax\") is a separate IV-derived field, not this feeling line.</p>"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "transfer",
+        "title": "Transfer memories",
+        "layout": "tabs-primary",
+        "summary": "Preserve imported cartridge bytes; resort intake uses Resort feeling resolver.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "transfer-events",
+                "label": "What we record",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<p><strong>Imported from cartridge:</strong> copy full OT/NotOT memory tuples unchanged (<code>memoryId</code>, <code>intensity</code>, <code>feelingRaw</code>, <code>variable</code>). Validate with per-<code>memoryId</code> feeling bitmask on write/export.</p><p><strong>Resort transfer log</strong> (OpenHome hop, first island arrival): store hop metadata plus a <strong>Resort-resolved</strong> feeling (see Resort memories). Map display to nearest game feeling text where helpful; do not pretend it was a native cartridge roll unless exporting.</p><ul><li>Left game A for game B (OpenHome)</li><li>First available at Resort from origin game</li><li>Returned to home region save after island visit (optional)</li></ul>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/memories/transfer_memory.example.json",
+                    "language": "json",
+                    "caption": "Resort transfer log entry (feeling from Resort resolver)",
+                    "body": "{\n  \"registryId\": \"mem_000201\",\n  \"pkrid\": \"pkr_000123\",\n  \"family\": \"transfer\",\n  \"memoryType\": \"arrived_at_resort\",\n  \"feelingSource\": \"resort_resolver\",\n  \"feelingNormalized\": 8,\n  \"renderedFeeling\": \"it got lighthearted\",\n  \"fromGameId\": \"emerald\",\n  \"regionHint\": \"hoenn\",\n  \"importance\": 70,\n  \"createdAt\": 1234561000.0,\n  \"resolverInputs\": {\n    \"activityId\": \"resort_intake\",\n    \"primaryType\": \"Water\",\n    \"nature\": \"Jolly\",\n    \"mapTags\": [\"dock\", \"arrival\"]\n  },\n  \"displayHint\": \"It seems lighthearted since arriving from Hoenn.\"\n}"
+                  }
+                ]
+              },
+              {
+                "id": "transfer-flow",
+                "label": "Flow",
+                "blocks": [
+                  {
+                    "type": "diagram",
+                    "title": "Transfer to memory token",
+                    "caption": "Transfer pipeline writes; resort reads later",
+                    "source": "sequenceDiagram\n    participant G1 as Origin game\n    participant OH as OpenHome transfer\n    participant REG as MemoryRegistry\n    participant RS as Resort intake\n    G1->>OH: Pokemon sent to box or game B\n    OH->>REG: transfer memory plus emotion\n    OH->>RS: Pokemon available in Resort\n    RS->>REG: arrived_at_resort memory\n    Note over REG: Player meets Pokemon days later\n    REG->>RS: displayHint for interact flavor"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "resort",
+        "title": "Resort memories",
+        "layout": "tabs-primary",
+        "summary": "Island events. Feelings from activity + type + Nature + map context.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "resolver",
+                "label": "Resort feeling resolver",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Only **Resort-authored** memories use dynamic feeling selection. Inputs:\n\n• **activityId** / smart object tags (played ball, pool edge, woken late)\n• **primaryType** / **secondaryType**\n• **Nature** (and optionally Characteristic as light bias)\n• **mapTags** (pool, water, quiet, night)\n• **timeBlock** (late_night wake-ups)\n\nOutput: `feelingNormalized` (0 to 23) and `renderedFeeling` string aligned with the cartridge table for consistent UI. Optionally clamp to a resort-specific whitelist per `memoryType` if we export to cartridge later.\n\n**Example:** Fire type, **Careful** Nature, standing near **pool** water → uncomfortable → **nervous** (index 9, \"it got nervous\"). Water type at same pool might resolve **comfortable** (index 10)."
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "ResortFeelingResolver",
+                    "caption": "Cartridge memories skip this path entirely",
+                    "source": "flowchart TD\n    EVT[\"Resort event completed\"] --> IN[\"Inputs activity types nature mapTags time\"]\n    IN --> RULES[\"Data table type nature zone rules\"]\n    RULES --> IDX[\"feelingNormalized 0..23\"]\n    IDX --> TXT[\"renderedFeeling string\"]\n    IDX --> REG[\"PokemonMemoryRegistry\"]"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/memories/resort_feeling_rules.example.json",
+                    "language": "json",
+                    "caption": "Example rule rows (data-driven)",
+                    "body": "{\n  \"resortFeelingRules\": [\n    {\n      \"when\": { \"primaryType\": \"Fire\", \"mapTags\": [\"pool\", \"water\"], \"natureGroup\": \"composed\" },\n      \"feelingNormalized\": 9,\n      \"note\": \"Careful/Gentle/Calm/Careful group → nervous near water\"\n    },\n    {\n      \"when\": { \"activityId\": \"played_ball_together\", \"natureGroup\": \"energetic\" },\n      \"feelingNormalized\": 1,\n      \"note\": \"it had fun\"\n    },\n    {\n      \"when\": { \"activityId\": \"woken_late_night\", \"natureGroup\": \"steady\" },\n      \"feelingNormalized\": 23,\n      \"note\": \"it got sleepy\"\n    }\n  ]\n}"
+                  }
+                ]
+              },
+              {
+                "id": "types",
+                "label": "Memory types",
+                "blocks": [
+                  {
+                    "type": "html",
+            "html": "<table><thead><tr><th>memoryType</th><th>Trigger</th></tr></thead><tbody><tr><td><code>played_ball_together</code></td><td>Smart object activity completed with friend</td></tr><tr><td><code>napped_near_friend</code></td><td>Rest activity near bonded pkrid</td></tr><tr><td><code>made_staff</code></td><td>Player assigned staff role on map</td></tr><tr><td><code>assigned_special_space</code></td><td>Player asked Pokémon to stay in rest nook, villa room, etc.</td></tr><tr><td><code>woken_late_night</code></td><td>Player interaction during late_night time block</td></tr><tr><td><code>received_photo</code></td><td>Photo gift linked as treasured anchor</td></tr><tr><td><code>player_joined_game</code></td><td>Player accepted multi-actor activity invite</td></tr><tr><td><code>worked_staff_shift</code></td><td>Staff work loop completed</td></tr></tbody></table>"
+          },
+                  {
+                    "type": "text",
+                    "body": "Created by **activity completion hooks**, **player assignment**, and **staff role changes**. Feed NPC AI `memoryScore` and interact flavor. Photo gifts link `photoId` and `linkedRegistryId`."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/memories/resort_memory.example.json",
+                    "language": "json",
+                    "caption": "Pool-edge nervous Fire / Careful example",
+                    "body": "{\n  \"registryId\": \"mem_000315\",\n  \"pkrid\": \"pkr_000456\",\n  \"family\": \"resort\",\n  \"memoryType\": \"pool_edge_idle\",\n  \"feelingSource\": \"resort_resolver\",\n  \"feelingNormalized\": 9,\n  \"renderedFeeling\": \"it got nervous\",\n  \"importance\": 55,\n  \"mapId\": \"beach_01\",\n  \"resolverInputs\": {\n    \"activityId\": \"pool_edge_idle\",\n    \"primaryType\": \"Fire\",\n    \"secondaryType\": null,\n    \"nature\": \"Careful\",\n    \"mapTags\": [\"pool\", \"water\"]\n  },\n  \"displayHint\": \"It seems uneasy this close to the water.\"\n}"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/memories/resort_photo_memory.example.json",
+                    "language": "json",
+                    "caption": "Treasured photo (feeling may be nostalgic)",
+                    "body": "{\n  \"registryId\": \"mem_000310\",\n  \"pkrid\": \"pkr_000123\",\n  \"family\": \"resort\",\n  \"memoryType\": \"received_photo\",\n  \"feelingSource\": \"resort_resolver\",\n  \"feelingNormalized\": 15,\n  \"renderedFeeling\": \"it felt nostalgic\",\n  \"participants\": [\"pkr_000123\", \"player\"],\n  \"photoId\": \"photo_204\",\n  \"linkedRegistryId\": \"mem_000482\",\n  \"importance\": 95,\n  \"displayHint\": \"It is holding a photo from the day it played by the beach ball.\"\n}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "game-context",
+        "title": "Game-context and silent cache",
+        "layout": "tabs-primary",
+        "summary": "Cartridge deltas plus surprise snapshots when cache misses.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "deltas",
+                "label": "Cartridge deltas",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "While a Pokémon remains in an tracked game, record **game-context** tokens when we detect meaningful changes on read or sync:"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>memoryType</th><th>Trigger</th></tr></thead><tbody><tr><td><code>evolved_in_game</code></td><td>Species stage changed in source game</td></tr><tr><td><code>leveled_up_in_game</code></td><td>Level increased (optional threshold, e.g. every 10 levels)</td></tr><tr><td><code>learned_move</code></td><td>New move in moveset</td></tr><tr><td><code>ribbon_added</code></td><td>New ribbon flag</td></tr><tr><td><code>friendship_changed</code></td><td>Friendship crossed band (low, mid, high)</td></tr><tr><td><code>beat_game</code></td><td>Champion or equivalent cleared in source game</td></tr><tr><td><code>badge_milestone</code></td><td>Badge count crossed configured threshold</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/memories/game_context.example.json",
+                    "language": "json",
+                    "caption": "Evolution context memory",
+                    "body": "{\n  \"memoryId\": \"mem_000088\",\n  \"pkrid\": \"pkr_000123\",\n  \"family\": \"game_context\",\n  \"memoryType\": \"evolved_in_game\",\n  \"gameId\": \"emerald\",\n  \"gameContext\": {\n    \"locationLabel\": \"Route 119\",\n    \"badgeCount\": 4,\n    \"speciesBefore\": \"grovyle\",\n    \"speciesAfter\": \"sceptile\"\n  },\n  \"importance\": 80,\n  \"displayHint\": \"It evolved into Sceptile on Route 119 in Emerald.\",\n  \"createdAt\": 1234500000.0\n}"
+                  }
+                ]
+              },
+              {
+                "id": "silent-cache",
+                "label": "Silent cache check",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "When the player opens **Pokémon Resort**, run a **silent cache check** against the last stored cartridge fingerprints for each linked game. No UI unless the player opts into transfer tools.\n\nOn **cache miss** (party, location, badges, or progress changed since last snapshot), write a **cartridge context snapshot** for each Pokémon in the party at that moment, plus player-level fields (badges, champion flag, map label, time block if known)."
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Silent cache check",
+                    "caption": "Miss writes snapshot; hit does nothing",
+                    "source": "flowchart TD\n    OPEN[\"Player opens Resort\"] --> CHECK[\"Compare party and progress fingerprint\"]\n    CHECK -->|cache hit| DONE[\"No new snapshot\"]\n    CHECK -->|cache miss| SNAP[\"Write cartridge_context per party pkrid\"]\n    SNAP --> STORE[\"PokemonMemoryRegistry\"]\n    STORE --> LATER[\"Days later Pokemon spawns on island\"]\n    LATER --> FLAVOR[\"Surprise displayHint on interact\"]"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/memories/cartridge_snapshot.example.json",
+                    "language": "json",
+                    "caption": "Cache-miss snapshot (Lavender Town before badge 6)",
+                    "body": "{\n  \"snapshotId\": \"snap_00941\",\n  \"pkrid\": \"pkr_000025\",\n  \"family\": \"game_context\",\n  \"memoryType\": \"cartridge_snapshot\",\n  \"gameId\": \"firered\",\n  \"capturedAt\": 1234567890.0,\n  \"gameContext\": {\n    \"playerLocationLabel\": \"Lavender Town\",\n    \"badgeCount\": 5,\n    \"championCleared\": false,\n    \"partyIndex\": 0,\n    \"speciesName\": \"Pikachu\",\n    \"level\": 24\n  },\n  \"importance\": 75,\n  \"feelingSource\": null,\n  \"displayHint\": \"It was with you in Lavender Town before the sixth badge.\"\n}"
+                  },
+                  {
+                    "type": "text",
+                    "body": "**Surprise rule:** do not spoil snapshots in menus the same day unless the player interacts with that Pokémon. Prefer subtle emote or inspect text on first meeting after intake.\n\nFingerprint inputs: `gameId`, `partyPkrids` order, per-Pokémon level/species/moves hash, `badgeCount`, `championFlag`, `mapLabel` or `locationId`, optional `playTimeMinutes`."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "storage",
+        "title": "Storage and surfacing",
+        "summary": "Registry API, importance, and NPC AI hook.",
+        "blocks": [
+          {
+            "type": "diagram",
+            "title": "Read path at resort",
+            "caption": "Live PokemonActor never owns canonical memories",
+            "source": "flowchart LR\n    REG[\"PokemonMemoryRegistry\"] -->|top by importance| FLAVOR[\"Interact displayHint\"]\n    REG -->|memoryType tags| SCORE[\"NPC AI memoryScore\"]\n    REG -->|treasured photo| OVERLAY[\"Held photo sprite\"]\n    ACT[\"PokemonActor runtime\"] -.->|read only| REG"
+          },
+          {
+            "type": "code",
+            "repo": "pokemon-resort",
+            "path": "config/gameplay/memories/memory_registry_config.example.json",
+            "language": "json",
+            "caption": "Registry limits (curated, not a log)",
+            "body": "{\n  \"memoryRegistry\": {\n    \"maxMemoriesPerPkrid\": 48,\n    \"dedupeByMemoryTypeWindowSeconds\": 3600,\n    \"minImportanceForNpcBias\": 40,\n    \"maxSurfacedOnInteract\": 1,\n    \"silentCacheCheckOnResortOpen\": true,\n    \"cacheFingerprintGames\": [\"firered\", \"emerald\", \"scarlet\"]\n  }\n}"
+          },
+          {
+            "type": "html",
+            "html": "<p><strong>Acceptance criteria</strong></p><ul><li>Cartridge memories store <code>feelingRaw</code> + bitmask validation; never re-derive from Nature later</li><li>Gen 6 (0 to 23) and Gen 8 (1 to 24) export rules handled</li><li>Link Trade memory 4 / variable 0 special case implemented</li><li>Resort memories use ResortFeelingResolver (activity + type + Nature + map)</li><li>Transfer log and resort events share resolver; imported hops keep cartridge bytes</li><li>game_context snapshots use <code>displayHint</code> without faking cartridge feeling</li><li>Silent cache miss writes party snapshot without blocking resort load</li><li>No raw event log; dedupe and cap per pkrid</li></ul>"
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "Overworld NPC AI (memoryScore and activity tokens)", "href": "#/ideas?idea=idea-overworld-npc-ai" },
+              { "label": "Pokéball rest nook (assigned special space)", "href": "#/ideas?idea=idea-pokeball-rest-nook" },
+              { "label": "Compatibility / transfer routes", "href": "#/docs?article=compatibility-ontology" },
+              { "label": "Pokémon Natures (separate from memory strings)", "href": "https://pokemondb.net/mechanics/natures" },
+              { "label": "Memory feelings (Bulbapedia)", "href": "https://bulbapedia.bulbagarden.net/wiki/Memory" },
+              { "label": "Characteristics (Bulbapedia)", "href": "https://bulbapedia.bulbagarden.net/wiki/Characteristic" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

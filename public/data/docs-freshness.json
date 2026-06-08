@@ -1,5 +1,5 @@
 {
-  "computedAt": "2026-06-06T05:21:36.004Z",
+  "computedAt": "2026-06-08T02:48:36.093Z",
   "articles": {
     "writing-docs": {
       "status": "stale",
@@ -108,7 +108,7 @@
     "owmap-format": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-01",
-      "newestCodeChange": "2026-06-03",
+      "newestCodeChange": "2026-06-08",
       "apps": [
         "pokemon-resort",
         "pokemon-resort-page"
@@ -136,7 +136,7 @@
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/SceneMetadataParser.cpp",
           "exists": true,
-          "modifiedAt": "2026-06-03"
+          "modifiedAt": "2026-06-08"
         }
       ]
     },

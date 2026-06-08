@@ -13,7 +13,7 @@
     "showReference": {
       "path": "media/atlas/reference/concierge-show-map-ep6.jpg",
       "label": "From the show",
-      "caption": "Pokémon Concierge, episode 6 (~6:18). The frame our hand-traced map comes from."
+      "caption": "Pokémon Concierge, episode 6 (~6:18) — the frame our hand-traced map comes from."
     },
     "carousel": [
       {
@@ -74,10 +74,31 @@
     {
       "id": "red",
       "label": "Uncertain / TBD",
-      "hint": "Placeholders. Location not finalized yet (e.g. lobby on the ocean)"
+      "hint": "Placeholders — location not finalized yet (e.g. lobby on the ocean)"
     }
   ],
   "pins": [
+    {
+      "id": "pin-11",
+      "name": "Farm 1",
+      "color": "red",
+      "x": 0.6447,
+      "y": 0.4915,
+      "summary": "",
+      "linkedResearch": [],
+      "linkedFeatures": [],
+      "dossier": {
+        "overview": "",
+        "researchMilestones": [],
+        "sections": []
+      },
+      "tilt": -20,
+      "coverImage": {
+        "path": "media/atlas/pin-11/VS-Netflix-PokmonConciergeE1ImHarutheNewConcierge-6-20.jpg",
+        "label": "",
+        "caption": ""
+      }
+    },
     {
       "id": "pin-10",
       "name": "Glamping Tents",
