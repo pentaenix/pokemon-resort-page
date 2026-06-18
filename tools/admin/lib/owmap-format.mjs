@@ -1,5 +1,5 @@
 /**
- * Overworld map (.owmap) binary format v1 — matches pokemon-resort terrain arrays.
+ * Overworld map (.owmap) binary format v1: matches pokemon-resort terrain arrays.
  *
  * Layout (little-endian):
  *   magic "OWM1" (4)

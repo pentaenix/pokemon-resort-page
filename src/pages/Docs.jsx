@@ -344,7 +344,7 @@ function DocsArticleView({ meta, body, categories, freshness, appCatalog, onBack
       )}
 
       {hero && (
-        <figure className={`docs-article-cover${meta.heroImage?.fit === 'contain' ? ' docs-article-cover--contain' : ''}`}>
+        <figure className={`docs-article-cover${meta.heroImage?.fit === 'contain' ? ' docs-article-cover--contain' : ''}${meta.heroImage?.fit === 'pixel' ? ' docs-article-cover--pixel' : ''}`}>
           <img src={hero} alt={meta.heroImage?.caption || meta.title} />
           {meta.heroImage?.caption && <figcaption>{meta.heroImage.caption}</figcaption>}
         </figure>

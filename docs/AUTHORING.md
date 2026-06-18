@@ -13,7 +13,7 @@ This guide is for humans and coding agents adding articles to the **Resort Docs*
 
 ## Why JSON instead of Markdown?
 
-Articles use the same **dossier block model** as Research, Ideas, Features, and Milestones. That gives you diagrams (Mermaid UML), image galleries, carousels, side-by-side compares, and sanitized HTML tables without a custom Markdown parser. JSON is verbose but explicit — easy for LLMs to generate correctly and validate before publish.
+Articles use the same **dossier block model** as Research, Ideas, Features, and Milestones. That gives you diagrams (Mermaid UML), image galleries, carousels, side-by-side compares, and sanitized HTML tables without a custom Markdown parser. JSON is verbose but explicit: easy for LLMs to generate correctly and validate before publish.
 
 ## File layout
 
@@ -25,14 +25,14 @@ Articles use the same **dossier block model** as Research, Ideas, Features, and 
 | `public/assets/docs/` | SVG mocks, icons, placeholders |
 | `public/media/docs/` | Screenshots, GIFs, MP4 clips |
 
-Each article needs **both** an entry in `docs.json` and a body file under the matching **category folder** — not in a flat `articles/` root.
+Each article needs **both** an entry in `docs.json` and a body file under the matching **category folder**: not in a flat `articles/` root.
 
 ```
 public/docs/articles/
-  meta/        — authoring guides (category: meta)
-  formats/     — file format specs (category: formats)
-  gameplay/    — systems & architecture (category: gameplay)
-  design/      — visual / UX reference (category: design)
+  meta/       : authoring guides (category: meta)
+  formats/    : file format specs (category: formats)
+  gameplay/   : systems & architecture (category: gameplay)
+  design/     : visual / UX reference (category: design)
 ```
 
 The card's `category` must match the folder name. Default path: `{category}/{slug}.json`.
@@ -143,12 +143,12 @@ Set `"layout": "tabs-primary"` on a section that contains a single `tabs` block 
 | `diagram` | `source`, `title?`, `caption?` | Mermaid UML text |
 | `code` | `repo`, `path`, `body`, `lines?`, `language?`, `caption?` | Linked source from an app root (see below) |
 | `tabs` | `tabs[]`, `caption?` | Tab bar; each tab has `id`, `label`, `blocks[]` |
-| `links` | `items[]` | `{ label, href }` — https only |
+| `links` | `items[]` | `{ label, href }`: https only |
 | `html` | `html` | Sanitized subset; good for schema tables |
 
 ### Linked code (`repo` roots)
 
-`path` is relative to the app folder in the monorepo — not `pokemon-resort-page/` unless that is the repo value.
+`path` is relative to the app folder in the monorepo: not `pokemon-resort-page/` unless that is the repo value.
 
 | `repo` | Directory |
 |--------|-----------|
@@ -226,10 +226,10 @@ Fallback placeholder:
 
 ## Categories (current)
 
-- `meta` — Writing docs
-- `formats` — File formats (charbin, owmap, …)
-- `gameplay` — Game systems
-- `design` — Visual / UX reference
+- `meta`: Writing docs
+- `formats`: File formats (charbin, owmap, …)
+- `gameplay`: Game systems
+- `design`: Visual / UX reference
 
 ## Validation rules
 

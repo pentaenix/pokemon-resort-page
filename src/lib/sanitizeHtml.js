@@ -1,6 +1,6 @@
 /**
  * Sanitize HTML for dossier "html" blocks (browser DOMParser).
- * Admin mirror: tools/admin/public/sanitize-html.js — keep in sync.
+ * Admin mirror: tools/admin/public/sanitize-html.js: keep in sync.
  */
 
 import { isValidPublicHref } from './linkUtils.js';

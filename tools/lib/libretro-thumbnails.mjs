@@ -63,7 +63,7 @@ export function boxartListingUrl(systemFolder) {
   return `${LIBRETRO_BASE}/${encodePathSegment(systemFolder)}/Named_Boxarts/`;
 }
 
-/** Decode Apache href segment; keep literal + (e.g. CGB+SGB) — do not treat + as space. */
+/** Decode Apache href segment; keep literal + (e.g. CGB+SGB): do not treat + as space. */
 function decodeListingHref(hrefPath) {
   return decodeURIComponent(hrefPath);
 }

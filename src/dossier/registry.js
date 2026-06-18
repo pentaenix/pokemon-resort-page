@@ -62,6 +62,8 @@ function normalizeCompareItems(items) {
       path: String(item?.path || '').trim(),
       label: String(item?.label || '').trim(),
       caption: String(item?.caption || '').trim(),
+      fit: item?.fit === 'pixel' || item?.fit === 'contain' ? item.fit : undefined,
+      pixelScale: Number(item?.pixelScale) > 1 ? Number(item.pixelScale) : undefined,
     }))
     .filter((item) => item.path);
 }
@@ -109,7 +111,7 @@ registerDossierBlock({
   normalize(block) {
     const items = normalizeCompareItems(block.items);
     if (items.length < 2) return null;
-    const variant = block.variant === 'fixed' ? 'fixed' : 'fluid';
+    const variant = block.variant === 'fixed' || block.variant === 'arrow' ? block.variant : 'fluid';
     return {
       type: 'compare',
       variant,
@@ -175,8 +177,11 @@ registerDossierBlock({
     const body = String(block.body || block.text || '').trim();
     const caption = String(block.caption || '').trim();
     const layout = block.layout === 'side' ? 'side' : 'stacked';
+    const fit = block.fit === 'pixel' || block.fit === 'contain' ? block.fit : undefined;
+    const pixelScale = Number(block.pixelScale) > 1 ? Number(block.pixelScale) : undefined;
+    const emphasis = block.emphasis === 'low' ? 'low' : undefined;
     if (!body && !caption) return null;
-    return { type: 'figure', path, body, caption, layout };
+    return { type: 'figure', path, body, caption, layout, fit, pixelScale, emphasis };
   },
   collectImages(block) {
     return [{ path: block.path, caption: block.caption || block.body }];

@@ -88,7 +88,7 @@ function applyCardinalSlope(out, dir, hv, tileSize) {
   }
 }
 
-/** Corner order SW, SE, NE, NW — matches OverworldMapRenderer.cpp. */
+/** Corner order NW, NE, SE, SW: matches TerrainSurface.cpp / OverworldMapRenderer.cpp. */
 function applyCornerRampHeights(out, special, hv, tileSize) {
   const low = hv * tileSize;
   const high = (hv + 1) * tileSize;

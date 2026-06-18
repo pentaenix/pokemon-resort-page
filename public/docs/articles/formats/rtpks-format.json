@@ -1,36 +1,36 @@
 {
   "dossier": {
-    "overview": "An `.rtpks` file is a **Resort Tile Pack Source** — a portable ZIP archive that stores a Pokémon DS Map Studio (PDSMS) tileset together with a stable **Resort tile ID** index. PDSMS continues to be the authoring UI for Gen 4/5-style 3D tile painting; RTPKS is how those tiles survive re-saves, merges, and handoff into the Resort toolchain without renumbering identities.\n\nRTPKS is a **source** format (editor + asset library). Overworld **maps** for the C++ runtime are authored separately in the **Operations Desk Map Editor** as `.owmap` files (height, collision, spawn, metadata). Tile packs and terrain maps solve different problems — RTPKS holds *what tiles exist*; owmap holds *where the player walks*.\n\nImplementation: `Pokemon-DS-Map-Studio/src/main/java/resort/formats/`. In-repo overview: `Pokemon-DS-Map-Studio/docs/pokemon_resort_pipeline.md` (RTPKS sections).",
+    "overview": "An `.rtpks` file is a **Resort Tile Pack Source**: a ZIP archive that bundles a PDSMS tileset with stable **Resort tile IDs**, a **runtime mesh pack** (embedded `pokemon_resort.rpak`), and editor **tile tabs**. PDSMS remains the authoring UI for Gen 4/5-style 3D tiles; RTPKS v2 is how those tiles reach the **Map Editor** palette and the C++ **bgfx** renderer without renumbering.\n\n**RTPKS v2** (manifest `version: 2`) is required everywhere in the Resort toolchain. v1 packs are rejected. Each save also writes a sibling **`.rtpks.meta`** sidecar (preview PNGs + tab metadata) that the Map Editor needs to list tiles. Overworld placement happens in `.owmap` files via `tilePackage` + `tileLayers` (see owmap-format).\n\nImplementation: `Pokemon-DS-Map-Studio/src/main/java/resort/formats/`. Runtime loader: `pokemon-resort/src/gameplay/world3d/data/RtpksTilePackageLoader.cpp`.",
     "sections": [
       {
         "id": "role",
         "title": "What RTPKS is for",
-        "summary": "Stable tile identities for PDSMS → Resort.",
+        "summary": "Stable tile identities from PDSMS to Map Editor and bgfx.",
         "blocks": [
           {
             "type": "figure",
-            "path": "media/docs/pdsms/rtpks-resort-menu.webp",
-            "body": "Pokémon DS Map Studio with the **Pokémon Resort** menu open. RTPKS actions live here: **Open RTPKS as Tileset…**, **Save Current Tileset as RTPKS…**, and **Append Current Tiles to RTPKS…**. Paint maps with the normal tile list on the right — local indices in the grid, stable `resortTileId` values inside the pack file.",
-            "caption": "Pokémon Resort menu — RTPKS tileset actions",
+            "path": "media/docs/pdsms/pdsms-tile-selector.png",
+            "body": "Pokémon DS Map Studio tile selector: artists paint with **local tile indices** in the grid. RTPKS maps each list slot to a stable `resortTileId` that survives re-saves, appends, and handoff to Resort. The **Pokémon Resort** menu exposes Open / Save / Append RTPKS actions.",
+            "caption": "PDSMS tile selector (local indices in the editor)",
             "layout": "stacked"
           },
           {
             "type": "diagram",
-            "title": "Resort authoring split",
-            "caption": "Two editors, two formats — linked by pipeline discipline, not one mega-file",
-            "source": "flowchart LR\n    PDSMS[PDSMS tile painting] -->|Save as RTPKS| RTPKS[.rtpks tile pack]\n    RTPKS -->|stable resortTileId| TILES[Shared tile library]\n    ME[Map Editor owmap] -->|height collision spawn| OWM[.owmap terrain map]\n    OWM --> GAME[C++ overworld loader]\n    TILES -.->|future tile placement| ME"
+            "title": "Resort tile pipeline",
+            "caption": "Two files per pack (.rtpks + .rtpks.meta); owmap references the pack and paints resortTileId cells",
+            "source": "flowchart LR\n    PDSMS[PDSMS tile painting] -->|Save RTPKS v2| RTPKS[.rtpks ZIP]\n    PDSMS -->|sidecar| META[.rtpks.meta]\n    RTPKS --> ME[Map Editor palette]\n    META --> ME\n    ME -->|tileLayers + tilePackage| OWM[.owmap map]\n    RTPKS -->|RtpksTilePackageLoader| BGFX[OverworldBgfxRenderer]"
           },
           {
             "type": "text",
-            "body": "Design goals (from the Resort PDSMS integration):\n\n• **No second tile palette UI** — artists use the existing PDSMS tile selector; stable IDs live only inside RTPKS.\n• **Native payload round-trip** — `pdsms/tileset.pdsts` loads through existing `TilesetIO`; the editor never reconstructs tiles from runtime meshes.\n• **One Tile = one identity** — a 2×2 tree is still one RTPKS entry, not four draw calls.\n• **ID preservation** — re-saving an RTPKS-backed tileset keeps existing `resortTileId` values; removed slots become `inactive` tombstones instead of silent renumbering.\n\nEmpty map cells in PDSMS use local tile index **-1**. Resort tile ID **0 is valid** — do not treat zero as “null id.”"
+            "body": "Design goals:\n\n• **No second palette UI in PDSMS**: stable IDs live inside RTPKS; the Map Editor resolves `resortTileId` through the meta sidecar previews.\n• **Native PDSMS round-trip**: `pdsms/tileset.pdsts` loads through `TilesetIO`; the editor never reconstructs tiles from runtime meshes alone.\n• **Embedded runtime**: v2 packs include `runtime/manifest.json` (rpak), per-tile mesh JSON, and PNG textures so C++ and the Map Editor 3D view share one source.\n• **ID preservation**: re-saving keeps existing `resortTileId` values; removed slots become `inactive` tombstones.\n\nEmpty map cells in PDSMS use local index **-1**. Resort tile ID **0 is valid**. Do not treat zero as null."
           }
         ]
       },
       {
         "id": "schema",
-        "title": "Archive schema",
+        "title": "Archive schema (v2)",
         "layout": "tabs-primary",
-        "summary": "ZIP layout, manifest, tile index, and PDSMS payload.",
+        "summary": "ZIP layout, manifest, tile index, tile tabs, runtime rpak, and meta sidecar.",
         "blocks": [
           {
             "type": "tabs",
@@ -41,24 +41,23 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Extension: `.rtpks`. Container: **ZIP archive** with forward-slash entry paths (no custom binary header beyond ZIP). Reader/writer: `RtpksArchive.java` — shared ZIP helper also used by other Resort container formats in PDSMS."
-                  },
-                  {
-                    "type": "figure",
-                    "path": "assets/docs/rtpks-archive-structure.svg",
-                    "body": "Required entries: `manifest.json`, `index/tile_index.json`, `pdsms/tileset.pdsts`, and every PNG referenced by the tileset under `pdsms/textures/`. Thumbnail and metadata paths are optional.",
-                    "caption": "RTPKS archive tree",
-                    "layout": "stacked"
+                    "body": "Extension: `.rtpks`. Container: **ZIP** with forward-slash paths. Reader/writer: `RtpksArchive.java`. **Version 2 only**: `RtpksManifest.VERSION = 2`; admin `inspectRtpksBuffer` and `RtpksTilePackageLoader` reject v1."
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th>Entry path</th><th>Required</th><th>Contents</th></tr></thead><tbody><tr><td><code>manifest.json</code></td><td>yes</td><td>Format id, version, pack metadata, paths to payload</td></tr><tr><td><code>index/tile_index.json</code></td><td>yes</td><td><code>localIndex</code> → <code>resortTileId</code> mapping</td></tr><tr><td><code>pdsms/tileset.pdsts</code></td><td>yes</td><td>Native PDSMS tileset binary</td></tr><tr><td><code>pdsms/textures/*.png</code></td><td>yes*</td><td>Embedded textures (*one per material in tileset)</td></tr><tr><td><code>pdsms/TilesetThumbnail.png</code></td><td>no</td><td>Selector preview image</td></tr><tr><td><code>metadata/tile_metadata.json</code></td><td>no</td><td>Reserved for future per-tile tags</td></tr></tbody></table>"
+                    "html": "<table><thead><tr><th>Entry path</th><th>Required</th><th>Contents</th></tr></thead><tbody><tr><td><code>manifest.json</code></td><td>yes</td><td>Format id, <strong>version 2</strong>, pack metadata, paths to index files</td></tr><tr><td><code>index/tile_index.json</code></td><td>yes</td><td><code>localIndex</code> → <code>resortTileId</code></td></tr><tr><td><code>index/tile_tabs.json</code></td><td>yes</td><td>Palette tabs grouping <code>resortTileId</code> lists for Map Editor</td></tr><tr><td><code>pdsms/tileset.pdsts</code></td><td>yes</td><td>Native PDSMS tileset</td></tr><tr><td><code>pdsms/textures/*.png</code></td><td>yes*</td><td>Embedded textures (*per material)</td></tr><tr><td><code>runtime/manifest.json</code></td><td>yes</td><td><code>pokemon_resort.rpak</code>: materials + tile templates</td></tr><tr><td><code>runtime/meshes/tile_{id}.json</code></td><td>yes*</td><td>Per-tile mesh geometry (*one per active id)</td></tr><tr><td><code>runtime/textures/*.png</code></td><td>yes*</td><td>Runtime texture copies for C++ / editor 3D</td></tr><tr><td><code>pdsms/TilesetThumbnail.png</code></td><td>no</td><td>PDSMS selector thumbnail</td></tr></tbody></table><p><strong>Sibling sidecar</strong> (not inside the ZIP): <code>{pack}.rtpks.meta</code>: separate ZIP with <code>pokemon_resort.rtpks.meta</code> manifest, <code>editor/tile_metadata.json</code>, and <code>editor/previews/tile_{id}.png</code> thumbnails. Map Editor requires both files; SHA256 of the `.rtpks` must match <code>sourceSha256</code> in the meta manifest.</p>"
                   },
                   {
                     "type": "diagram",
-                    "title": "Load sequence",
-                    "caption": "RtpksReader extracts to a temp folder because TilesetIO expects textures beside pdsts",
-                    "source": "sequenceDiagram\n    participant Disk as .rtpks ZIP\n    participant Reader as RtpksReader\n    participant IO as TilesetIO\n    participant UI as PDSMS editor\n    Disk->>Reader: read manifest + index + blobs\n    Reader->>Reader: extract pdsts + PNGs to temp/pdsms/\n    Reader->>IO: readTilesetFromFile(pdsts)\n    IO->>UI: Tileset + ResortTilesetBinding"
+                    "title": "Load sequence (PDSMS)",
+                    "caption": "RtpksReader extracts pdsts + textures to temp because TilesetIO expects files on disk",
+                    "source": "sequenceDiagram\n    participant Disk as .rtpks ZIP\n    participant Reader as RtpksReader\n    participant IO as TilesetIO\n    participant UI as PDSMS editor\n    Disk->>Reader: manifest v2 + index + tabs + runtime\n    Reader->>Reader: extract pdsts + PNGs to temp/pdsms/\n    Reader->>IO: readTilesetFromFile(pdsts)\n    IO->>UI: Tileset + ResortTilesetBinding"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Load sequence (game)",
+                    "caption": "C++ reads runtime/ only: no PDSMS payload at play time",
+                    "source": "sequenceDiagram\n    participant OWM as .owmap tilePackage path\n    participant Loader as RtpksTilePackageLoader\n    participant BGFX as OverworldBgfxRenderer\n    OWM->>Loader: open .rtpks\n    Loader->>Loader: manifest v2 + runtime/manifest.json\n    Loader->>Loader: meshes + textures\n    Loader->>BGFX: RtpksTilePackage\n    BGFX->>BGFX: place meshes from tileLayers cells"
                   }
                 ]
               },
@@ -68,16 +67,16 @@
                 "blocks": [
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th>Field</th><th>Type</th><th>Value / notes</th></tr></thead><tbody><tr><td><code>format</code></td><td>string</td><td><code>pokemon_resort.rtpks</code></td></tr><tr><td><code>version</code></td><td>number</td><td><strong>1</strong></td></tr><tr><td><code>packId</code></td><td>string</td><td>Stable pack slug (from filename on first save)</td></tr><tr><td><code>name</code></td><td>string</td><td>Display label</td></tr><tr><td><code>tileIndex</code></td><td>string</td><td>Path to index JSON (default <code>index/tile_index.json</code>)</td></tr><tr><td><code>editorPayload.type</code></td><td>string</td><td>Must be <code>pdsms_tileset</code></td></tr><tr><td><code>editorPayload.tileset</code></td><td>string</td><td>Default <code>pdsms/tileset.pdsts</code></td></tr><tr><td><code>editorPayload.textureDirectory</code></td><td>string</td><td>Default <code>pdsms/textures</code></td></tr><tr><td><code>editorPayload.thumbnail</code></td><td>string</td><td>Default <code>pdsms/TilesetThumbnail.png</code></td></tr></tbody></table>"
+                    "html": "<table><thead><tr><th>Field</th><th>Type</th><th>Value / notes</th></tr></thead><tbody><tr><td><code>format</code></td><td>string</td><td><code>pokemon_resort.rtpks</code></td></tr><tr><td><code>version</code></td><td>number</td><td><strong>2</strong> (v1 deprecated)</td></tr><tr><td><code>packId</code></td><td>string</td><td>Stable pack slug</td></tr><tr><td><code>name</code></td><td>string</td><td>Display label</td></tr><tr><td><code>tileIndex</code></td><td>string</td><td>Default <code>index/tile_index.json</code></td></tr><tr><td><code>tileTabs</code></td><td>string</td><td>Default <code>index/tile_tabs.json</code></td></tr><tr><td><code>editorPayload.type</code></td><td>string</td><td><code>pdsms_tileset</code></td></tr><tr><td><code>editorPayload.tileset</code></td><td>string</td><td><code>pdsms/tileset.pdsts</code></td></tr></tbody></table>"
                   },
                   {
                     "type": "code",
                     "repo": "pokemon-ds-map-studio",
                     "path": "src/main/java/resort/formats/RtpksManifest.java",
-                    "lines": "5-25",
+                    "lines": "5-27",
                     "language": "java",
-                    "caption": "RtpksManifest — format constant and editor payload paths",
-                    "body": "public class RtpksManifest {\n    public static final String FORMAT = \"pokemon_resort.rtpks\";\n    public static final int VERSION = 1;\n    public String format = FORMAT;\n    public int version = VERSION;\n    public String packId;\n    public String name;\n    public EditorPayload editorPayload = new EditorPayload();\n    public String tileIndex = \"index/tile_index.json\";\n}"
+                    "caption": "RtpksManifest: v2 with tileTabs path",
+                    "body": "public class RtpksManifest {\n    public static final String FORMAT = \"pokemon_resort.rtpks\";\n    public static final int VERSION = 2;\n    public String tileIndex = \"index/tile_index.json\";\n    public String tileTabs = \"index/tile_tabs.json\";\n    public EditorPayload editorPayload = new EditorPayload();\n}"
                   }
                 ]
               },
@@ -87,7 +86,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Format: `pokemon_resort.tile_index`, version 1. Maps each **PDSMS local tile list index** to a stable **`resortTileId`** (uint32 — stored as JSON number). Runtime and future Resort importers resolve painted cells through this table."
+                    "body": "Format: `pokemon_resort.tile_index`, version 1. Maps each **PDSMS local tile list index** to a stable **`resortTileId`** (uint32 in JSON). Map Editor `tileLayers` cells and the C++ renderer both reference `resortTileId`, not local index."
                   },
                   {
                     "type": "html",
@@ -95,16 +94,57 @@
                   },
                   {
                     "type": "html",
-                    "html": "<p><strong>ID assignment rules</strong> (<code>TileIndexBuilder</code>):</p><ul><li>First save: ids allocated sequentially from 0 upward for each tile slot.</li><li>Re-save: existing active mappings for unchanged indices are preserved.</li><li>Removed tiles: prior entry kept with <code>status: inactive</code> — ids are not recycled silently.</li><li>New tiles appended at end: receive the next unused id (may skip gaps from inactive entries).</li><li>Any future compact/reindex tool must be explicit and emit a remap report.</li></ul>"
+                    "html": "<p><strong>ID assignment</strong> (<code>TileIndexBuilder</code>): first save allocates ids 0…n-1; re-save preserves mappings; removed tiles become <code>inactive</code>; appended tiles get the next unused id.</p>"
+                  }
+                ]
+              },
+              {
+                "id": "tile-tabs",
+                "label": "tile_tabs.json",
+                "blocks": [
+                  {
+                    "type": "figure",
+                    "path": "media/docs/pdsms/pdsms-tile-tab-creator.png",
+                    "body": "PDSMS **Tile tab creator** assigns tiles to named tabs (ground, trees, props, …). On save, `RtpksTileTabs.build()` writes `index/tile_tabs.json`. The Map Editor groups the RTPKS palette by these tabs.",
+                    "caption": "Tile tab creator in PDSMS",
+                    "layout": "side"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Field</th><th>Description</th></tr></thead><tbody><tr><td><code>format</code></td><td><code>pokemon_resort.rtpks.tile_tabs</code></td></tr><tr><td><code>tabs[]</code></td><td><code>id</code>, <code>name</code>, <code>order</code>, <code>tileIds[]</code> (resortTileId list)</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "runtime",
+                "label": "runtime/ (rpak)",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "`RtpksRuntimePayloadWriter` bakes PDSMS tiles into an embedded **RPAK** document at save time. `runtime/manifest.json` uses `format: pokemon_resort.rpak`, lists materials and tile templates, and points at per-tile mesh JSON and texture PNGs under `runtime/`."
                   },
                   {
                     "type": "code",
-                    "repo": "pokemon-ds-map-studio",
-                    "path": "src/main/java/resort/formats/TileIndexBuilder.java",
-                    "lines": "18-71",
-                    "language": "java",
-                    "caption": "buildOrUpdate — preserve stable ids across saves",
-                    "body": "public static TileIndex buildOrUpdate(String packId, int tileCount, TileIndex existing) {\n    // Copy inactive tombstones; mark out-of-range actives inactive\n    // For each localIndex 0..tileCount-1: reuse prior id or allocate next unused\n    return index;\n}"
+                    "repo": "pokemon-resort",
+                    "path": "src/gameplay/world3d/data/RtpksTilePackageLoader.cpp",
+                    "lines": "124-162",
+                    "language": "cpp",
+                    "caption": "C++ loader: v2 manifest + runtime meshes",
+                    "body": "const JsonValue manifest = extractJson(zip, \"manifest.json\");\nif (intOr(manifest.get(\"version\"), 0) != 2) {\n    throw std::runtime_error(\"Unsupported RTPKS package. Re-export as RTPKS v2\");\n}\nconst JsonValue runtime = extractJson(zip, \"runtime/manifest.json\");\n// … load materials from runtime/textures/, meshes from runtime/meshes/tile_{id}.json"
+                  }
+                ]
+              },
+              {
+                "id": "meta-sidecar",
+                "label": ".rtpks.meta",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Written beside the pack by `RtpksEditorMetaWriter.write()`: filename pattern: `my_pack.rtpks.meta`. Contains rendered preview PNGs (one per active tile), tab assignments, footprint metadata, and a SHA256 of the source `.rtpks` so the Map Editor can detect stale sidecars.\n\nDeploy **both** files to `pokemon-resort/assets/overworld/tilepacks/`. Upload APIs in the admin server accept `.rtpks` + `.rtpks.meta` together."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Sidecar entry</th><th>Purpose</th></tr></thead><tbody><tr><td><code>manifest.json</code></td><td><code>format: pokemon_resort.rtpks.meta</code>, <code>sourceSha256</code>, paths</td></tr><tr><td><code>editor/tile_metadata.json</code></td><td>Per-tile tab, footprint, preview path</td></tr><tr><td><code>editor/previews/tile_{id}.png</code></td><td>Palette thumbnails for Map Editor</td></tr></tbody></table>"
                   }
                 ]
               }
@@ -115,47 +155,38 @@
       {
         "id": "authoring",
         "title": "Authoring in PDSMS",
-        "summary": "Pokémon Resort menu actions.",
+        "summary": "Save, append, tile tabs, and Resort handoff.",
         "blocks": [
           {
             "type": "html",
-            "html": "<table><thead><tr><th>Menu action</th><th>Behavior</th></tr></thead><tbody><tr><td><strong>Open RTPKS as Tileset…</strong></td><td>Load ZIP → native tileset + textures + <code>ResortTilesetBinding</code> (active tile index)</td></tr><tr><td><strong>Save Current Tileset as RTPKS…</strong></td><td>Write pdsts, textures, thumbnail, manifest, and updated tile index (preserves ids)</td></tr><tr><td><strong>Append Current Tiles to RTPKS…</strong></td><td>Merge editor tiles onto an existing pack; new slots get new ids; reopens pack</td></tr><tr><td><strong>Validate Current Resort Setup…</strong></td><td>Checks tileset is RTPKS-backed, index matches tile count, map cells resolve ids</td></tr></tbody></table><p>Status bar shows active RTPKS path and dirty state. Code: <code>ResortController</code>, <code>ResortTilesetWorkflow</code>, <code>ResortTilesetBinding</code>.</p>"
+            "html": "<table><thead><tr><th>Menu action</th><th>Behavior</th></tr></thead><tbody><tr><td><strong>Open RTPKS as Tileset…</strong></td><td>Load v2 ZIP → native tileset + binding + tile tabs</td></tr><tr><td><strong>Save Current Tileset as RTPKS…</strong></td><td>Write pdsts, runtime rpak, index, tabs, and <code>.rtpks.meta</code> sidecar</td></tr><tr><td><strong>Append Current Tiles to RTPKS…</strong></td><td>Merge tiles onto an existing pack; new slots get new ids</td></tr><tr><td><strong>Validate Current Resort Setup…</strong></td><td>Checks binding, index, tabs, and runtime payload</td></tr></tbody></table>"
           },
           {
             "type": "figure",
-            "path": "media/docs/pdsms/rtpks-append-result.webp",
-            "body": "After **Append Current Tiles to RTPKS…**, PDSMS reports how many tiles were merged, the new pack size, and the **local index → resortTileId** assignments for appended slots (e.g. local 390–778 in a 779-tile pack). Existing ids are preserved; only new list positions receive fresh mappings via <code>TileIndexBuilder</code>.",
-            "caption": "Append to RTPKS — stable id assignment report",
+            "path": "media/docs/pdsms/pdsms-rtpks-append.png",
+            "body": "After **Append Current Tiles to RTPKS…**, PDSMS reports merged tile count and **local index → resortTileId** assignments for new slots. Existing ids are preserved; only appended list positions receive fresh mappings.",
+            "caption": "Tiles appended to an existing RTPKS file",
             "layout": "side"
           },
           {
+            "type": "figure",
+            "path": "media/docs/map-editor/map-editor-rtpks-palette.png",
+            "body": "In the **Map Editor**, bind the pack (both `.rtpks` and `.rtpks.meta` in the tilepacks folder). The palette reads tab groups and preview images from the sidecar, then paints `resortTileId` into `tileLayers`.",
+            "caption": "RTPKS palette in the Map Editor",
+            "layout": "stacked"
+          },
+          {
             "type": "text",
-            "body": "Typical tile pack workflow:\n\n1. Build or import tiles in PDSMS (ground, trees, props on layers 0–7).\n2. **Pokémon Resort → Save Current Tileset as RTPKS…** → e.g. `packs/gen4_exterior.rtpks`.\n3. **Open RTPKS as Tileset…** on another machine — tile count, order, sizes, and multi-cell tiles must match.\n4. Paint maps with the normal PDSMS grid (local indices only in the map matrix).\n5. For Resort C++ overworld terrain (height, ramps, collision, spawn), use the **Map Editor** and export `.owmap` (see owmap-format).\n\nRun PDSMS: Java 8+, `java -jar Pokemon-DS-Map-Studio/build/libs/pokemon-ds-map-studio.jar` (or Gradle build in `Pokemon-DS-Map-Studio/`)."
-          },
-          {
-            "type": "code",
-            "repo": "pokemon-ds-map-studio",
-            "path": "src/main/java/resort/formats/RtpksWriter.java",
-            "lines": "23-66",
-                    "language": "java",
-                    "caption": "RtpksWriter.write — assemble ZIP from live tileset",
-                    "body": "public static void write(Path rtpksPath, WriteRequest request) throws IOException {\n    TilesetIO.saveTilesetToFile(pdstsPath, request.tileset);\n    TileIndex tileIndex = TileIndexBuilder.buildOrUpdate(...);\n    archive.put(\"manifest.json\", ...);\n    archive.put(\"index/tile_index.json\", ...);\n    archive.put(\"pdsms/tileset.pdsts\", ...);\n    // + pdsms/textures/*.png, optional thumbnail\n    RtpksArchive.write(rtpksPath, archive);\n}"
-          },
-          {
-            "type": "code",
-            "repo": "pokemon-ds-map-studio",
-            "path": "src/main/java/resort/formats/RtpksReader.java",
-            "lines": "24-67",
-            "language": "java",
-            "caption": "RtpksReader.load — validate manifest and hydrate TilesetIO",
-            "body": "public static LoadResult load(Path rtpksPath) throws IOException {\n    // Parse manifest (format + version + pdsms_tileset)\n    // Parse tile_index.json\n    // Extract pdsts + textures to temp dir → TilesetIO.readTilesetFromFile\n    return new LoadResult(...);\n}"
+            "body": "Typical workflow:\n\n1. Build or import tiles in PDSMS; organize **tile tabs** if the pack is large.\n2. **Pokémon Resort → Save Current Tileset as RTPKS…** → e.g. `gen4_exterior.rtpks` (+ `.rtpks.meta`).\n3. Copy both files to `pokemon-resort/assets/overworld/tilepacks/`.\n4. Map Editor → bind tile package → paint `tileLayers` on a map → save `.owmap`.\n5. Run the game 3D test screen to verify bgfx placement.\n\nRun PDSMS: Java 8+, `Pokemon-DS-Map-Studio/build/libs/pokemon-ds-map-studio.jar`."
           },
           {
             "type": "gallery",
-            "caption": "PDSMS captures (from public/media/gallery/screenshots/)",
+            "caption": "PDSMS and Map Editor captures (June 2026)",
             "images": [
-              { "path": "media/docs/pdsms/rtpks-resort-menu.webp", "caption": "Pokémon Resort menu — RTPKS actions" },
-              { "path": "media/docs/pdsms/rtpks-append-result.webp", "caption": "Append report — localIndex → resortTileId" }
+              { "path": "media/docs/pdsms/pdsms-tile-selector.png", "caption": "PDSMS tile selector" },
+              { "path": "media/docs/pdsms/pdsms-tile-tab-creator.png", "caption": "Tile tab creator" },
+              { "path": "media/docs/pdsms/pdsms-rtpks-append.png", "caption": "Append to RTPKS report" },
+              { "path": "media/docs/map-editor/map-editor-rtpks-palette.png", "caption": "Map Editor RTPKS palette" }
             ]
           }
         ]
@@ -163,39 +194,33 @@
       {
         "id": "validation",
         "title": "Validation rules",
-        "summary": "What Validate Current Resort Setup checks.",
+        "summary": "PDSMS verifier and admin inspectRtpks checks.",
         "blocks": [
           {
             "type": "html",
-            "html": "<table><thead><tr><th>Check</th><th>Severity</th></tr></thead><tbody><tr><td>Tileset loaded</td><td>error</td></tr><tr><td>Active tileset bound to RTPKS (<code>ResortTilesetBinding</code>)</td><td>error</td></tr><tr><td>Tile index non-empty</td><td>error</td></tr><tr><td>Active index count == tileset.size()</td><td>error</td></tr><tr><td>No duplicate active <code>resortTileId</code></td><td>error</td></tr><tr><td>Each painted local index resolves to a Resort id</td><td>error</td></tr><tr><td><code>tilePackSource</code> path mismatch vs active RTPKS</td><td>warning</td></tr></tbody></table>"
+            "html": "<table><thead><tr><th>Check</th><th>Where</th><th>Severity</th></tr></thead><tbody><tr><td>Manifest <code>version === 2</code></td><td>PDSMS / admin / C++</td><td>error (v1 rejected)</td></tr><tr><td><code>index/tile_tabs.json</code> has tabs</td><td>admin</td><td>error</td></tr><tr><td><code>runtime/manifest.json</code> rpak present</td><td>admin / C++</td><td>error</td></tr><tr><td>Sibling <code>.rtpks.meta</code> with matching SHA256</td><td>admin Map Editor</td><td>error</td></tr><tr><td>Tile index matches tileset size</td><td>PDSMS Validate</td><td>error</td></tr><tr><td>No duplicate active <code>resortTileId</code></td><td>PDSMS Validate</td><td>error</td></tr><tr><td>Each runtime mesh + texture exists</td><td>RtpksVerifier</td><td>error</td></tr></tbody></table>"
           },
           {
             "type": "text",
-            "body": "Reader errors (load time):\n\n• Wrong `format` or unsupported `version` in manifest or tile index\n• Missing archive entries (`manifest.json`, pdsts, textures)\n• `editorPayload.type` not `pdsms_tileset`\n• Texture missing during `TilesetIO` hydration"
+            "body": "Reader errors:\n\n• Wrong `format` or unsupported manifest `version` (v1: re-export from PDSMS)\n• Missing `runtime/manifest.json`, meshes, or textures\n• Map Editor without `.rtpks.meta` or SHA256 mismatch after manual copy\n• `editorPayload.type` not `pdsms_tileset`"
           }
         ]
       },
       {
         "id": "extending",
-        "title": "How to extend RTPKS",
-        "summary": "Version bumps, metadata, and Map Editor handoff.",
+        "title": "Versioning and extension",
+        "summary": "v1 deprecation, safe extensions, owmap glue.",
         "blocks": [
           {
             "type": "text",
-            "body": "**Safe extensions (v1):**\n\n• **`metadata/tile_metadata.json`** — optional per-tile tags (path reserved in docs; writer does not populate yet). Readers should ignore unknown ZIP entries.\n• **Extra manifest fields** — preserve on read/write if you add tooling; bump docs when semantics are defined.\n• **Append workflow** — `RtpksAppender` merges tilesets and runs `TileIndexBuilder` so new slots get fresh ids without rewriting old ones.\n\n**Breaking changes:**\n\n• Increment manifest `version` when JSON shape changes; teach `RtpksReader.validateManifest` and any Resort importer together.\n• Replacing `pdsms_tileset` payload type requires a new `editorPayload.type` — do not overload v1.\n• Explicit reindex/compact tools must emit a remap report if `localIndex` or `resortTileId` assignments change.\n\n**Map Editor (.owmap) integration:** owmap stores terrain height, special ramps, collision, spawn, and JSON metadata — not PDSMS tile layers. When bridging RTPKS tiles into Resort maps, treat RTPKS as the **canonical tile asset pack** and owmap as the **walkable world shell**. Document new glue tools in both this article and owmap-format when import paths land."
-          },
-          {
-            "type": "diagram",
-            "title": "Extension decision flow",
-            "caption": "Prefer new optional ZIP entries before bumping version",
-            "source": "flowchart TD\n    Q[Need new tile data?] --> A{Editor-only?}\n    A -->|Yes| B[metadata/tile_metadata.json or manifest extras]\n    A -->|No| C{Changes id mapping rules?}\n    C -->|Yes| D[Version bump + remap report tool]\n    C -->|No| E[Optional index fields if readers tolerate unknowns]"
+            "body": "**v1 → v2 migration:** Re-open the tileset in PDSMS and **Save Current Tileset as RTPKS…** again. v2 adds embedded runtime meshes, `tile_tabs.json`, and the `.rtpks.meta` sidecar. Old v1-only packs cannot load in the Map Editor or C++ renderer.\n\n**Safe extensions:** Optional manifest fields and extra ZIP entries should be ignored by readers that do not understand them. Per-tile tags can grow in `editor/tile_metadata.json` without bumping RTPKS manifest version if consumers tolerate unknown keys.\n\n**Breaking changes:** Increment manifest `version` when JSON shape changes; update `RtpksReader`, `inspectRtpksBuffer`, and `RtpksTilePackageLoader` together. Any tool that renumbers `resortTileId` must emit an explicit remap report for painted `tileLayers` cells in existing `.owmap` files."
           },
           {
             "type": "links",
             "items": [
-              { "label": "owmap format (Resort Map Editor terrain maps)", "href": "#/docs?article=owmap-format" },
-              { "label": "charbin schema (character sprites on maps)", "href": "#/docs?article=charbin-schema" },
-              { "label": "Island Dreamforge (terrain mesh upstream)", "href": "#/docs?article=island-dreamforge" }
+              { "label": "owmap format (tileLayers + tilePackage on maps)", "href": "#/docs?article=owmap-format" },
+              { "label": "Overworld GLB props (models[] on maps)", "href": "#/docs?article=overworld-glb-models" },
+              { "label": "charbin schema (character sprites on maps)", "href": "#/docs?article=charbin-schema" }
             ]
           }
         ]

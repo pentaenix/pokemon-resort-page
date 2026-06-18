@@ -1,0 +1,302 @@
+{
+  "dossier": {
+    "overview": "Pokémon accessories are cosmetic layers on the summary portrait and optional overworld walk sprite: one equipped slot per Pokémon, drag placement in a dressing UI, and per-facing sprite rules (example: ribbon full width south, clipped east/west, hidden north).\n\nAccessories and ribbons are Resort-earned (side quests, missions, guest gifts, Pokémon happiness gifts). The only cosmetics that travel in from cartridge data are held items (Dark Glasses, belts, etc.) projected as visuals when the item is legitimately on that Pokémon.\n\nEntry point: mirror smart object in the accessory building beside the Glamping Tents on the Island Atlas.",
+    "sections": [
+      {
+        "id": "guide",
+        "title": "Pokémon accessories",
+        "layout": "tabs-primary",
+        "summary": "Feature spec, rendering, ribbons, and reactive Pokémon / NPC observers. Generation reference assets are on the second tab.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "feature",
+                "label": "Feature and implementation",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Spark idea (not committed). Accessories echo contest decorations (Gen 4), photo stickers (Gen 5), and PSS props (Gen 6), but Resort owns every id, unlock, and equip state. Nothing from those systems is read off a save except held-item visuals."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Field</th><th>Specification</th></tr></thead><tbody><tr><td>Equipped slots</td><td>One accessory per Pokémon (summary layer + optional overworld layer)</td></tr><tr><td>Inventory</td><td>Multiple copies of the same accessory id allowed; one active equip per Pokémon</td></tr><tr><td>Removal</td><td>Player may unequip at any time; disliked items may trigger a Pokémon-initiated removal prompt (see Reactions)</td></tr><tr><td>Cartridge import</td><td><strong>Held items only</strong> (see Held-item projection). No contest accessories, photo stickers, PSS props, or ribbon bytes from saves</td></tr><tr><td>Ribbons</td><td>Resort-earned ribbon ids only; see Ribbons</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Acquisition channel</th><th>What unlocks</th></tr></thead><tbody><tr><td>Side quests</td><td>Story or location-tied accessory ids (one-time rewards)</td></tr><tr><td>Missions</td><td>Repeatable or dailies; includes ribbon-tier rewards after contest-style goals</td></tr><tr><td>Guest gifts</td><td>NPC handoffs after affinity or event flags</td></tr><tr><td>Pokémon gifts</td><td>Random offer when happiness crosses a threshold (mechanic TBD: threshold curve, cooldown, Nature bias)</td></tr><tr><td>Held-item projection</td><td>Not unlocked: cosmetic appears when the held item is already on the Pokémon from cartridge / OpenHome</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Resort data model",
+                    "caption": "Accessory state is Resort-owned; keys use pkrid",
+                    "source": "flowchart LR\n    INV[\"PlayerAccessoryInventory\"] --> EQ[\"EquippedAccessory per pkrid\"]\n    EQ --> SUM[\"Summary portrait composite\"]\n    EQ --> OW[\"Overworld sprite overlay\"]\n    DEF[\"AccessoryDef facings contestTags\"] --> EQ\n    HELD[\"HeldItemProjectionDef\"] --> EQ"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Mirror dressing flow",
+                    "caption": "Smart object at Glamping Tents publishes open_dressing_ui",
+                    "source": "flowchart TD\n    P[\"Player at mirror\"] --> SO[\"SmartObject mirror\"]\n    SO --> UI[\"Dressing UI session\"]\n    UI --> PRE[\"Summary + overworld preview\"]\n    PRE --> OK[\"Confirm writes pkrid equip\"]\n    PRE --> CAN[\"Cancel discards session\"]\n    OK --> VIS[\"AccessoryVisibility broadcast\"]\n    VIS --> RX[\"Pokemon + NPC reaction hooks\"]"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/accessory-mirror-shop.png",
+                    "body": "Pokémon Concierge frame: mirror interactable beside the glamping tents. Opens the accessory dressing screen (layout reference for UI density and framing, not a final Resort screen).",
+                    "caption": "Pokémon Concierge: mirror dressing scene (show screenshot)",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Step</th><th>Action</th></tr></thead><tbody><tr><td>1</td><td>Player visits the accessory building at <a href=\"#/atlas?pin=pin-10\">Glamping Tents</a></td></tr><tr><td>2</td><td>Interact with the mirror smart object</td></tr><tr><td>3</td><td>Dressing UI: summary view, inventory rail (Resort accessories, earned ribbons, held-item projections)</td></tr><tr><td>4</td><td>Drag accessory to anchor (hat, face, neck, body)</td></tr><tr><td>5</td><td>Overworld preview pane updates per facing when enabled</td></tr><tr><td>6</td><td>Confirm stores equip state on <code>pkrid</code>; cancel discards session edits</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Summary and overworld rendering"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/piloswine-summary.png",
+                    "body": "Summary editor layout: box portrait with accessory layer and optional overworld inset. Primary drag-and-drop surface.",
+                    "caption": "Piloswine: summary layout with overworld inset (concept)",
+                    "layout": "stacked",
+                    "fit": "pixel",
+                    "pixelScale": 4
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/piloswine-overworld-directions.png",
+                    "body": "Overworld facings for one accessory on Piloswine. Each `AccessoryDef` lists which directions draw a frame, clip, or omit the layer.",
+                    "caption": "Piloswine: overworld accessory facings (concept)",
+                    "layout": "side",
+                    "fit": "pixel",
+                    "pixelScale": 3
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/quaxwell-overworld-directions.png",
+                    "body": "Quaxwell overworld facings using the same direction rules as other species sheets.",
+                    "caption": "Quaxwell: overworld accessory facings (concept)",
+                    "layout": "side",
+                    "fit": "pixel",
+                    "pixelScale": 3
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/chimchar-overworld-directions.png",
+                    "body": "Single south-facing frame: hat accessory on Chimchar walking toward the camera. Illustrates a one-frame hat attachment, not a full direction sheet.",
+                    "caption": "Chimchar: south hat frame (concept)",
+                    "layout": "side",
+                    "fit": "pixel",
+                    "pixelScale": 2,
+                    "emphasis": "low"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Accessory sprites composite above the walk sheet. Anchor rects per facing may reuse charbin `metadata.custom.bodyMarkers` (see charbin-schema). Renderer draws the equipped accessory layer after the base sprite for each visible facing."
+                  },
+                  {
+                    "type": "text",
+                    "body": "Ribbons"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Rule</th><th>Specification</th></tr></thead><tbody><tr><td>Source</td><td>Resort missions and side quests; not imported from cartridge ribbon bytes</td></tr><tr><td>Equip</td><td>Player selects one earned ribbon id in the mirror UI</td></tr><tr><td>Summary</td><td>Ribbon sprite anchored on the species silhouette (chest or collar slot per species table)</td></tr><tr><td>Overworld</td><td>Matching ribbon layer on south walk frame; clipped or hidden on other facings per <code>RibbonDef</code></td></tr><tr><td>Shop rail</td><td>Ribbons are not purchasable; only ids already in player inventory from Resort rewards</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/spheal-ribbon-anchor-shape.gif",
+                    "body": "Ribbon anchor on the summary species shape: placement rect relative to the portrait silhouette before the full box UI is composited.",
+                    "caption": "Spheal: ribbon anchor on summary shape (concept)",
+                    "layout": "side",
+                    "fit": "pixel",
+                    "pixelScale": 4
+                  },
+                  {
+                    "type": "compare",
+                    "variant": "arrow",
+                    "caption": "Summary screen: without ribbon, then with earned ribbon equipped",
+                    "items": [
+                      {
+                        "path": "media/ideas/pokemon-accessories/spheal-summary-without-ribbon.gif",
+                        "label": "Without ribbon"
+                      },
+                      {
+                        "path": "media/ideas/pokemon-accessories/spheal-summary-with-ribbon.gif",
+                        "label": "With ribbon"
+                      }
+                    ]
+                  },
+                  {
+                    "type": "compare",
+                    "variant": "arrow",
+                    "caption": "Overworld walk (south): same Spheal without and with ribbon layer",
+                    "items": [
+                      {
+                        "path": "media/ideas/pokemon-accessories/spheal-overworld-walk-without-ribbon.gif",
+                        "label": "Walk, no ribbon",
+                        "fit": "pixel",
+                        "pixelScale": 3
+                      },
+                      {
+                        "path": "media/ideas/pokemon-accessories/spheal-overworld-walk-with-ribbon.gif",
+                        "label": "Walk, with ribbon",
+                        "fit": "pixel",
+                        "pixelScale": 3
+                      }
+                    ]
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/spheal-overworld-static-with-ribbon.png",
+                    "body": "Static south-facing overworld frame with ribbon equipped. Used when the actor is idle or as the preview still in the dressing UI.",
+                    "caption": "Spheal: static overworld frame with ribbon (concept)",
+                    "layout": "side",
+                    "fit": "pixel",
+                    "pixelScale": 3
+                  },
+                  {
+                    "type": "text",
+                    "body": "Held-item projection (cartridge-only cosmetics)"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Rule</th><th>Specification</th></tr></thead><tbody><tr><td>Eligibility</td><td>Pokémon currently holds a whitelisted item id from cartridge / OpenHome data</td></tr><tr><td>Visual</td><td><code>HeldItemProjectionDef</code> maps item id to accessory sprites (glasses, belt, scarf, etc.)</td></tr><tr><td>Battle</td><td>When the item is the active held item in battle, use battle rules; accessory slot may still show the same visual or hide per config</td></tr><tr><td>Export</td><td>Projection reads held item bytes only; Resort does not write new held items onto a save for cosmetics</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/ideas/pokemon-accessories/squirtle-held-glasses-anime.webp",
+                    "body": "Reference for held-item cosmetic treatment (Squirtle with glasses). Dark Glasses and similar items use this visual when the held item is present on the Pokémon.",
+                    "caption": "Squirtle with glasses (anime reference)",
+                    "layout": "side"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Reactive Pokémon and NPC observers"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Accessory visibility and reactions",
+                    "caption": "Equip change broadcasts to nearby actors; no stat changes from social barks",
+                    "source": "flowchart TB\n    EQ[\"Equip change on pkrid\"] --> VIS[\"AccessoryVisibilityEvent\"]\n    VIS --> SELF[\"Equipped PokemonActor\"]\n    VIS --> NEAR[\"Nearby PokemonActor + TrainerNPC\"]\n    SELF --> PREF[\"NatureAffinity check\"]\n    PREF --> EM[\"Emote idle sparkle or removal prompt\"]\n    NEAR --> TAG[\"Contest tag + species bark table\"]\n    TAG --> DLG[\"Flavor dialogue or emote offer\"]"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>AccessoryDef field</th><th>Purpose</th></tr></thead><tbody><tr><td><code>contestTags</code></td><td>Hidden coolness, beauty, cuteness, etc. (contest-stat alignment for affinity scoring)</td></tr><tr><td><code>natureAffinity</code></td><td>Per-Nature like / neutral / dislike</td></tr><tr><td><code>speciesOverrides</code></td><td>Optional per-species preference exceptions</td></tr><tr><td><code>observerBarks</code></td><td>Optional lines for NPCs and overworld Pokémon when this accessory id is visible</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Equipped Pokémon preference</th><th>Runtime behavior</th></tr></thead><tbody><tr><td>Like</td><td>Positive idle or sparkle; optional dialogue line</td></tr><tr><td>Neutral</td><td>No extra line</td></tr><tr><td>Dislike</td><td>Pokémon may request removal; player chooses allow or refuse</td></tr><tr><td>Refused removal</td><td>Over time, dialogue set where the Pokémon adapts to the accessory</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p>Integration with <a href=\"#/ideas?idea=idea-overworld-npc-ai\">Overworld NPC AI</a>: visible accessories are inputs to soft scoring, not hard filters. A guest Pokémon wearing a coolness-tagged hat may increase weight for emote offers toward other guests with matching <code>contestTags</code>. Trainer NPCs can use <code>observerBarks</code> when the player partner enters interaction range. Partner follower idle (separate idea) may add a Nature-weighted emote when the equipped accessory matches <code>natureAffinity</code>.</p><p>Reactions are flavor only: no battle stat changes, no friendship deltas from barks alone.</p>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Happiness gift roll (TBD)",
+                    "caption": "Threshold crossing may enqueue a gift offer; exact curve not finalized",
+                    "source": "flowchart LR\n    H[\"Happiness delta\"] --> TH[\"Threshold crossed?\"]\n    TH -->|no| END[\"No roll\"]\n    TH -->|yes| POOL[\"Eligible accessory pool\"]\n    POOL --> NAT[\"Nature weight filter\"]\n    NAT --> GIFT[\"PokemonGiftOffer UI\"]"
+                  }
+                ]
+              },
+              {
+                "id": "generation-assets",
+                "label": "Generation reference assets",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Historical game sheets below are **authoring references** for Resort-original accessory ids. Players unlock Resort ids through side quests, missions, and happiness gifts. These sprites are not read from cartridge saves. The only cosmetics that come from imported Pokémon data are held-item projections."
+                  },
+                  {
+                    "type": "tabs",
+                    "tabs": [
+                      {
+                        "id": "gen4",
+                        "label": "Gen 4 (D/P)",
+                        "blocks": [
+                          {
+                            "type": "figure",
+                            "path": "media/ideas/pokemon-accessories/reference-dp-contest-accessories.png",
+                            "body": "Diamond/Pearl contest accessory set: scarves, masks, and props from Super Contest visual rounds. Resort echoes these shapes as new ids tied to island missions.",
+                            "caption": "Gen 4: contest accessory sheet (reference)",
+                            "layout": "stacked"
+                          },
+                          {
+                            "type": "html",
+                            "html": "<table><thead><tr><th>Gen 4 family</th><th>Resort plan</th></tr></thead><tbody><tr><td>Contest accessories</td><td>Resort ids with <code>AccessoryDef</code> facings + contest tags</td></tr><tr><td>Unlock</td><td>Side quests and contest-style missions on the island</td></tr><tr><td>Contest stat alignment</td><td>Hidden coolness / beauty / cuteness tags on defs for Nature affinity</td></tr></tbody></table>"
+                          },
+                          {
+                            "type": "figure",
+                            "path": "media/ideas/pokemon-accessories/reference-dp-ribbons.png",
+                            "body": "Diamond/Pearl ribbon icon sheet. Resort ribbon rewards reuse these glyphs as art reference; ids are minted by Resort missions, not imported ribbon bytes.",
+                            "caption": "Gen 4: ribbon icon sheet (reference)",
+                            "layout": "stacked"
+                          }
+                        ]
+                      },
+                      {
+                        "id": "gen5",
+                        "label": "Gen 5 (B2W2)",
+                        "blocks": [
+                          {
+                            "type": "figure",
+                            "path": "media/ideas/pokemon-accessories/reference-b2w2-photo-decorations.png",
+                            "body": "Black 2/White 2 photo decoration stickers from the Xtransceiver photo studio. Resort sticker-style accessories use the same placement model on the summary portrait.",
+                            "caption": "Gen 5: photo decoration stickers (reference)",
+                            "layout": "stacked"
+                          },
+                          {
+                            "type": "html",
+                            "html": "<table><thead><tr><th>Gen 5 family</th><th>Resort plan</th></tr></thead><tbody><tr><td>Photo decorations</td><td>Sticker-style Resort ids (props, frames, characters)</td></tr><tr><td>Placement</td><td>Free position on summary portrait; optional overworld simplification</td></tr><tr><td>Unlock</td><td>Guest gifts and location side quests; not tied to Xtransceiver minigame</td></tr></tbody></table>"
+                          }
+                        ]
+                      },
+                      {
+                        "id": "gen6",
+                        "label": "Gen 6 (X/Y)",
+                        "blocks": [
+                          {
+                            "type": "figure",
+                            "path": "media/ideas/pokemon-accessories/reference-xy-pss-icons.png",
+                            "body": "X/Y Player Search System icon set: hats, glasses, and face props from trainer cards. Resort ports prop shapes as Pokémon-facing accessories scaled to species anchors.",
+                            "caption": "Gen 6: PSS icon props (reference)",
+                            "layout": "stacked"
+                          },
+                          {
+                            "type": "html",
+                            "html": "<table><thead><tr><th>Gen 6 family</th><th>Resort plan</th></tr></thead><tbody><tr><td>PSS icons</td><td>Hats, glasses, masks on face or head anchors</td></tr><tr><td>Direction rules</td><td>South full render; east/west clip; north omit</td></tr><tr><td>Unlock</td><td>Missions and Resort-original props alongside PSS-shaped references</td></tr></tbody></table>"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "open-questions",
+        "title": "Open questions",
+        "summary": "Happiness gifts, export, and shipping scope.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Topic</th><th>Status</th></tr></thead><tbody><tr><td>Happiness threshold gift mechanic</td><td>TBD (threshold curve, cooldown, duplicate handling)</td></tr><tr><td>Export accessories back to cartridge saves</td><td>Out of scope for v1; held items already round-trip via OpenHome</td></tr><tr><td>Held-item projection vs battle held slot</td><td>Undecided when both visual and battle use the same item</td></tr><tr><td>Feature ships in Resort</td><td>Spark: under evaluation</td></tr></tbody></table>"
+          },
+          {
+            "type": "links",
+            "items": [
+              { "label": "Glamping Tents: Island Atlas", "href": "#/atlas?pin=pin-10" },
+              { "label": "charbin schema (bodyMarkers / accessory anchors)", "href": "#/docs?article=charbin-schema" },
+              { "label": "Overworld NPC AI", "href": "#/ideas?idea=idea-overworld-npc-ai" },
+              { "label": "Pokémon memory system", "href": "#/ideas?idea=idea-pokemon-memories" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

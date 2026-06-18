@@ -1,6 +1,14 @@
 import { renderCompatGraphHtml, bindCompatGraph } from './ontology-picker.js';
 import { featureHasDossierContent } from './dossier-shared.js';
 import { mapEditorHtml, bindMapEditor, initMapEditorTab } from './map-editor.js';
+import { characterEditorHtml, bindCharacterEditor, initCharacterEditorTab } from './character-editor.js';
+import {
+  bindGameEngineHub,
+  gameEngineHubHtml,
+  gameEngineToolById,
+  loadGameEngineTools,
+  workbenchTitleForTool,
+} from './game-engine.js';
 import { atlasMapEditorHtml, bindAtlasMapEditor, initAtlasMapEditorTab } from './atlas-map-editor.js';
 import {
   bindDossierEditor,
@@ -27,16 +35,437 @@ const state = {
   github: { status: null, issues: [], state: 'open', loading: false, error: '' },
   featureFilter: 'active',
   featureSearch: '',
-  workshopPanes: { features: true, research: false },
+  workshopTab: 'milestones',
+  libraryTab: 'games',
+  deskReturnTab: 'Dashboard',
+  lastDeskKey: '',
   docArticles: {},
   ideaArticles: {},
+  gameEngineTools: [],
+  gameEngineTool: null,
 };
 const files = { compatibility:'compatibility.json', bugs:'bugs.json', features:'features.json', research:'research.json', atlasPins:'atlas-pins.json', theme:'theme.json', homepage:'homepage.json', gallery:'gallery.json', models:'models.json', characters:'characters.json', roadmap:'roadmap.json', ideas:'ideas.json', docs:'docs.json' };
-const tabs = ['Dashboard','Compatibility','Bugs','Workshop','Island Atlas','Map Editor','Milestones','Ideas','Docs','Game Library','Media Library','Models','Characters','Design Lab','Publish'];
+const tabs = ['Dashboard','Compatibility','Workshop','Island Atlas','Game Engine','Library','Publish'];
+const WORKSHOP_SECTIONS = [
+  { id: 'milestones', label: 'Milestones', hint: 'Public roadmap timeline', fileKey: 'roadmap' },
+  { id: 'docs', label: 'Docs', hint: 'Technical & design articles', fileKey: 'docs' },
+  { id: 'features', label: 'Features', hint: 'On-flight board cards + dossiers', fileKey: 'features' },
+  { id: 'bugs', label: 'Bugs', hint: 'Internal bugs + GitHub issues', fileKey: 'bugs' },
+  { id: 'research', label: 'Research', hint: 'Characters, Pokémon, locations', fileKey: 'research' },
+  { id: 'ideas', label: 'Ideas', hint: 'Extended sparks for #/ideas', fileKey: 'ideas' },
+];
+const WORKSHOP_TABS = WORKSHOP_SECTIONS.map((s) => s.id);
+const DEFAULT_WORKSHOP_TAB = WORKSHOP_TABS[0];
+const LIBRARY_SECTIONS = [
+  { id: 'games', label: 'Games', hint: 'Metadata, paths, and box art', fileKey: 'compatibility' },
+  { id: 'characters', label: 'Characters', hint: 'Staff, visitors, and sprite registry', fileKey: 'characters' },
+  { id: 'media', label: 'Media', hint: 'Gallery records and detected assets', fileKey: 'gallery' },
+  { id: 'models', label: 'Models', hint: 'Island GLB stack and submodels', fileKey: 'models' },
+];
+const LIBRARY_TABS = LIBRARY_SECTIONS.map((s) => s.id);
+const DEFAULT_LIBRARY_TAB = LIBRARY_TABS[0];
 const RESEARCH_CATEGORIES = ['Location', 'Character', 'Pokémon', 'Species', 'Mechanic', 'Region', 'Timeline', 'Asset', 'Other'];
+const TAB_SLUG_ALIASES = {
+  'box-art': 'Library',
+  'game-library': 'Library',
+  'media-library': 'Library',
+  'map-editor': 'Game Engine',
+  'character-editor': 'Game Engine',
+};
 const $ = (sel) => document.querySelector(sel);
 const esc = (value='') => String(value).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const clone = (x) => JSON.parse(JSON.stringify(x));
+
+function tabToSlug(tab) {
+  return String(tab || '').trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+function slugToTab(slug) {
+  const key = String(slug || '').trim().toLowerCase();
+  if (!key || key === '/') return null;
+  if (TAB_SLUG_ALIASES[key]) return TAB_SLUG_ALIASES[key];
+  return tabs.find((tab) => tabToSlug(tab) === key) || null;
+}
+
+function normalizeTabName(tab) {
+  if (tab === 'Box Art') return 'Library';
+  if (['Milestones', 'Docs', 'Features', 'Research', 'Bugs', 'Community Issues', 'Ideas'].includes(tab)) return 'Workshop';
+  if (['Game Library', 'Media Library', 'Models', 'Characters'].includes(tab)) return 'Library';
+  if (tab === 'Map Editor' || tab === 'Character Editor') return 'Game Engine';
+  return tab;
+}
+
+function legacyGameEngineToolId(tab) {
+  if (tab === 'Map Editor') return 'maps';
+  if (tab === 'Character Editor') return 'characters';
+  return null;
+}
+
+function isGameEngineWorkbenchOpen() {
+  return state.tab === 'Game Engine' && Boolean(state.gameEngineTool);
+}
+
+function normalizeGameEngineToolId(toolId) {
+  const key = String(toolId || '').trim().toLowerCase();
+  if (!key) return null;
+  return state.gameEngineTools.some((t) => t.id === key) ? key : null;
+}
+
+function workshopSectionForTab(tab) {
+  const map = {
+    Milestones: 'milestones',
+    Docs: 'docs',
+    Features: 'features',
+    Research: 'research',
+    Bugs: 'bugs',
+    'Community Issues': 'bugs',
+    Ideas: 'ideas',
+  };
+  return map[tab] || null;
+}
+
+function librarySectionForTab(tab) {
+  const map = {
+    'Game Library': 'games',
+    'Box Art': 'games',
+    'Media Library': 'media',
+    Models: 'models',
+    Characters: 'characters',
+  };
+  return map[tab] || null;
+}
+
+function librarySectionCount(sectionId) {
+  switch (sectionId) {
+    case 'games': return (state.data?.['compatibility.json']?.games || []).length;
+    case 'media': return (state.data?.['gallery.json']?.items || []).length;
+    case 'models': return (state.data?.['models.json']?.submodels || []).length + 1;
+    case 'characters': {
+      const data = state.data?.['characters.json'] || {};
+      return (data.seriesCharacters || []).length + (data.plannedVisitors || []).length + (data.spriteRequirements || []).length;
+    }
+    default: return 0;
+  }
+}
+
+function librarySectionFile(sectionId) {
+  const key = LIBRARY_SECTIONS.find((s) => s.id === sectionId)?.fileKey;
+  return key ? files[key] : null;
+}
+
+function workshopSectionCount(sectionId) {
+  switch (sectionId) {
+    case 'milestones': return (state.data?.['roadmap.json']?.milestones || []).length;
+    case 'docs': return (state.data?.['docs.json']?.articles || []).length;
+    case 'features': return (state.data?.['features.json']?.features || []).length;
+    case 'bugs': return (state.data?.['bugs.json']?.bugs || []).length;
+    case 'research': return (state.data?.['research.json']?.entries || []).length;
+    case 'ideas': return (state.data?.['ideas.json']?.items || []).length;
+    default: return 0;
+  }
+}
+
+function workshopSectionFile(sectionId) {
+  const key = WORKSHOP_SECTIONS.find((s) => s.id === sectionId)?.fileKey;
+  return key ? files[key] : null;
+}
+
+function parseAdminRoute() {
+  const raw = window.location.hash.replace(/^#/, '').trim();
+  if (!raw) return { tab: null, workshopTab: DEFAULT_WORKSHOP_TAB, libraryTab: DEFAULT_LIBRARY_TAB, gameEngineTool: null };
+  const pathPart = (raw.startsWith('/') ? raw.slice(1) : raw).split('?')[0];
+  const segments = pathPart.split('/').filter(Boolean).map((part) => decodeURIComponent(part).toLowerCase());
+  const first = segments[0] || '';
+
+  if (first === 'workshop') {
+    const section = segments[1] || DEFAULT_WORKSHOP_TAB;
+    return {
+      tab: 'Workshop',
+      workshopTab: WORKSHOP_TABS.includes(section) ? section : DEFAULT_WORKSHOP_TAB,
+      libraryTab: DEFAULT_LIBRARY_TAB,
+      gameEngineTool: null,
+    };
+  }
+  if (first === 'library') {
+    const section = segments[1] || DEFAULT_LIBRARY_TAB;
+    return {
+      tab: 'Library',
+      libraryTab: LIBRARY_TABS.includes(section) ? section : DEFAULT_LIBRARY_TAB,
+      workshopTab: DEFAULT_WORKSHOP_TAB,
+      gameEngineTool: null,
+    };
+  }
+  const legacyWorkshop = {
+    milestones: 'milestones',
+    roadmap: 'milestones',
+    docs: 'docs',
+    features: 'features',
+    research: 'research',
+    bugs: 'bugs',
+    'community-issues': 'bugs',
+    ideas: 'ideas',
+  };
+  if (legacyWorkshop[first]) {
+    return { tab: 'Workshop', workshopTab: legacyWorkshop[first], libraryTab: DEFAULT_LIBRARY_TAB, gameEngineTool: null };
+  }
+  const legacyLibrary = {
+    'game-library': 'games',
+    games: 'games',
+    'box-art': 'games',
+    'media-library': 'media',
+    media: 'media',
+    models: 'models',
+    characters: 'characters',
+  };
+  if (legacyLibrary[first]) {
+    return { tab: 'Library', libraryTab: legacyLibrary[first], workshopTab: DEFAULT_WORKSHOP_TAB, gameEngineTool: null };
+  }
+  if (first === 'design-lab') {
+    return { tab: 'Dashboard', workshopTab: DEFAULT_WORKSHOP_TAB, libraryTab: DEFAULT_LIBRARY_TAB, gameEngineTool: null };
+  }
+  if (first === 'game-engine' || first === 'game_engine') {
+    return {
+      tab: 'Game Engine',
+      gameEngineTool: segments[1] || null,
+      workshopTab: DEFAULT_WORKSHOP_TAB,
+      libraryTab: DEFAULT_LIBRARY_TAB,
+    };
+  }
+  if (first === 'map-editor') {
+    return { tab: 'Game Engine', gameEngineTool: 'maps', workshopTab: DEFAULT_WORKSHOP_TAB, libraryTab: DEFAULT_LIBRARY_TAB };
+  }
+  if (first === 'character-editor') {
+    return { tab: 'Game Engine', gameEngineTool: 'characters', workshopTab: DEFAULT_WORKSHOP_TAB, libraryTab: DEFAULT_LIBRARY_TAB };
+  }
+
+  return { tab: slugToTab(first), workshopTab: DEFAULT_WORKSHOP_TAB, libraryTab: DEFAULT_LIBRARY_TAB, gameEngineTool: null };
+}
+
+function readTabFromLocation() {
+  return parseAdminRoute().tab;
+}
+
+function tabHref(tab, { workshopTab = state.workshopTab, libraryTab = state.libraryTab, gameEngineTool = state.gameEngineTool } = {}) {
+  if (tab === 'Workshop') {
+    const section = WORKSHOP_TABS.includes(workshopTab) ? workshopTab : DEFAULT_WORKSHOP_TAB;
+    return `#/workshop/${section}`;
+  }
+  if (tab === 'Library') {
+    const section = LIBRARY_TABS.includes(libraryTab) ? libraryTab : DEFAULT_LIBRARY_TAB;
+    return `#/library/${section}`;
+  }
+  if (tab === 'Game Engine') {
+    const tool = normalizeGameEngineToolId(gameEngineTool);
+    return tool ? `#/game-engine/${tool}` : '#/game-engine';
+  }
+  return `#/${tabToSlug(tab)}`;
+}
+
+function syncUrlToTab(tab, { replace = false, workshopTab = state.workshopTab, libraryTab = state.libraryTab, gameEngineTool = state.gameEngineTool } = {}) {
+  const href = tabHref(tab, { workshopTab, libraryTab, gameEngineTool });
+  if (window.location.hash === href) return;
+  const fn = replace ? 'replaceState' : 'pushState';
+  history[fn](null, '', href);
+}
+
+function waitForAdminTransition() {
+  const viewport = $('#adminViewport');
+  if (!viewport) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      viewport.removeEventListener('transitionend', onEnd);
+      resolve();
+    };
+    const onEnd = (event) => {
+      if (event.target === viewport && event.propertyName === 'transform') finish();
+    };
+    viewport.addEventListener('transitionend', onEnd);
+    setTimeout(finish, 520);
+  });
+}
+
+function deskContentTab() {
+  if (state.tab === 'Game Engine') return 'Game Engine';
+  return state.tab;
+}
+
+function workbenchBackLabel() {
+  return state.tab === 'Game Engine' ? 'Back to Game Engine' : 'Back to Admin';
+}
+
+function workbenchLoadingShell(title) {
+  const label = workbenchBackLabel();
+  return `<section class="workbench-page">
+    <section class="toolbar workbench-commandbar">
+      <div class="workbench-brand">
+        <button type="button" class="workbench-menu-btn" id="workbenchExit">${esc(label)}</button>
+        <span class="workbench-menu-title">${esc(title)}</span>
+      </div>
+    </section>
+    <div class="workbench-loading">Loading…</div>
+  </section>`;
+}
+
+function bindWorkbenchEscape() {
+  for (const id of ['workbenchExit', 'mapExitWorkbench', 'characterExitWorkbench']) {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.onclick = () => {
+        if (isGameEngineWorkbenchOpen()) void closeGameEngineWorkbench();
+        else navigateToTab(state.deskReturnTab || 'Dashboard');
+      };
+    }
+  }
+  const panic = $('#workbenchPanicBack');
+  if (panic) {
+    panic.onclick = () => {
+      if (isGameEngineWorkbenchOpen()) void closeGameEngineWorkbench();
+      else navigateToTab(state.deskReturnTab || 'Dashboard');
+    };
+    const hasBar = document.getElementById('workbenchExit')
+      || document.getElementById('mapExitWorkbench')
+      || document.getElementById('characterExitWorkbench');
+    panic.hidden = !document.body.classList.contains('workbench-open') || Boolean(hasBar);
+  }
+}
+
+function initWorkbenchEscapeKey() {
+  if (window.__deskWorkbenchEscapeBound) return;
+  window.__deskWorkbenchEscapeBound = true;
+  window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (!document.body.classList.contains('workbench-open')) return;
+    event.preventDefault();
+    if (isGameEngineWorkbenchOpen()) void closeGameEngineWorkbench();
+    else navigateToTab(state.deskReturnTab || 'Dashboard');
+  });
+  window.addEventListener('pageshow', (event) => {
+    if (!event.persisted) return;
+    document.body.classList.remove('workbench-open');
+    void render();
+  });
+}
+
+async function openGameEngineTool(toolId, { replace = false } = {}) {
+  const id = normalizeGameEngineToolId(toolId);
+  if (!id) return;
+  if (state.tab !== 'Game Engine') {
+    state.deskReturnTab = deskContentTab();
+    state.tab = 'Game Engine';
+  }
+  state.gameEngineTool = id;
+  syncUrlToTab('Game Engine', { replace });
+  renderTabs();
+  await render();
+}
+
+async function closeGameEngineWorkbench({ replace = false } = {}) {
+  if (!isGameEngineWorkbenchOpen()) return;
+  state.gameEngineTool = null;
+  document.body.classList.remove('workbench-open');
+  await waitForAdminTransition();
+  syncUrlToTab('Game Engine', { replace });
+  renderTabs();
+  await render();
+}
+
+async function leaveGameEngineWorkbenchForTab(targetTab, { replace = false } = {}) {
+  if (!isGameEngineWorkbenchOpen()) return;
+  state.gameEngineTool = null;
+  document.body.classList.remove('workbench-open');
+  await waitForAdminTransition();
+  const normalized = normalizeTabName(targetTab);
+  state.tab = tabs.includes(normalized) ? normalized : (state.deskReturnTab || 'Dashboard');
+  syncUrlToTab(state.tab, { replace, workshopTab: state.workshopTab, libraryTab: state.libraryTab });
+  renderTabs();
+  await render();
+}
+
+function deskRenderKey(tab) {
+  if (tab === 'Workshop') return `${tab}|${state.workshopTab}`;
+  if (tab === 'Library') return `${tab}|${state.libraryTab}`;
+  return tab;
+}
+
+async function navigateToTab(tab, { replace = false } = {}) {
+  const legacyTool = legacyGameEngineToolId(tab);
+  const workshopSection = workshopSectionForTab(tab);
+  if (workshopSection) {
+    if (isGameEngineWorkbenchOpen()) {
+      await leaveGameEngineWorkbenchForTab('Workshop', { replace });
+      setWorkshopTab(workshopSection, { replace });
+      return;
+    }
+    setWorkshopTab(workshopSection, { replace });
+    return;
+  }
+  const librarySection = librarySectionForTab(tab);
+  if (librarySection) {
+    if (isGameEngineWorkbenchOpen()) {
+      await leaveGameEngineWorkbenchForTab('Library', { replace });
+      setLibraryTab(librarySection, { replace });
+      return;
+    }
+    setLibraryTab(librarySection, { replace });
+    return;
+  }
+  const normalized = normalizeTabName(tab);
+  if (legacyTool) {
+    await openGameEngineTool(legacyTool, { replace });
+    return;
+  }
+  if (!tabs.includes(normalized)) return;
+  if (normalized === 'Game Engine') {
+    if (isGameEngineWorkbenchOpen()) {
+      await closeGameEngineWorkbench({ replace });
+      return;
+    }
+    if (state.tab === 'Game Engine') return;
+    state.gameEngineTool = null;
+    state.tab = 'Game Engine';
+    syncUrlToTab(state.tab, { replace });
+    renderTabs();
+    await render();
+    return;
+  }
+  if (isGameEngineWorkbenchOpen()) {
+    await leaveGameEngineWorkbenchForTab(normalized, { replace });
+    return;
+  }
+  if (state.tab === 'Workshop' && normalized !== 'Workshop') persistWorkshopTabDraft(state.workshopTab);
+  if (state.tab === 'Library' && normalized !== 'Library') persistLibraryTabDraft(state.libraryTab);
+  state.tab = normalized;
+  syncUrlToTab(state.tab, { replace });
+  renderTabs();
+  await render();
+}
+
+function setWorkshopTab(tabKey, { replace = false } = {}) {
+  if (!WORKSHOP_TABS.includes(tabKey)) return;
+  if (state.tab === 'Workshop' && state.workshopTab === tabKey) return;
+  if (state.tab === 'Workshop') persistWorkshopTabDraft(state.workshopTab);
+  if (state.tab === 'Library') persistLibraryTabDraft(state.libraryTab);
+  state.workshopTab = tabKey;
+  if (state.tab !== 'Workshop') state.tab = 'Workshop';
+  syncUrlToTab('Workshop', { replace, workshopTab: tabKey });
+  renderTabs();
+  render();
+}
+
+function setLibraryTab(tabKey, { replace = false } = {}) {
+  if (!LIBRARY_TABS.includes(tabKey)) return;
+  if (state.tab === 'Library' && state.libraryTab === tabKey) return;
+  if (state.tab === 'Library') persistLibraryTabDraft(state.libraryTab);
+  if (state.tab === 'Workshop') persistWorkshopTabDraft(state.workshopTab);
+  state.libraryTab = tabKey;
+  if (state.tab !== 'Library') state.tab = 'Library';
+  syncUrlToTab('Library', { replace, libraryTab: tabKey });
+  renderTabs();
+  render();
+}
 
 function stamp() {
   return new Date().toLocaleTimeString();
@@ -109,22 +538,78 @@ function initLogDockToggle() {
   if (btn) btn.onclick = () => setLogDockCollapsed(!document.body.classList.contains('log-dock-collapsed'));
 }
 async function boot() {
+  document.body.classList.remove('workbench-open');
+  initWorkbenchEscapeKey();
   initLogDockToggle();
+  const route = parseAdminRoute();
+  if (route.tab) state.tab = normalizeTabName(route.tab);
+  if (route.workshopTab) state.workshopTab = route.workshopTab;
+  if (route.libraryTab) state.libraryTab = route.libraryTab;
+  if (route.tab === 'Game Engine' && !route.gameEngineTool) state.deskReturnTab = 'Dashboard';
+  state.gameEngineTools = await loadGameEngineTools(api);
+  if (route.gameEngineTool) {
+    state.gameEngineTool = normalizeGameEngineToolId(route.gameEngineTool);
+  }
+  window.addEventListener('hashchange', async () => {
+    const nextRoute = parseAdminRoute();
+    if (!nextRoute.tab) return;
+    const normalized = normalizeTabName(nextRoute.tab);
+    if (!tabs.includes(normalized)) return;
+    const toolChanged = normalized === 'Game Engine'
+      && normalizeGameEngineToolId(nextRoute.gameEngineTool) !== state.gameEngineTool;
+    const tabChanged = normalized !== state.tab;
+    const workshopChanged = normalized === 'Workshop' && nextRoute.workshopTab !== state.workshopTab;
+    const libraryChanged = normalized === 'Library' && nextRoute.libraryTab !== state.libraryTab;
+    if (!tabChanged && !workshopChanged && !libraryChanged && !toolChanged) return;
+    if (isGameEngineWorkbenchOpen() && normalized !== 'Game Engine') {
+      document.body.classList.remove('workbench-open');
+      await waitForAdminTransition();
+    }
+    if (state.tab === 'Workshop' && (tabChanged || workshopChanged)) {
+      persistWorkshopTabDraft(state.workshopTab);
+    }
+    if (state.tab === 'Library' && (tabChanged || libraryChanged)) {
+      persistLibraryTabDraft(state.libraryTab);
+    }
+    if (normalized === 'Game Engine' && !isGameEngineWorkbenchOpen() && state.tab !== 'Game Engine') {
+      state.deskReturnTab = deskContentTab();
+    }
+    state.tab = normalized;
+    if (normalized === 'Workshop') state.workshopTab = nextRoute.workshopTab;
+    if (normalized === 'Library') state.libraryTab = nextRoute.libraryTab;
+    if (normalized === 'Game Engine') {
+      state.gameEngineTool = normalizeGameEngineToolId(nextRoute.gameEngineTool);
+    } else {
+      state.gameEngineTool = null;
+    }
+    renderTabs();
+    await render();
+  });
   const payload = await api('/api/data');
   state.data = payload.files || payload;
   state.docArticles = payload.docArticles || {};
   state.ideaArticles = payload.ideaArticles || {};
   state.assets = (await api('/api/assets')).assets;
   renderTabs();
-  render();
+  syncUrlToTab(state.tab, { replace: true });
+  try {
+    await render();
+  } catch (error) {
+    document.body.classList.remove('workbench-open');
+    state.gameEngineTool = null;
+    state.tab = 'Dashboard';
+    syncUrlToTab('Dashboard', { replace: true });
+    renderTabs();
+    log(`Desk failed to load: ${error.message}`, 'error');
+    await render();
+  }
 }
 function renderTabs() {
   $('#tabs').innerHTML = tabs.map(tab => `<button class="${state.tab===tab?'active':''}" data-tab="${tab}">${tab}</button>`).join('');
   $('#tabs').onclick = (event) => {
     const btn = event.target.closest('button[data-tab]');
     if (!btn) return;
-    state.tab = btn.dataset.tab;
-    renderTabs(); render();
+    navigateToTab(btn.dataset.tab);
   };
 }
 function markDirty(file) { state.dirty.add(file); }
@@ -211,7 +696,7 @@ function dashboard() {
   ];
   return `<section class="grid dashboard">${cards.map(([label,val]) => `<article class="card"><span>${label}</span><strong>${val}</strong></article>`).join('')}</section>
   <section class="panel" style="margin-top:16px"><h2>Needs attention</h2><div class="grid">${attentionItems().map(item => `<p><span class="badge">${item.type}</span> ${item.text}</p>`).join('')}</div></section>
-  <section class="panel" style="margin-top:16px"><h2>Quick actions</h2><div class="actions"><button class="btn" data-go="Compatibility">Update Compatibility</button><button class="btn" data-go="Bugs">Add Bug</button><button class="btn" data-go="Workshop">Open Workshop</button><button class="btn ghost" data-go="Map Editor">Map editor</button><button class="btn ghost" data-go="Game Library">Game library & box art</button><button class="btn ghost" data-go="Publish">Preview / Publish</button></div></section>`;
+  <section class="panel" style="margin-top:16px"><h2>Quick actions</h2><div class="actions"><button class="btn" data-go="Compatibility">Update Compatibility</button><button class="btn" data-go="Bugs">Add Bug</button><button class="btn" data-go="Workshop">Open Workshop</button><button class="btn ghost" data-game-engine-launch="maps">Map studio</button><button class="btn ghost" data-go="Game Engine">Game Engine</button><button class="btn ghost" data-go="Library">Library & box art</button><button class="btn ghost" data-go="Publish">Preview / Publish</button></div></section>`;
 }
 function attentionItems() {
   const data = state.data;
@@ -221,7 +706,7 @@ function attentionItems() {
   const pins = data['atlas-pins.json']?.pins || [];
   const researchEntries = data['research.json'].entries || [];
   const items = [];
-  games.filter(g => !g.boxArt || !state.assets.includes(g.boxArt)).slice(0,6).forEach(g => items.push({ type:'Game Library', text:`${g.title} needs local box art at ${g.boxArt}.` }));
+  games.filter(g => !g.boxArt || !state.assets.includes(g.boxArt)).slice(0,6).forEach(g => items.push({ type:'Library', text:`${g.title} needs local box art at ${g.boxArt}.` }));
   routes.filter(r => r.status === 'red' && !r.relatedBugs?.length).slice(0,4).forEach(r => items.push({ type:'Compatibility', text:`${r.title} is red but has no linked bug.` }));
   bugs.filter(b => b.status === 'Fixed' && b.linkedRoutes?.length).slice(0,3).forEach(b => items.push({ type:'Issue Desk', text:`${b.id} is fixed; verify linked routes are updated.` }));
   pins.filter(p => !p.summary?.trim()).slice(0,3).forEach(p => items.push({ type:'Island Atlas', text:`Cork pin ${p.name} has no hover summary yet.` }));
@@ -240,60 +725,60 @@ function workshopPickerList(kind, items, selectedId, labelFn, metaFn) {
     </button>`;
   }).join('') : '<p class="hint feature-list-empty">Nothing here yet.</p>'}</div>`;
 }
-function captureWorkshopPaneState() {
-  document.querySelectorAll('[data-workshop-pane]').forEach((el) => {
-    const key = el.dataset.workshopPane;
-    if (key && state.workshopPanes) state.workshopPanes[key] = el.open;
+function persistWorkshopTabDraft(tabKey) {
+  if (tabKey === 'milestones') applyMilestoneFromForm({ persistOnly: true });
+  else if (tabKey === 'docs') applyDocFromForm({ persistOnly: true });
+  else if (tabKey === 'features') applyFeatureFromForm({ persistOnly: true });
+  else if (tabKey === 'research') applyResearchFromForm({ persistOnly: true });
+  else if (tabKey === 'bugs') applyBugFromForm({ persistOnly: true });
+  else if (tabKey === 'ideas') applyIdeaFromForm({ persistOnly: true });
+}
+
+function workshopTabBarHtml() {
+  const active = state.workshopTab || DEFAULT_WORKSHOP_TAB;
+  const items = WORKSHOP_SECTIONS.map((section) => {
+    const file = workshopSectionFile(section.id);
+    const count = workshopSectionCount(section.id);
+    return {
+      ...section,
+      count,
+      dirty: file ? state.dirty.has(file) : false,
+    };
   });
+  return `<div class="workshop-tabs" role="tablist" aria-label="Workshop sections">
+    ${items.map((item) => `<button type="button" class="workshop-tab ${active === item.id ? 'active' : ''}" data-workshop-tab="${item.id}" role="tab" aria-selected="${active === item.id ? 'true' : 'false'}">
+      <span class="workshop-tab-label">${esc(item.label)} <span class="workshop-tab-count">${item.count}</span></span>
+      <span class="workshop-tab-hint">${esc(item.hint)}</span>
+      ${item.dirty ? '<span class="workshop-tab-badge">Unsaved</span>' : ''}
+    </button>`).join('')}
+  </div>`;
 }
-function workshopPaneBodyHtml(paneKey) {
-  if (paneKey === 'features') return workshopFeaturesPane();
-  if (paneKey === 'research') return workshopResearchPane();
-  return '';
-}
-function renderWorkshopPaneBody(paneKey) {
-  const pane = document.querySelector(`[data-workshop-pane="${paneKey}"]`);
-  if (!pane) return;
-  let body = pane.querySelector('.workshop-pane-body');
-  if (!body) {
-    body = document.createElement('div');
-    body.className = 'workshop-pane-body';
-    pane.appendChild(body);
-  }
-  body.innerHTML = workshopPaneBodyHtml(paneKey);
-  bindWorkshopPaneSection(paneKey);
-}
-function unmountWorkshopPaneBody(paneKey) {
-  document.querySelector(`[data-workshop-pane="${paneKey}"]`)?.querySelector('.workshop-pane-body')?.remove();
-}
-function persistWorkshopPaneDraft(paneKey) {
-  if (paneKey === 'features') applyFeatureFromForm();
-  else if (paneKey === 'research') applyResearchFromForm();
-}
-function workshopPane(title, hint, bodyHtml, paneKey) {
-  const open = Boolean(state.workshopPanes?.[paneKey]);
-  return `<details class="workshop-pane" data-workshop-pane="${paneKey}"${open ? ' open' : ''}>
-    <summary class="workshop-pane-summary"><strong>${title}</strong>${hint ? `<span class="hint workshop-pane-hint">${hint}</span>` : ''}</summary>
-    ${open ? `<div class="workshop-pane-body">${bodyHtml}</div>` : ''}
-  </details>`;
-}
+
 function updateWorkshopSaveHints() {
-  const map = [
-    ['features', files.features, 'Save features'],
-    ['research', files.research, 'Save research'],
-  ];
-  map.forEach(([key, file, label]) => {
-    const pane = document.querySelector(`[data-workshop-pane="${key}"]`);
-    const hint = pane?.querySelector('.feature-save-hint');
-    if (!hint) return;
+  WORKSHOP_SECTIONS.forEach((section) => {
+    const file = workshopSectionFile(section.id);
+    if (!file) return;
     const dirty = state.dirty.has(file);
-    hint.textContent = dirty ? 'Unsaved' : 'Saved';
-    hint.classList.toggle('is-dirty', dirty);
+    const hint = document.querySelector(`[data-workshop-tab-panel="${section.id}"] .feature-save-hint`);
+    if (hint) {
+      hint.textContent = dirty ? 'Unsaved' : 'Saved';
+      hint.classList.toggle('is-dirty', dirty);
+    }
+    const tabBtn = document.querySelector(`[data-workshop-tab="${section.id}"]`);
+    if (!tabBtn) return;
+    let badge = tabBtn.querySelector('.workshop-tab-badge');
+    if (dirty && !badge) {
+      badge = document.createElement('span');
+      badge.className = 'workshop-tab-badge';
+      badge.textContent = 'Unsaved';
+      tabBtn.appendChild(badge);
+    } else if (!dirty && badge) {
+      badge.remove();
+    }
   });
-  const dirtyNote = [
-    state.dirty.has(files.features) && 'features',
-    state.dirty.has(files.research) && 'research',
-  ].filter(Boolean);
+  const dirtyNote = WORKSHOP_SECTIONS
+    .map((section) => state.dirty.has(workshopSectionFile(section.id)) && section.id)
+    .filter(Boolean);
   const toolbarHint = document.querySelector('.workshop-toolbar .feature-unsaved, .workshop-toolbar .feature-disk-ok');
   if (toolbarHint) {
     toolbarHint.outerHTML = dirtyNote.length
@@ -301,6 +786,123 @@ function updateWorkshopSaveHints() {
       : '<p class="hint feature-disk-ok">All workshop files in sync with disk.</p>';
   }
 }
+
+function persistLibraryJsonDraft(file) {
+  const el = $('#jsonEditor');
+  if (!el) return;
+  try {
+    const next = JSON.parse(el.value);
+    const before = clone(state.data[file]);
+    state.data[file] = next;
+    if (JSON.stringify(before) !== JSON.stringify(next)) markDirty(file);
+  } catch { /* keep prior in-memory draft when JSON is invalid */ }
+}
+
+function persistGameFromForm() {
+  const form = document.querySelector('[data-form="game"]');
+  if (!form || !state.selected.game) return;
+  const d = readFormFields(form);
+  const game = state.data['compatibility.json'].games.find((g) => g.id === state.selected.game);
+  if (!game) return;
+  const before = clone(game);
+  const nextId = (d.id || game.id).trim();
+  Object.assign(game, {
+    id: nextId,
+    title: d.title ?? game.title,
+    generation: d.generation ?? game.generation,
+    shortTitle: d.shortTitle ?? game.shortTitle,
+    platform: d.platform ?? game.platform,
+    releaseYear: Number(d.releaseYear ?? game.releaseYear) || game.releaseYear,
+    family: d.family ?? game.family,
+    boxArt: d.boxArt ?? game.boxArt,
+  });
+  state.selected.game = nextId;
+  if (recordChanged(before, game)) markDirty(files.compatibility);
+}
+
+function persistModelsFromForm() {
+  const form = document.querySelector('[data-form="models"]');
+  if (!form) return;
+  const d = readFormFields(form);
+  const models = state.data['models.json'];
+  const before = clone(models.mainModel);
+  Object.assign(models.mainModel, {
+    name: d.mainName ?? models.mainModel.name,
+    status: d.mainStatus ?? models.mainModel.status,
+    file: d.mainFile ?? models.mainModel.file,
+    preview: d.mainPreview ?? models.mainModel.preview,
+    summary: d.mainSummary ?? models.mainModel.summary,
+    displaySize: Math.min(120, Math.max(0.5, Number(d.mainDisplaySize) || models.mainModel.displaySize || 6.2)),
+  });
+  if (recordChanged(before, models.mainModel)) markDirty(files.models);
+}
+
+function persistLibraryTabDraft(tabKey) {
+  if (tabKey === 'games') persistGameFromForm();
+  else if (tabKey === 'models') persistModelsFromForm();
+  else if (tabKey === 'media') persistLibraryJsonDraft(files.gallery);
+  else if (tabKey === 'characters') persistLibraryJsonDraft(files.characters);
+}
+
+function libraryTabBarHtml() {
+  const active = state.libraryTab || DEFAULT_LIBRARY_TAB;
+  const items = LIBRARY_SECTIONS.map((section) => {
+    const file = librarySectionFile(section.id);
+    const count = librarySectionCount(section.id);
+    return {
+      ...section,
+      count,
+      dirty: file ? state.dirty.has(file) : false,
+    };
+  });
+  return `<div class="workshop-tabs library-tabs" role="tablist" aria-label="Library sections">
+    ${items.map((item) => `<button type="button" class="workshop-tab library-tab ${active === item.id ? 'active' : ''}" data-library-tab="${item.id}" role="tab" aria-selected="${active === item.id ? 'true' : 'false'}">
+      <span class="workshop-tab-label">${esc(item.label)} <span class="workshop-tab-count">${item.count}</span></span>
+      <span class="workshop-tab-hint">${esc(item.hint)}</span>
+      ${item.dirty ? '<span class="workshop-tab-badge">Unsaved</span>' : ''}
+    </button>`).join('')}
+  </div>`;
+}
+
+function updateLibrarySaveHints() {
+  LIBRARY_SECTIONS.forEach((section) => {
+    const file = librarySectionFile(section.id);
+    if (!file) return;
+    const dirty = state.dirty.has(file);
+    const hint = document.querySelector(`[data-library-tab-panel="${section.id}"] .feature-save-hint`);
+    if (hint) {
+      hint.textContent = dirty ? 'Unsaved' : 'Saved';
+      hint.classList.toggle('is-dirty', dirty);
+    }
+    const tabBtn = document.querySelector(`[data-library-tab="${section.id}"]`);
+    if (!tabBtn) return;
+    let badge = tabBtn.querySelector('.workshop-tab-badge');
+    if (dirty && !badge) {
+      badge = document.createElement('span');
+      badge.className = 'workshop-tab-badge';
+      badge.textContent = 'Unsaved';
+      tabBtn.appendChild(badge);
+    } else if (!dirty && badge) {
+      badge.remove();
+    }
+  });
+  const dirtyNote = LIBRARY_SECTIONS
+    .map((section) => state.dirty.has(librarySectionFile(section.id)) && section.id)
+    .filter(Boolean);
+  const toolbarHint = document.querySelector('.library-toolbar .feature-unsaved, .library-toolbar .feature-disk-ok');
+  if (toolbarHint) {
+    toolbarHint.outerHTML = dirtyNote.length
+      ? `<p class="hint feature-unsaved"><strong>Unsaved:</strong> ${dirtyNote.join(', ')}</p>`
+      : '<p class="hint feature-disk-ok">All library files in sync with disk.</p>';
+  }
+}
+
+function bindLibraryDesk() {
+  document.querySelectorAll('[data-library-tab]').forEach((btn) => {
+    btn.onclick = () => setLibraryTab(btn.dataset.libraryTab);
+  });
+}
+
 function genLabel(data, genId) {
   return data.generations.find((g) => g.id === genId)?.label || genId.replace('gen', 'Gen ');
 }
@@ -368,7 +970,7 @@ function compatPreviewHtml(data, fromGen, toGen, route) {
   const fromGames = gamesInGeneration(data, fromGen);
   const toGames = gamesInGeneration(data, toGen);
   return `<div class="compat-preview">
-    <div class="compat-preview-head"><span class="badge">${esc(route.id)}</span><span class="badge compat-status-${esc(route.status)}">${esc(data.statuses[route.status]?.label || route.status)}</span><span class="hint">Draft in memory — save when ready</span></div>
+    <div class="compat-preview-head"><span class="badge">${esc(route.id)}</span><span class="badge compat-status-${esc(route.status)}">${esc(data.statuses[route.status]?.label || route.status)}</span><span class="hint">Draft in memory: save when ready</span></div>
     <h3>${esc(route.title)}</h3>
     <p>${esc(route.summary)}</p>
     <p class="hint">Coverage: <strong>${esc(route.coverage)}</strong> · Last updated: <strong>${esc(route.lastUpdated)}</strong>${fromGames ? ` · ${esc(genLabel(data, fromGen))} games: ${esc(fromGames)}` : ''}${toGen !== fromGen && toGames ? ` · ${esc(genLabel(data, toGen))} games: ${esc(toGames)}` : ''}</p>
@@ -377,7 +979,7 @@ function compatPreviewHtml(data, fromGen, toGen, route) {
 function updateCompatDirtyHint() {
   const dirty = state.dirty.has(files.compatibility);
   document.querySelectorAll('.compat-save-hint').forEach((el) => {
-    el.textContent = dirty ? 'Unsaved draft — click Save' : 'Saved to disk';
+    el.textContent = dirty ? 'Unsaved draft: click Save' : 'Saved to disk';
     el.classList.toggle('is-dirty', dirty);
   });
   const toolbar = document.querySelector('.compat-toolbar > div');
@@ -386,7 +988,7 @@ function updateCompatDirtyHint() {
   const ok = toolbar.querySelector('.compat-disk-ok');
   if (dirty) {
     ok?.remove();
-    if (!unsaved) toolbar.insertAdjacentHTML('beforeend', '<p class="hint compat-unsaved"><strong>Not on disk yet</strong> — save, then refresh Ontology.</p>');
+    if (!unsaved) toolbar.insertAdjacentHTML('beforeend', '<p class="hint compat-unsaved"><strong>Not on disk yet</strong>: save, then refresh Ontology.</p>');
   } else {
     unsaved?.remove();
     if (!ok) toolbar.insertAdjacentHTML('beforeend', '<p class="hint compat-disk-ok">In sync with disk.</p>');
@@ -464,14 +1066,14 @@ function compatibility() {
   const routeStatus = route?.status || 'gray';
   const dirty = state.dirty.has(files.compatibility);
   return `<section class="toolbar compat-toolbar">
-    <div><h2>Compatibility</h2><p>Pick a route on the graph or with the generation dropdowns. Changing <strong>status</strong> updates the draft immediately — click <strong>Save compatibility</strong> when you want it on disk.</p>${dirty ? '<p class="hint compat-unsaved"><strong>Not on disk yet</strong> — save, then refresh Ontology.</p>' : '<p class="hint compat-disk-ok">In sync with disk.</p>'}</div>
+    <div><h2>Compatibility</h2><p>Pick a route on the graph or with the generation dropdowns. Changing <strong>status</strong> updates the draft immediately: click <strong>Save compatibility</strong> when you want it on disk.</p>${dirty ? '<p class="hint compat-unsaved"><strong>Not on disk yet</strong>: save, then refresh Ontology.</p>' : '<p class="hint compat-disk-ok">In sync with disk.</p>'}</div>
   </section>
   <section class="panel compat-quick">
     <div class="compat-action-bar">
       <div class="compat-action-buttons">
         <button type="button" class="btn js-save-compatibility">Save compatibility</button>
       </div>
-      <span class="compat-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved draft — click Save' : 'Saved to disk'}</span>
+      <span class="compat-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved draft: click Save' : 'Saved to disk'}</span>
     </div>
     <div class="compat-route-layout">
       <div class="compat-graph-panel">
@@ -651,7 +1253,7 @@ function getSelectedResearch() {
 function researchDossierConfig() {
   return {
     title: 'Research brief',
-    hint: 'Rich sections for Concierge Research — characters, Pokémon, locations, mechanics, and more.',
+    hint: 'Rich sections for Concierge Research: characters, Pokémon, locations, mechanics, and more.',
     showMap: false,
     showResearchMilestones: false,
     uploadFolder: 'media/research',
@@ -732,11 +1334,12 @@ function getDocEditorRecord(meta) {
 function docListHtml(articles, selectedSlug) {
   return `<div class="list feature-list">${articles.length ? articles.map((a) => `<button type="button" class="${selectedSlug === a.slug ? 'active' : ''}" data-doc-slug="${esc(a.slug)}"><strong>${esc(a.title)}</strong><span class="feature-list-meta">${esc(a.category)} · ${esc(a.slug)}</span></button>`).join('') : '<p class="hint feature-list-empty">No articles yet.</p>'}</div>`;
 }
-function applyDocFromForm() {
+function applyDocFromForm({ persistOnly = false } = {}) {
   const meta = getSelectedDocMeta();
   if (!meta) return null;
   const d = formData('[data-form="doc"]');
   const categories = state.data['docs.json'].categories || [];
+  const before = clone(meta);
   Object.assign(meta, {
     id: (d.id || meta.id).trim(),
     slug: (d.slug || meta.slug).trim(),
@@ -753,8 +1356,11 @@ function applyDocFromForm() {
       caption: (d.heroCaption || meta.heroImage?.caption || '').trim(),
     },
   });
-  const dossier = readDossierFromDom($, { mountSelector: '#docDossierMount' });
-  state.docArticles[meta.slug] = { dossier: dossier || { overview: '', sections: [] } };
+  if (!persistOnly) {
+    const dossier = readDossierFromDom($, { mountSelector: '#docDossierMount' });
+    if (dossier !== null) state.docArticles[meta.slug] = { dossier: dossier || { overview: '', sections: [] } };
+  }
+  if (recordChanged(before, meta)) markDirty(files.docs);
   return meta;
 }
 function readRecordImagesFromDom(idPrefix) {
@@ -776,7 +1382,7 @@ function recordImagesSectionHtml(images, idPrefix) {
         <img src="${adminAssetUrl(img.path)}" alt="" loading="lazy" />
         <label>Caption<input data-image-caption value="${esc(img.caption)}" placeholder="What does this show?" /></label>
         <button type="button" class="btn ghost small" data-remove-image="${idx}">Remove</button>
-      </figure>`).join('') : '<p class="hint record-images-empty">No images yet — use Browse or Upload below.</p>'}</div>
+      </figure>`).join('') : '<p class="hint record-images-empty">No images yet: use Browse or Upload below.</p>'}</div>
     <div class="record-images-add row">
       ${pathInputWithUploadHtml({
     label: 'Image path',
@@ -970,7 +1576,7 @@ function patchSelectedBug(fields) {
 function deleteSelectedBug() {
   const bug = getSelectedBug();
   if (!bug) return;
-  if (!confirm(`Delete ${bug.id} — “${bug.title}”?\n\nRemoved from the draft immediately. Click Save bugs to update bugs.json on disk.`)) return;
+  if (!confirm(`Delete ${bug.id}: “${bug.title}”?\n\nRemoved from the draft immediately. Click Save bugs to update bugs.json on disk.`)) return;
   const deletedId = bug.id;
   const bugs = state.data['bugs.json'].bugs;
   const index = bugs.findIndex((item) => item.id === deletedId);
@@ -986,16 +1592,16 @@ function deleteSelectedBug() {
   syncCommunityPanel({ pickerOnly: true });
   log(`Deleted ${deletedId} from draft. Save bugs when ready.`, 'ok');
 }
-function applyBugFromForm() {
+function applyBugFromForm({ persistOnly = false } = {}) {
   const form = document.querySelector('[data-form="bug"]');
   if (!form) return getSelectedBug();
-  const d = readFormFields(form);
   const bug = getSelectedBug();
   if (!bug) return null;
-  const statusChanged = d.status && d.status !== bug.status;
+  const before = clone(bug);
+  const d = readFormFields(form);
   const nextId = (d.id || bug.id).trim();
-  const images = readRecordImagesFromDom('bug');
-  Object.assign(bug, {
+  const statusChanged = d.status && d.status !== bug.status;
+  const updates = {
     id: nextId,
     title: d.title ?? bug.title,
     status: d.status ?? bug.status,
@@ -1006,10 +1612,14 @@ function applyBugFromForm() {
     linkedRoutes: csv(d.linkedRoutes),
     lastUpdated: statusChanged ? todayIso() : (d.lastUpdated || bug.lastUpdated),
     checklist: readChecks('bugChecks'),
-    ...(images !== null ? { images } : {}),
-  });
+  };
+  if (!persistOnly) {
+    const images = readRecordImagesFromDom('bug');
+    if (images !== null) updates.images = images;
+  }
+  Object.assign(bug, updates);
   state.selected.bug = nextId;
-  markDirty(files.bugs);
+  if (recordChanged(before, bug)) markDirty(files.bugs);
   return bug;
 }
 function applyBugChecklistFromDom() {
@@ -1064,7 +1674,7 @@ function bugDetailHtml(bug, data) {
         <span class="badge bug-status-badge bug-status-${bugStatusSlug(bug.status)}">${esc(bug.status)}</span>
         <span class="badge bug-severity-${esc(bug.severity.toLowerCase())}">${esc(bug.severity)}</span>
         ${recordImageCount(bug) ? `<span class="badge record-detail-photos" title="Evidence images in draft">${recordImageCount(bug)} image${recordImageCount(bug) === 1 ? '' : 's'}</span>` : ''}
-        <span class="hint">Draft in memory — save when ready</span>
+        <span class="hint">Draft in memory: save when ready</span>
       </div>
       <div class="bug-quick-actions" role="group" aria-label="Quick status">
         ${quickStatuses.map(([status, label]) => `<button type="button" class="bug-quick-btn bug-status-${bugStatusSlug(status)}${bug.status === status ? ' is-current' : ''}" data-bug-status="${esc(status)}">${esc(label)}</button>`).join('')}
@@ -1095,20 +1705,10 @@ function bugDetailHtml(bug, data) {
 function updateBugDirtyHint() {
   const dirty = state.dirty.has(files.bugs);
   document.querySelectorAll('.bug-save-hint').forEach((el) => {
-    el.textContent = dirty ? 'Unsaved draft — click Save' : 'Saved to disk';
+    el.textContent = dirty ? 'Unsaved' : 'Saved';
     el.classList.toggle('is-dirty', dirty);
   });
-  const toolbar = document.querySelector('.bug-toolbar > div');
-  if (!toolbar) return;
-  const unsaved = toolbar.querySelector('.bug-unsaved');
-  const ok = toolbar.querySelector('.bug-disk-ok');
-  if (dirty) {
-    ok?.remove();
-    if (!unsaved) toolbar.insertAdjacentHTML('beforeend', '<p class="hint bug-unsaved"><strong>Not on disk yet</strong> — save when you are done editing.</p>');
-  } else {
-    unsaved?.remove();
-    if (!ok) toolbar.insertAdjacentHTML('beforeend', '<p class="hint bug-disk-ok">In sync with disk.</p>');
-  }
+  updateWorkshopSaveHints();
 }
 function bindSaveBugsButtons() {
   const dirty = state.dirty.has(files.bugs);
@@ -1460,31 +2060,29 @@ function syncBugUIFromState({ detailOnly = false } = {}) {
   updateBugDirtyHint();
   bindSaveBugsButtons();
 }
-function bugsEditor() {
+function workshopBugsPane() {
   const data = state.data['bugs.json'];
   const bugs = data.bugs;
   if (!state.selected.bug) state.selected.bug = filteredBugs(bugs, { filter: state.bugFilter })[0]?.id || bugs[0]?.id;
   const dirty = state.dirty.has(files.bugs);
-  return `<section class="toolbar bug-toolbar">
-    <div><h2>Bugs &amp; community issues</h2><p>Track internal bugs above. With <code>GITHUB_TOKEN</code> in <code>.env.local</code>, pull GitHub issues and add them to the Operations page in one click — then <strong>Save bugs</strong>.</p>${dirty ? '<p class="hint bug-unsaved"><strong>Not on disk yet</strong> — save when you are done editing.</p>' : '<p class="hint bug-disk-ok">In sync with disk.</p>'}</div>
-  </section>
-  <section class="panel bug-desk">
-    <div class="bug-action-bar">
+  return `<div class="workshop-pane-inner bug-desk">
+    <div class="bug-action-bar workshop-action-bar">
       <div class="bug-action-buttons">
         <button type="button" class="btn js-save-bugs">Save bugs</button>
         <button type="button" class="btn ghost" id="newBug">New bug</button>
       </div>
-      <span class="bug-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved draft — click Save' : 'Saved to disk'}</span>
+      <span class="bug-save-hint feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
     </div>
-    <div class="bug-layout">
-      <aside class="panel bug-sidebar">
+    <p class="hint workshop-bugs-intro">Track internal bugs below. With <code>GITHUB_TOKEN</code> in <code>.env.local</code>, pull GitHub issues and add them to the Operations page, then <strong>Save bugs</strong>.</p>
+    <div class="bug-layout workshop-layout">
+      <aside class="panel bug-sidebar workshop-sidebar">
         <div id="bugFiltersHost">${bugFiltersHtml(bugs)}</div>
         <div id="bugListHost">${bugListItemsHtml(bugs)}</div>
       </aside>
-      <article class="panel bug-main" id="bugDetailHost">${bugDetailHtml(getSelectedBug(), data)}</article>
+      <article class="panel bug-main workshop-main" id="bugDetailHost">${bugDetailHtml(getSelectedBug(), data)}</article>
     </div>
     <section class="panel bug-community-panel" id="communityPanelHost">${communityIssuesPanelHtml()}</section>
-  </section>`;
+  </div>`;
 }
 
 const FEATURE_ACTIVE_STAGES = ['Boarding Soon', 'On-Flight', 'Testing'];
@@ -1517,16 +2115,41 @@ function featureFilterCounts(features, stages) {
   });
   return counts;
 }
-function applyFeatureFromForm() {
+function normalizeRecordForCompare(record) {
+  const copy = clone(record);
+  for (const key of ['linkedBugs', 'linkedRoutes', 'tags', 'linkedPins', 'linkedFeatures', 'relatedBugs', 'tasks', 'evidence', 'images', 'checklist']) {
+    if (!Array.isArray(copy[key])) copy[key] = [];
+  }
+  if (!copy.image) delete copy.image;
+  if (copy.dossier === undefined) delete copy.dossier;
+  if (copy.dossier && !featureHasDossierContent({ dossier: copy.dossier }, normalizeFeatureDossierRaw)) delete copy.dossier;
+  if (copy.linkedPois === undefined) delete copy.linkedPois;
+  if (copy.heroImage) {
+    const path = String(copy.heroImage.path || '').trim();
+    const caption = String(copy.heroImage.caption || '').trim();
+    const extras = { ...copy.heroImage };
+    delete extras.path;
+    delete extras.caption;
+    const hasExtras = Object.values(extras).some((value) => value !== undefined && value !== '');
+    if (!path && !caption && !hasExtras) delete copy.heroImage;
+    else copy.heroImage = { ...extras, path, caption };
+  }
+  return copy;
+}
+
+function recordChanged(before, after) {
+  return JSON.stringify(normalizeRecordForCompare(before)) !== JSON.stringify(normalizeRecordForCompare(after));
+}
+
+function applyFeatureFromForm({ persistOnly = false } = {}) {
   const form = document.querySelector('[data-form="feature"]');
   if (!form) return getSelectedFeature();
   const d = readFormFields(form);
   const feature = getSelectedFeature();
   if (!feature) return null;
+  const before = clone(feature);
   const nextId = (d.id || feature.id).trim();
-  const images = readRecordImagesFromDom('feature');
-  const dossier = readFeatureDossierFromDom($);
-  Object.assign(feature, {
+  const updates = {
     id: nextId,
     title: d.title ?? feature.title,
     stage: d.stage ?? feature.stage,
@@ -1537,11 +2160,16 @@ function applyFeatureFromForm() {
     linkedBugs: csv(d.linkedBugs),
     linkedRoutes: csv(d.linkedRoutes),
     tasks: readChecks('featureTasks'),
-    ...(images !== null ? { images } : {}),
-    ...(dossier !== null ? { dossier } : {}),
-  });
+  };
+  if (!persistOnly) {
+    const images = readRecordImagesFromDom('feature');
+    const dossier = readFeatureDossierFromDom($, { mountSelector: '#featureDossierMount' });
+    if (images !== null) updates.images = images;
+    if (dossier !== null) updates.dossier = dossier;
+  }
+  Object.assign(feature, updates);
   state.selected.feature = nextId;
-  touchFeatureDraft();
+  if (recordChanged(before, feature)) touchFeatureDraft();
   return feature;
 }
 function applyFeatureTasksFromDom() {
@@ -1564,7 +2192,7 @@ function patchSelectedFeature(fields) {
 function deleteSelectedFeature() {
   const feature = getSelectedFeature();
   if (!feature) return;
-  if (!confirm(`Delete ${feature.id} — “${feature.title}”?\n\nRemoved from the draft immediately. Click Save features to update features.json on disk.`)) return;
+  if (!confirm(`Delete ${feature.id}: “${feature.title}”?\n\nRemoved from the draft immediately. Click Save features to update features.json on disk.`)) return;
   const deletedId = feature.id;
   const features = state.data['features.json'].features;
   const index = features.findIndex((item) => item.id === deletedId);
@@ -1616,7 +2244,7 @@ function featureDetailHtml(feature, data) {
         <span class="badge feature-priority-${esc(String(feature.priority).toLowerCase())}">${esc(feature.priority)}</span>
         ${featureHasDossierContent(feature, normalizeFeatureDossierRaw) ? '<span class="badge record-detail-dossier" title="Research dossier">Dossier</span>' : ''}
         ${recordImageCount(feature) ? `<span class="badge record-detail-photos" title="Legacy quick images">${recordImageCount(feature)} img</span>` : ''}
-        <span class="hint">Draft in memory — save when ready</span>
+        <span class="hint">Draft in memory: save when ready</span>
       </div>
       <div class="feature-quick-actions" role="group" aria-label="Quick stage">
         ${data.stages.map((stage) => `<button type="button" class="feature-quick-btn feature-stage-${featureStageSlug(stage)}${feature.stage === stage ? ' is-current' : ''}" data-feature-stage="${esc(stage)}">${esc(stage)}</button>`).join('')}
@@ -1701,7 +2329,7 @@ function refreshFeatureDetailChrome(feature) {
 function updateFeatureDirtyHint() {
   const dirty = state.dirty.has(files.features);
   document.querySelectorAll('.feature-save-hint').forEach((el) => {
-    el.textContent = dirty ? 'Unsaved draft — click Save' : 'Saved to disk';
+    el.textContent = dirty ? 'Unsaved draft: click Save' : 'Saved to disk';
     el.classList.toggle('is-dirty', dirty);
   });
   const toolbar = document.querySelector('.feature-toolbar > div');
@@ -1710,7 +2338,7 @@ function updateFeatureDirtyHint() {
   const ok = toolbar.querySelector('.feature-disk-ok');
   if (dirty) {
     ok?.remove();
-    if (!unsaved) toolbar.insertAdjacentHTML('beforeend', '<p class="hint feature-unsaved"><strong>Not on disk yet</strong> — save when you are done editing.</p>');
+    if (!unsaved) toolbar.insertAdjacentHTML('beforeend', '<p class="hint feature-unsaved"><strong>Not on disk yet</strong>: save when you are done editing.</p>');
   } else {
     unsaved?.remove();
     if (!ok) toolbar.insertAdjacentHTML('beforeend', '<p class="hint feature-disk-ok">In sync with disk.</p>');
@@ -1780,7 +2408,7 @@ function bindFeatureFilters() {
   }
 }
 function bindFeatureList() {
-  const root = document.querySelector('[data-workshop-pane="features"]');
+  const root = document.querySelector('[data-workshop-tab-panel="features"]');
   if (!root) return;
   root.querySelectorAll('[data-feature-id]').forEach((btn) => {
     btn.onclick = (event) => {
@@ -1858,13 +2486,16 @@ function bindFeatureDetail() {
     rerender: () => syncFeatureUIFromState({ detailOnly: true }),
   });
 }
-function applyResearchFromForm() {
+function applyResearchFromForm({ persistOnly = false } = {}) {
   const entry = getSelectedResearch();
   if (!entry) return null;
+  const form = document.querySelector('[data-form="research"]');
+  if (!form) return entry;
+  const before = clone(entry);
   const d = formData('[data-form="research"]');
-  const dossier = readDossierFromDom($, { mountSelector: '#researchDossierMount' });
   const categories = state.data['research.json'].categories || RESEARCH_CATEGORIES;
-  Object.assign(entry, {
+  const linkedPins = csv(d.linkedPins || d.linkedPois);
+  const updates = {
     id: (d.id || entry.id).trim(),
     title: d.title ?? entry.title,
     category: categories.includes(d.category) ? d.category : (entry.category || 'Other'),
@@ -1874,15 +2505,32 @@ function applyResearchFromForm() {
     canonStatus: d.canonStatus ?? entry.canonStatus,
     summary: d.summary ?? entry.summary,
     tags: csv(d.tags),
-    linkedPins: csv(d.linkedPins || d.linkedPois),
-    linkedPois: undefined,
+    linkedPins,
     linkedFeatures: csv(d.linkedFeatures),
     relatedBugs: csv(d.relatedBugs),
-    evidence: d.evidenceImage ? [{ label: 'Curated evidence', image: d.evidenceImage, note: d.evidenceNote || '' }] : [],
-    ...(dossier !== null ? { dossier } : {}),
-  });
+  };
+  if (!persistOnly) {
+    const dossier = readDossierFromDom($, { mountSelector: '#researchDossierMount' });
+    if (dossier !== null) updates.dossier = dossier;
+    const evidenceImage = d.evidenceImage?.trim() || '';
+    const evidenceNote = d.evidenceNote?.trim() || '';
+    updates.evidence = evidenceImage
+      ? [{ label: 'Curated evidence', image: evidenceImage, note: evidenceNote }]
+      : (entry.evidence || []);
+  } else {
+    const evidenceImage = d.evidenceImage?.trim() || '';
+    const evidenceNote = d.evidenceNote?.trim() || '';
+    if (evidenceImage) {
+      updates.evidence = [{ label: 'Curated evidence', image: evidenceImage, note: evidenceNote }];
+    }
+  }
+  Object.assign(entry, updates);
+  if (!persistOnly && Object.prototype.hasOwnProperty.call(entry, 'linkedPois')) delete entry.linkedPois;
   state.selected.research = entry.id;
-  markDirty(files.research);
+  if (recordChanged(before, entry)) {
+    markDirty(files.research);
+    updateWorkshopSaveHints();
+  }
   return entry;
 }
 function bindResearchDetail() {
@@ -1959,9 +2607,8 @@ function bindResearchDesk() {
     };
     research.entries.unshift(entry);
     state.selected.research = entry.id;
-    state.workshopPanes.research = true;
     markDirty(files.research);
-    openWorkshopPane('research');
+    setWorkshopTab('research');
     syncWorkshopResearchUI();
     log(`Created ${entry.id}. Save research when ready.`, 'ok');
   };
@@ -2078,12 +2725,17 @@ function ideaListHtml(items, selectedSlug) {
     return `<button type="button" class="${selectedSlug === slug ? 'active' : ''}" data-idea-slug="${esc(slug)}"><strong>${esc(item.title)}</strong><span class="feature-list-meta">${esc(item.status)} · ${esc(slug)}</span></button>`;
   }).join('') : '<p class="hint feature-list-empty">No ideas yet.</p>'}</div>`;
 }
-function applyIdeaFromForm() {
+function applyIdeaFromForm({ persistOnly = false } = {}) {
   const meta = getSelectedIdeaMeta();
   if (!meta) return null;
-  const d = formData('[data-form="idea"]');
+  const form = document.querySelector('[data-form="idea"]');
+  if (!form) return meta;
+  const d = readFormFields(form);
   const slug = (d.slug || meta.slug || meta.id).trim();
-  Object.assign(meta, {
+  const before = clone(meta);
+  const heroPath = (d.heroPath ?? meta.heroImage?.path ?? '').trim();
+  const heroCaption = (d.heroCaption ?? meta.heroImage?.caption ?? '').trim();
+  const updates = {
     id: (d.id || meta.id).trim(),
     slug,
     title: d.title ?? meta.title,
@@ -2091,15 +2743,17 @@ function applyIdeaFromForm() {
     summary: d.summary ?? meta.summary,
     tags: csv(d.tags),
     updatedAt: d.updatedAt ?? meta.updatedAt,
-    heroImage: {
-      path: (d.heroPath || meta.heroImage?.path || '').trim(),
-      caption: (d.heroCaption || meta.heroImage?.caption || '').trim(),
-    },
-  });
-  const dossier = readDossierFromDom($, { mountSelector: '#ideaDossierMount' });
-  state.ideaArticles[slug] = { dossier: dossier || { overview: '', sections: [] } };
+  };
+  if (meta.heroImage || heroPath || heroCaption) {
+    updates.heroImage = { ...(meta.heroImage || {}), path: heroPath, caption: heroCaption };
+  }
+  Object.assign(meta, updates);
+  if (!persistOnly) {
+    const dossier = readDossierFromDom($, { mountSelector: '#ideaDossierMount' });
+    if (dossier !== null) state.ideaArticles[slug] = { dossier: dossier || { overview: '', sections: [] } };
+  }
   state.selected.idea = slug;
-  markDirty(files.ideas);
+  if (recordChanged(before, meta)) markDirty(files.ideas);
   return meta;
 }
 function ideaDetailHtml(record) {
@@ -2156,7 +2810,10 @@ function bindIdeaDetail() {
       mountSelector: '#ideaDossierMount',
       renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, ideaDossierConfig()),
       getRecord: () => getIdeaEditorRecord(getSelectedIdeaMeta()),
-      onDirty: () => markDirty(files.ideas),
+      onDirty: () => {
+        markDirty(files.ideas);
+        updateWorkshopSaveHints();
+      },
     });
   }
 }
@@ -2177,6 +2834,7 @@ async function saveIdeasToDisk() {
   await saveFile(files.ideas, state.data['ideas.json']);
   log('Written ideas.json and article files.', 'ok');
   syncIdeasUI({ detailOnly: true });
+  updateWorkshopSaveHints();
 }
 function bindIdeasDesk() {
   bindIdeaList();
@@ -2205,28 +2863,26 @@ function bindIdeasDesk() {
     log(`Created ${slug}. Save ideas when ready.`, 'ok');
   };
 }
-function ideasEditor() {
+function workshopIdeasPane() {
   const manifest = state.data['ideas.json'] || { items: [] };
   const items = manifest.items || [];
   const meta = getSelectedIdeaMeta();
   const record = getIdeaEditorRecord(meta);
   const dirty = state.dirty.has(files.ideas);
-  return `<section class="toolbar feature-toolbar">
-    <div><h2>Ideas</h2><p>Extended sparks for <strong>#/ideas</strong>. Index in <code>ideas.json</code>; bodies in <code>public/ideas/articles/{slug}.json</code>.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
-  </section>
-  <section class="panel feature-desk">
-    <div class="feature-action-bar">
+  return `<div class="workshop-pane-inner feature-desk">
+    <div class="feature-action-bar workshop-action-bar">
       <div class="feature-action-buttons">
         <button type="button" class="btn" id="saveIdeas">Save ideas</button>
         <button type="button" class="btn ghost" id="newIdea">New idea</button>
       </div>
       <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
     </div>
-    <div class="feature-layout">
-      <aside class="panel feature-sidebar"><div id="ideaListHost">${ideaListHtml(items, meta?.slug || meta?.id)}</div></aside>
-      <article class="panel feature-main" id="ideaDetailHost">${record ? ideaDetailHtml(record) : '<p class="hint">Select or create an idea.</p>'}</article>
+    <p class="hint workshop-section-intro">Extended sparks for <strong>#/ideas</strong>. Index in <code>ideas.json</code>; bodies in <code>public/ideas/articles/{slug}.json</code>.</p>
+    <div class="feature-layout workshop-layout">
+      <aside class="panel feature-sidebar workshop-sidebar"><div id="ideaListHost">${ideaListHtml(items, meta?.slug || meta?.id)}</div></aside>
+      <article class="panel feature-main workshop-main" id="ideaDetailHost">${record ? ideaDetailHtml(record) : '<p class="hint">Select or create an idea.</p>'}</article>
     </div>
-  </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
+  </div>`;
 }
 function resolveSelectedMilestoneId(milestones, data) {
   if (state.selected.milestone && milestones.find((m) => m.id === state.selected.milestone)) {
@@ -2237,25 +2893,36 @@ function resolveSelectedMilestoneId(milestones, data) {
   }
   return milestones[0]?.id || null;
 }
-function applyMilestoneFromForm() {
+function applyMilestoneFromForm({ persistOnly = false } = {}) {
   const item = getSelectedMilestone();
   if (!item) return null;
-  const d = formData('[data-form="milestone"]');
-  const dossier = readDossierFromDom($, { mountSelector: '#milestoneDossierMount' });
+  const form = document.querySelector('[data-form="milestone"]');
+  if (!form) return item;
+  const d = readFormFields(form);
   const roadmap = state.data['roadmap.json'];
+  const before = clone(item);
+  const beforeCurrent = roadmap.currentMilestoneId;
   const nextId = (d.id || item.id).trim();
-  Object.assign(item, {
+  const image = (d.image ?? item.image ?? '').trim();
+  const updates = {
     id: nextId,
     title: d.title ?? item.title,
     status: d.status ?? item.status,
     summary: d.summary ?? item.summary,
-    image: d.image || '',
-    ...(dossier !== null ? { dossier } : {}),
-  });
-  if (d.current === 'yes' || d.status === 'current') roadmap.currentMilestoneId = nextId;
-  else if (roadmap.currentMilestoneId === item.id && d.current === 'no') roadmap.currentMilestoneId = null;
+    image,
+  };
+  if (!persistOnly) {
+    const dossier = readDossierFromDom($, { mountSelector: '#milestoneDossierMount' });
+    if (dossier !== null && (item.dossier || featureHasDossierContent({ dossier }, normalizeFeatureDossierRaw))) {
+      updates.dossier = dossier;
+    }
+  }
+  Object.assign(item, updates);
+  if (d.current === 'yes') roadmap.currentMilestoneId = nextId;
+  else if (d.current === 'no' && roadmap.currentMilestoneId === item.id) roadmap.currentMilestoneId = null;
+  else if (d.status === 'current' && d.current !== 'no') roadmap.currentMilestoneId = nextId;
   state.selected.milestone = nextId;
-  markDirty(files.roadmap);
+  if (recordChanged(before, item) || beforeCurrent !== roadmap.currentMilestoneId) markDirty(files.roadmap);
   return item;
 }
 const MILESTONE_ERA_ORDER = [
@@ -2296,18 +2963,7 @@ function milestoneListItemsHtml(milestones, selectedId) {
   return `<div class="milestone-era-groups">${blocks.join('')}</div>`;
 }
 function updateMilestoneDirtyHint() {
-  const dirty = state.dirty.has(files.roadmap);
-  const hint = document.querySelector('.milestone-save-hint');
-  if (hint) {
-    hint.textContent = dirty ? 'Unsaved' : 'Saved';
-    hint.classList.toggle('is-dirty', dirty);
-  }
-  const toolbarNote = document.querySelector('.milestone-toolbar .feature-unsaved, .milestone-toolbar .feature-disk-ok');
-  if (toolbarNote) {
-    toolbarNote.outerHTML = dirty
-      ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>'
-      : '<p class="hint feature-disk-ok">In sync with disk.</p>';
-  }
+  updateWorkshopSaveHints();
 }
 function syncMilestonesUI({ detailOnly = false } = {}) {
   const data = state.data['roadmap.json'];
@@ -2328,7 +2984,7 @@ function syncMilestonesUI({ detailOnly = false } = {}) {
   updateMilestoneDirtyHint();
 }
 function bindMilestoneList() {
-  const root = document.querySelector('.milestone-desk');
+  const root = document.querySelector('[data-workshop-tab-panel="milestones"]') || document.querySelector('.milestone-desk');
   if (!root) return;
   root.querySelectorAll('[data-milestone-id]').forEach((btn) => {
     btn.onclick = (event) => {
@@ -2399,7 +3055,10 @@ function bindDocDetail() {
       mountSelector: '#docDossierMount',
       renderEditorHtml: (record, deps) => dossierEditorHtml(record, deps, docDossierConfig()),
       getRecord: () => getDocEditorRecord(getSelectedDocMeta()),
-      onDirty: () => markDirty(files.docs),
+      onDirty: () => {
+        markDirty(files.docs);
+        updateWorkshopSaveHints();
+      },
     });
   }
 }
@@ -2419,6 +3078,7 @@ async function saveDocsToDisk() {
   await saveFile(files.docs, state.data['docs.json']);
   log('Written docs.json and article files.', 'ok');
   syncDocsUI({ detailOnly: true });
+  updateWorkshopSaveHints();
 }
 function bindDocsDesk() {
   bindDocList();
@@ -2452,14 +3112,10 @@ function bindDocsDesk() {
   };
 }
 function openWorkshopPane(paneKey) {
-  state.workshopPanes[paneKey] = true;
-  const pane = document.querySelector(`[data-workshop-pane="${paneKey}"]`);
-  if (!pane) return;
-  pane.open = true;
-  if (!pane.querySelector('.workshop-pane-body')) renderWorkshopPaneBody(paneKey);
+  setWorkshopTab(paneKey);
 }
 function bindWorkshopResearchList() {
-  const root = document.querySelector('[data-workshop-pane="research"]');
+  const root = document.querySelector('[data-workshop-tab-panel="research"]');
   if (!root) return;
   root.querySelectorAll('[data-workshop-kind="research"]').forEach((btn) => {
     btn.onclick = (event) => {
@@ -2467,44 +3123,28 @@ function bindWorkshopResearchList() {
       event.stopPropagation();
       applyResearchFromForm();
       state.selected.research = btn.dataset.id;
-      openWorkshopPane('research');
+      if (state.workshopTab !== 'research') setWorkshopTab('research', { replace: true });
       syncWorkshopResearchUI();
-      document.querySelector('[data-workshop-pane="research"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      document.querySelector('[data-workshop-tab-panel="research"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     };
   });
 }
-function bindWorkshopPaneToggles() {
-  document.querySelectorAll('[data-workshop-pane]').forEach((el) => {
-    if (el.dataset.workshopPaneBound === '1') return;
-    el.dataset.workshopPaneBound = '1';
-    el.addEventListener('toggle', () => {
-      const key = el.dataset.workshopPane;
-      if (!key) return;
-      if (!el.open) {
-        persistWorkshopPaneDraft(key);
-        state.workshopPanes[key] = false;
-        unmountWorkshopPaneBody(key);
-        return;
-      }
-      state.workshopPanes[key] = true;
-      if (!el.querySelector('.workshop-pane-body')) renderWorkshopPaneBody(key);
-    });
-  });
-}
 function bindWorkshopPaneSection(paneKey) {
-  if (paneKey === 'features') bindFeatureDesk();
+  if (paneKey === 'milestones') bindMilestonesDesk();
+  else if (paneKey === 'docs') bindDocsDesk();
+  else if (paneKey === 'features') bindFeatureDesk();
   else if (paneKey === 'research') {
     bindResearchDesk();
     bindResearchDetail();
     bindWorkshopResearchList();
-  }
+  } else if (paneKey === 'bugs') bindBugDesk();
+  else if (paneKey === 'ideas') bindIdeasDesk();
 }
 function bindWorkshopDesk() {
-  bindWorkshopPaneToggles();
-  ['features', 'research'].forEach((paneKey) => {
-    const pane = document.querySelector(`[data-workshop-pane="${paneKey}"]`);
-    if (pane?.open && pane.querySelector('.workshop-pane-body')) bindWorkshopPaneSection(paneKey);
+  document.querySelectorAll('[data-workshop-tab]').forEach((btn) => {
+    btn.onclick = () => setWorkshopTab(btn.dataset.workshopTab);
   });
+  bindWorkshopPaneSection(state.workshopTab || DEFAULT_WORKSHOP_TAB);
 }
 function bindMilestonesDesk() {
   const saveBtn = $('#saveRoadmap');
@@ -2514,6 +3154,16 @@ function bindMilestonesDesk() {
     await saveFile(files.roadmap, state.data['roadmap.json']);
     log('Written to public/data/roadmap.json.', 'ok');
     updateMilestoneDirtyHint();
+  };
+  const newBtn = $('#newMilestone');
+  if (newBtn) newBtn.onclick = () => {
+    applyMilestoneFromForm();
+    const item = { id: `milestone-${Date.now().toString().slice(-5)}`, title: 'New milestone', status: 'future', summary: 'Describe the milestone.' };
+    state.data['roadmap.json'].milestones.push(item);
+    state.selected.milestone = item.id;
+    markDirty(files.roadmap);
+    syncMilestonesUI();
+    log(`Created ${item.id}. Save milestones when ready.`, 'ok');
   };
   bindMilestoneList();
   bindMilestoneDetail();
@@ -2621,7 +3271,7 @@ function researchDetailHtml(entry) {
       <label>Tags<input name="tags" value="${esc((entry.tags || []).join(', '))}" placeholder="comma-separated"></label>
       <details class="feature-advanced"><summary>Links &amp; evidence</summary>
         <label>Linked atlas pin ids<input name="linkedPins" value="${esc((entry.linkedPins || entry.linkedPois || []).join(', '))}" placeholder="${esc(pinOptions || 'ferry-dock')}"></label>
-        <p class="hint">Optional cork pins — edit under <strong>Island Atlas</strong> tab.</p>
+        <p class="hint">Optional cork pins: edit under <strong>Island Atlas</strong> tab.</p>
         <label>Linked features<input name="linkedFeatures" value="${esc((entry.linkedFeatures || []).join(', '))}"></label>
         <label>Related bugs<input name="relatedBugs" value="${esc((entry.relatedBugs || []).join(', '))}"></label>
         ${pathInputWithUploadHtml({
@@ -2662,7 +3312,7 @@ function atlasPoisEditor() {
   const poi = pois.find((p) => p.id === id);
   const dirty = state.dirty.has(files.pois);
   return `<section class="toolbar feature-toolbar atlas-poi-toolbar">
-    <div><h2>Atlas POIs</h2><p>3D island map markers only — characters, Pokémon, and lore live under Workshop → Research.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
+    <div><h2>Atlas POIs</h2><p>3D island map markers only: characters, Pokémon, and lore live under Workshop → Research.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
   </section>
   <section class="panel atlas-poi-desk">
     <div class="feature-action-bar milestone-action-bar">
@@ -2679,16 +3329,28 @@ function atlasPoisEditor() {
   </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
 }
 function workshop() {
-  const featuresDirty = state.dirty.has(files.features);
-  const researchDirty = state.dirty.has(files.research);
-  const dirtyNote = [featuresDirty && 'features', researchDirty && 'research'].filter(Boolean);
+  const active = state.workshopTab || DEFAULT_WORKSHOP_TAB;
+  const panes = {
+    milestones: workshopMilestonesPane,
+    docs: workshopDocsPane,
+    features: workshopFeaturesPane,
+    bugs: workshopBugsPane,
+    research: workshopResearchPane,
+    ideas: workshopIdeasPane,
+  };
+  const panelHtml = (panes[active] || workshopMilestonesPane)();
+  const dirtyNote = WORKSHOP_SECTIONS
+    .map((section) => state.dirty.has(workshopSectionFile(section.id)) && section.id)
+    .filter(Boolean);
   return `<section class="toolbar feature-toolbar workshop-toolbar">
-    <div><h2>Workshop</h2><p>Features and concierge research entries. Extended ideas live under the <strong>Ideas</strong> tab; cork map pins under <strong>Island Atlas</strong>.</p>
+    <div><h2>Workshop</h2><p>Milestones, docs, features, bugs, research, and ideas. Cork map pins live under <strong>Island Atlas</strong>.</p>
     ${dirtyNote.length ? `<p class="hint feature-unsaved"><strong>Unsaved:</strong> ${dirtyNote.join(', ')}</p>` : '<p class="hint feature-disk-ok">All workshop files in sync with disk.</p>'}</div>
   </section>
   <section class="panel workshop-page">
-    ${workshopPane('Features', 'On-flight board cards + dossier modals', workshopFeaturesPane(), 'features')}
-    ${workshopPane('Research', 'Characters, Pokémon, locations, mechanics — Concierge Research', workshopResearchPane(), 'research')}
+    ${workshopTabBarHtml()}
+    <div class="workshop-tab-panel" data-workshop-tab-panel="${active}" role="tabpanel">
+      ${panelHtml}
+    </div>
   </section>`;
 }
 function poiDetailHtml(poi) {
@@ -2738,7 +3400,7 @@ function resetBoxartPicker() {
   state.boxartPicker = { candidates: [], options: [], selectedCandidateId: null, searchQuery: '', loading: false };
 }
 function renderCoverCards(candidates) {
-  if (!candidates.length) return '<p class="hint">Click <strong>Find covers</strong> for Libretro matches. Switch titles are not on Libretro — add files manually at the path above.</p>';
+  if (!candidates.length) return '<p class="hint">Click <strong>Find covers</strong> for Libretro matches. Switch titles are not on Libretro: add files manually at the path above.</p>';
   return `<div class="cover-grid">${candidates.map((c, i) => `
     <article class="cover-card">
       <img src="${proxyImage(c.url)}" alt="${esc(c.regionLabel)}" loading="lazy">
@@ -2754,7 +3416,7 @@ function gameBoxArtPanel(game) {
   const isMissing = state.boxart?.missing?.some((m) => m.id === game.id);
   return `<section class="boxart-panel">
     <div class="boxart-panel-head">
-      <div><h3>Box art</h3><p class="hint">${hasFile ? 'File on disk.' : isMissing ? 'Missing on disk — fetch below or drop a file at the path.' : 'Path set; refresh status if you just added a file.'} · <strong>${esc(game.platform)}</strong></p></div>
+      <div><h3>Box art</h3><p class="hint">${hasFile ? 'File on disk.' : isMissing ? 'Missing on disk: fetch below or drop a file at the path.' : 'Path set; refresh status if you just added a file.'} · <strong>${esc(game.platform)}</strong></p></div>
       <div class="actions"><button type="button" class="btn ghost small" id="searchBoxart">Find covers</button><button type="button" class="btn ghost small" id="autoPickBoxart">Auto-pick recommended</button></div>
     </div>
     <div class="game-preview-large"><img src="${game?.boxArt ? `/${esc(game.boxArt)}?t=${Date.now()}` : ''}" alt="" onerror="this.style.display='none'"></div>
@@ -2763,15 +3425,105 @@ function gameBoxArtPanel(game) {
     </div>
   </section>`;
 }
-function gameLibrary() {
+function libraryGamesPane() {
   const data = state.data['compatibility.json'];
   const games = data.games;
   const id = state.selected.game || games[0]?.id;
   state.selected.game = id;
   const game = games.find((g) => g.id === id);
   const missing = state.boxart?.missingCount ?? 0;
-  return `<section class="toolbar"><div><h2>Game Library</h2><p>Edit metadata, paths, and box art for each title.</p>${boxartStatusLine()}</div><div class="actions"><button type="button" class="btn ghost" id="refreshBoxartStatus">Refresh status</button><button type="button" class="btn" id="fetchAllRecommended"${missing ? '' : ' disabled'}>Accept all recommended (${missing})</button><button type="button" class="btn ghost" id="refetchAllBoxart">Refetch all</button><button class="btn" id="saveGames">Save library</button></div></section>
-  <section class="editor-grid"><aside class="panel">${list(games, id, (g) => `${g.shortTitle}${state.boxart?.missing?.some((m) => m.id === g.id) ? ' · needs art' : ''}`)}</aside><article class="panel game-library-main">${gameForm(game, data)}${game ? gameBoxArtPanel(game) : ''}</article></section>`;
+  const dirty = state.dirty.has(files.compatibility);
+  return `<div class="workshop-pane-inner library-games-desk">
+    <div class="feature-action-bar workshop-action-bar">
+      <div class="feature-action-buttons">
+        <button class="btn" id="saveGames">Save library</button>
+        <button type="button" class="btn ghost" id="refreshBoxartStatus">Refresh status</button>
+        <button type="button" class="btn" id="fetchAllRecommended"${missing ? '' : ' disabled'}>Accept all recommended (${missing})</button>
+        <button type="button" class="btn ghost" id="refetchAllBoxart">Refetch all</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <div class="hint workshop-section-intro">${boxartStatusLine()}</div>
+    <section class="editor-grid workshop-layout">
+      <aside class="panel">${list(games, id, (g) => `${g.shortTitle}${state.boxart?.missing?.some((m) => m.id === g.id) ? ' · needs art' : ''}`)}</aside>
+      <article class="panel game-library-main">${game ? `${gameForm(game, data)}${gameBoxArtPanel(game)}` : '<p class="hint">Select a game.</p>'}</article>
+    </section>
+  </div>`;
+}
+function libraryMediaPane() {
+  const dirty = state.dirty.has(files.gallery);
+  return `<div class="workshop-pane-inner library-media-desk">
+    <div class="feature-action-bar workshop-action-bar">
+      <div class="feature-action-buttons">
+        <button class="btn" id="saveJsonEditor">Save gallery JSON</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <p class="hint workshop-section-intro">Add files to <code>public/media</code>, then create gallery records that point to them.</p>
+    <section class="editor-grid workshop-layout">
+      <aside class="panel"><h2>Detected assets</h2><div class="list">${state.assets.slice(0, 80).map((asset) => `<button type="button"><strong>${esc(asset.split('/').pop())}</strong><span>${esc(asset)}</span></button>`).join('')}</div></aside>
+      <article class="panel">${jsonEditorInner(files.gallery)}</article>
+    </section>
+  </div>`;
+}
+function libraryModelsPane() {
+  const data = state.data['models.json'];
+  const dirty = state.dirty.has(files.models);
+  return `<div class="workshop-pane-inner library-models-desk">
+    <div class="feature-action-bar workshop-action-bar">
+      <div class="feature-action-buttons">
+        <button type="button" class="btn ghost" id="saveJsonEditor">Save full JSON</button>
+        <button type="button" class="btn" id="saveModels">Save main model fields</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <p class="hint workshop-section-intro">Edit the master island model and submodel records used inside the Atlas page.</p>
+    <section class="panel"><div class="form" data-form="models"><h3>Main island model</h3><p class="hint">Upload and size the island on the <strong>Island Atlas</strong> tab. Fields here are advanced overrides.</p><div class="row three"><label>Name<input name="mainName" value="${esc(data.mainModel.name)}"></label><label>Status<input name="mainStatus" value="${esc(data.mainModel.status)}"></label><label>Display size<input name="mainDisplaySize" type="number" min="0.5" max="120" step="0.5" value="${esc(data.mainModel.displaySize ?? 6.2)}"></label></div><div class="row two"><label>File path<input name="mainFile" value="${esc(data.mainModel.file)}"></label><label>Preview path<input name="mainPreview" value="${esc(data.mainModel.preview)}"></label></div><label>Summary<textarea name="mainSummary">${esc(data.mainModel.summary)}</textarea></label></div></section>
+    <section class="panel" style="margin-top:16px"><h2>Submodels</h2><p class="hint">Use the JSON area for detailed submodel arrays while keeping the main model fields easy to edit.</p>${jsonEditorInner(files.models)}</section>
+  </div>`;
+}
+function libraryCharactersPane() {
+  const data = state.data['characters.json'];
+  const dirty = state.dirty.has(files.characters);
+  return `<div class="workshop-pane-inner library-characters-desk">
+    <div class="feature-action-bar workshop-action-bar">
+      <div class="feature-action-buttons">
+        <button class="btn" id="saveJsonEditor">Save character JSON</button>
+      </div>
+      <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
+    </div>
+    <p class="hint workshop-section-intro">Edit the characters and visitor sprite registry used by the Atlas page.</p>
+    <section class="editor-grid workshop-layout">
+      <aside class="panel"><h2>Sprite requirements</h2><div class="list">${data.spriteRequirements.map((req) => `<button type="button"><strong>${esc(req.label)}</strong><span>${esc(req.path)}</span></button>`).join('')}</div></aside>
+      <article class="panel">${jsonEditorInner(files.characters)}</article>
+    </section>
+  </div>`;
+}
+function gameEngine() {
+  return gameEngineHubHtml(state.gameEngineTools, esc);
+}
+function library() {
+  const active = state.libraryTab || DEFAULT_LIBRARY_TAB;
+  const panes = {
+    games: libraryGamesPane,
+    media: libraryMediaPane,
+    models: libraryModelsPane,
+    characters: libraryCharactersPane,
+  };
+  const panelHtml = (panes[active] || libraryGamesPane)();
+  const dirtyNote = LIBRARY_SECTIONS
+    .map((section) => state.dirty.has(librarySectionFile(section.id)) && section.id)
+    .filter(Boolean);
+  return `<section class="toolbar feature-toolbar library-toolbar">
+    <div><h2>Library</h2><p>Games, characters, media gallery, and 3D model stack.</p>
+    ${dirtyNote.length ? `<p class="hint feature-unsaved"><strong>Unsaved:</strong> ${dirtyNote.join(', ')}</p>` : '<p class="hint feature-disk-ok">All library files in sync with disk.</p>'}</div>
+  </section>
+  <section class="panel workshop-page library-page">
+    ${libraryTabBarHtml()}
+    <div class="workshop-tab-panel library-tab-panel" data-library-tab-panel="${active}" role="tabpanel">
+      ${panelHtml}
+    </div>
+  </section>`;
 }
 function gameForm(game, data) {
   return `<h2>${esc(game.title)}</h2><div class="form" data-form="game">
@@ -2782,49 +3534,28 @@ function gameForm(game, data) {
   </div>`;
 }
 
-function jsonEditor(title, file, description) {
-  return `<section class="toolbar"><div><h2>${title}</h2><p>${description}</p></div><div class="actions"><button class="btn" id="saveJsonEditor">Save ${file}</button></div></section>
-  <section class="panel"><label>JSON data<textarea id="jsonEditor" spellcheck="false" style="min-height:560px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(JSON.stringify(state.data[file], null, 2))}</textarea></label></section><pre id="output" class="output" style="margin-top:16px"></pre>`;
-}
-function mediaLibrary() {
-  const gallery = state.data['gallery.json'];
-  return `<section class="toolbar"><div><h2>Media Library</h2><p>Add files to public/media, then create gallery records that point to them.</p></div><div class="actions"><button class="btn" id="saveJsonEditor">Save gallery JSON</button></div></section>
-  <section class="editor-grid"><aside class="panel"><h2>Detected assets</h2><div class="list">${state.assets.slice(0,80).map(asset => `<button type="button"><strong>${esc(asset.split('/').pop())}</strong><span>${esc(asset)}</span></button>`).join('')}</div></aside><article class="panel">${jsonEditorInner(files.gallery)}</article></section><pre id="output" class="output" style="margin-top:16px"></pre>`;
-}
-function modelsEditor() {
-  const data = state.data['models.json'];
-  return `<section class="toolbar"><div><h2>3D Model Stack</h2><p>Edit the master island model and submodel records used inside the Atlas page.</p></div><div class="actions"><button class="btn ghost" id="saveJsonEditor">Save full JSON</button><button class="btn" id="saveModels">Save main model fields</button></div></section>
-  <section class="panel"><div class="form" data-form="models"><h3>Main island model</h3><div class="row three"><label>Name<input name="mainName" value="${esc(data.mainModel.name)}"></label><label>Status<input name="mainStatus" value="${esc(data.mainModel.status)}"></label><label>File path<input name="mainFile" value="${esc(data.mainModel.file)}"></label></div><label>Preview path<input name="mainPreview" value="${esc(data.mainModel.preview)}"></label><label>Summary<textarea name="mainSummary">${esc(data.mainModel.summary)}</textarea></label></div></section>
-  <section class="panel" style="margin-top:16px"><h2>Submodels</h2><p>Use the JSON area for detailed submodel arrays while keeping the main model fields easy to edit.</p>${jsonEditorInner(files.models)}</section><pre id="output" class="output" style="margin-top:16px"></pre>`;
-}
-function charactersEditor() {
-  const data = state.data['characters.json'];
-  return `<section class="toolbar"><div><h2>Characters & Visitors</h2><p>Edit the characters and visitor sprite registry used by the Atlas page.</p></div><div class="actions"><button class="btn" id="saveJsonEditor">Save character JSON</button></div></section>
-  <section class="editor-grid"><aside class="panel"><h2>Sprite requirements</h2><div class="list">${data.spriteRequirements.map(req => `<button type="button"><strong>${esc(req.label)}</strong><span>${esc(req.path)}</span></button>`).join('')}</div></aside><article class="panel">${jsonEditorInner(files.characters)}</article></section><pre id="output" class="output" style="margin-top:16px"></pre>`;
-}
-function milestonesEditor() {
+function jsonEditorInner(file) { return `<textarea id="jsonEditor" style="min-height:420px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(JSON.stringify(state.data[file], null, 2))}</textarea>`; }
+function workshopMilestonesPane() {
   const data = state.data['roadmap.json'];
   const milestones = data.milestones || [];
   const id = resolveSelectedMilestoneId(milestones, data);
   state.selected.milestone = id;
   const item = getSelectedMilestone();
   const dirty = state.dirty.has(files.roadmap);
-  return `<section class="toolbar feature-toolbar milestone-toolbar">
-    <div><h2>Milestones</h2><p>Timeline for the public <strong>Ideas &amp; Milestones</strong> tab. Mark one item as current.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
-  </section>
-  <section class="panel milestone-desk">
-    <div class="feature-action-bar milestone-action-bar">
+  return `<div class="workshop-pane-inner milestone-desk">
+    <div class="feature-action-bar milestone-action-bar workshop-action-bar">
       <div class="feature-action-buttons">
         <button type="button" class="btn" id="saveRoadmap">Save milestones</button>
         <button type="button" class="btn ghost" id="newMilestone">New milestone</button>
       </div>
       <span class="feature-save-hint milestone-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
     </div>
-    <div class="feature-layout milestone-layout">
-      <aside class="panel feature-sidebar milestone-sidebar"><div id="milestoneListHost">${milestoneListItemsHtml(milestones, id)}</div></aside>
-      <article class="panel feature-main milestone-main" id="milestoneDetailHost">${item ? milestoneDetailHtml(item, data) : '<p class="hint">Select a milestone.</p>'}</article>
+    <p class="hint workshop-section-intro">Timeline for the public <strong>Ideas &amp; Milestones</strong> tab. Mark one item as current.</p>
+    <div class="feature-layout milestone-layout workshop-layout">
+      <aside class="panel feature-sidebar milestone-sidebar workshop-sidebar"><div id="milestoneListHost">${milestoneListItemsHtml(milestones, id)}</div></aside>
+      <article class="panel feature-main milestone-main workshop-main" id="milestoneDetailHost">${item ? milestoneDetailHtml(item, data) : '<p class="hint">Select a milestone.</p>'}</article>
     </div>
-  </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
+  </div>`;
 }
 function milestoneDetailHtml(item, data) {
   const hasDossier = featureHasDossierContent(item, normalizeFeatureDossierRaw);
@@ -2843,29 +3574,27 @@ function milestoneDetailHtml(item, data) {
     </div>
   </div>`;
 }
-function docsEditor() {
+function workshopDocsPane() {
   const manifest = state.data['docs.json'] || { categories: [], articles: [] };
   const articles = manifest.articles || [];
   const meta = getSelectedDocMeta();
   const record = getDocEditorRecord(meta);
   const dirty = state.dirty.has(files.docs);
   const categories = manifest.categories || [];
-  return `<section class="toolbar feature-toolbar">
-    <div><h2>Docs</h2><p>Technical &amp; design articles for <strong>#/docs</strong>. Index in <code>docs.json</code>; bodies in <code>public/docs/articles/{category}/</code>. See <code>docs/AUTHORING.md</code>.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
-  </section>
-  <section class="panel feature-desk">
-    <div class="feature-action-bar">
+  return `<div class="workshop-pane-inner feature-desk">
+    <div class="feature-action-bar workshop-action-bar">
       <div class="feature-action-buttons">
         <button type="button" class="btn" id="saveDocs">Save docs</button>
         <button type="button" class="btn ghost" id="newDoc">New article</button>
       </div>
       <span class="feature-save-hint${dirty ? ' is-dirty' : ''}">${dirty ? 'Unsaved' : 'Saved'}</span>
     </div>
-    <div class="feature-layout">
-      <aside class="panel feature-sidebar"><div id="docListHost">${docListHtml(articles, meta?.slug)}</div></aside>
-      <article class="panel feature-main" id="docDetailHost">${record ? docDetailHtml(record, categories) : '<p class="hint">Select or create an article.</p>'}</article>
+    <p class="hint workshop-section-intro">Technical &amp; design articles for <strong>#/docs</strong>. Index in <code>docs.json</code>; bodies in <code>public/docs/articles/{category}/</code>.</p>
+    <div class="feature-layout workshop-layout">
+      <aside class="panel feature-sidebar workshop-sidebar"><div id="docListHost">${docListHtml(articles, meta?.slug)}</div></aside>
+      <article class="panel feature-main workshop-main" id="docDetailHost">${record ? docDetailHtml(record, categories) : '<p class="hint">Select or create an article.</p>'}</article>
     </div>
-  </section><pre id="output" class="output" style="margin-top:16px"></pre>`;
+  </div>`;
 }
 function docDetailHtml(record, categories) {
   const hasDossier = featureHasDossierContent(record, normalizeFeatureDossierRaw);
@@ -2890,50 +3619,105 @@ function docDetailHtml(record, categories) {
     </div>
   </div>`;
 }
-function jsonEditorInner(file) { return `<textarea id="jsonEditor" style="min-height:420px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(JSON.stringify(state.data[file], null, 2))}</textarea>`; }
-function designLab() {
-  const theme = state.data['theme.json'];
-  const homepage = state.data['homepage.json'];
-  return `<section class="toolbar"><div><h2>Design Lab</h2><p>Fine-tune the public site with safe config controls instead of hunting CSS.</p></div><div class="actions"><button class="btn" id="saveDesign">Save design config</button></div></section>
-  <section class="panel"><div class="form" data-form="design">
-    <div class="row three"><label>Motion<select name="motion">${['off','gentle','full'].map(v => `<option ${theme.motion===v?'selected':''}>${v}</option>`).join('')}</select></label><label>Hero style<select name="heroStyle">${['cinematic','clean','compact'].map(v => `<option ${theme.heroStyle===v?'selected':''}>${v}</option>`).join('')}</select></label><label>Card density<select name="cardDensity">${['cozy','comfortable','dense'].map(v => `<option ${theme.cardDensity===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
-    <div class="row three"><label>Ontology density<select name="ontologyDensity">${['calm','detailed','dense'].map(v => `<option ${theme.ontologyDensity===v?'selected':''}>${v}</option>`).join('')}</select></label><label>Graph line style<select name="graphLineStyle">${['hairline','ribbon','glow'].map(v => `<option ${theme.graphLineStyle===v?'selected':''}>${v}</option>`).join('')}</select></label><label>Legal banner<select name="legalBannerStyle">${['slim','standard','prominent'].map(v => `<option ${theme.legalBannerStyle===v?'selected':''}>${v}</option>`).join('')}</select></label></div>
-    <label>Homepage headline<textarea name="headline">${esc(homepage.hero.headline)}</textarea></label>
-    <label>Homepage subheadline<textarea name="subheadline">${esc(homepage.hero.subheadline)}</textarea></label>
-    <label>Homepage carousel JSON <textarea name="homeCarousel" spellcheck="false" style="min-height:260px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">${esc(JSON.stringify(homepage.carousel || [], null, 2))}</textarea></label>
-    <p class="hint">Home page carousel only. Island Atlas has its own carousel under <strong>Island Atlas</strong> → <strong>Map carousel</strong>.</p>
-  </div></section><pre id="output" class="output" style="margin-top:16px"></pre>`;
-}
 function publish() {
   return `<section class="panel"><h2>Preview and publish</h2><p>Validate data, review Git status, then commit and push through your local Git credentials. No tokens are stored in the public repo.</p><div class="actions"><button class="btn ghost" id="gitStatus">Refresh Git status</button><button class="btn ghost" id="validateOnly">Validate data</button><button class="btn" id="publishNow">Commit & push</button></div><label style="margin-top:16px">Commit message<input id="commitMessage" value="Resort update: data and tracker changes"></label></section><pre id="output" class="output" style="margin-top:16px">Dirty files in this session: ${[...state.dirty].join(', ') || 'none'}</pre>`;
 }
 async function render() {
   const app = $('#app');
-  if (state.tab === 'Box Art') state.tab = 'Game Library';
-  if (state.tab === 'Community Issues') state.tab = 'Bugs';
-  if (['Features', 'Research'].includes(state.tab)) state.tab = 'Workshop';
-  if (document.querySelector('[data-workshop-pane]')) captureWorkshopPaneState();
-  if (state.tab === 'Game Library' && !state.boxart) {
+  const workbenchPanel = $('#workbenchPanel');
+  const workbenchOpen = isGameEngineWorkbenchOpen();
+  if (state.tab === 'Box Art') state.tab = 'Library';
+  if (['Milestones', 'Docs', 'Features', 'Research', 'Bugs', 'Community Issues', 'Ideas'].includes(state.tab)) {
+    state.workshopTab = {
+      Milestones: 'milestones',
+      Docs: 'docs',
+      Features: 'features',
+      Research: 'research',
+      Bugs: 'bugs',
+      'Community Issues': 'bugs',
+      Ideas: 'ideas',
+    }[state.tab] || state.workshopTab;
+    state.tab = 'Workshop';
+  }
+  if (['Game Library', 'Media Library', 'Models', 'Characters'].includes(state.tab)) {
+    state.libraryTab = {
+      'Game Library': 'games',
+      'Media Library': 'media',
+      Models: 'models',
+      Characters: 'characters',
+    }[state.tab] || state.libraryTab;
+    state.tab = 'Library';
+  }
+  if (state.tab === 'Design Lab') state.tab = 'Dashboard';
+  const contentTab = deskContentTab();
+  syncUrlToTab(state.tab, { replace: true, workshopTab: state.workshopTab, libraryTab: state.libraryTab });
+  if (contentTab === 'Library' && state.libraryTab === 'games' && !state.boxart) {
     try { await refreshBoxartStatus(); } catch (e) {
       state.boxart = { configured: false, missingCount: 0, missing: [], error: e.message };
       log(`Box art status failed: ${e.message}`, 'error');
     }
   }
-  if (state.tab === 'Map Editor') {
-    document.body.classList.add('map-editor-active');
+  if (workbenchOpen) {
     document.body.classList.remove('atlas-map-active');
-    try { await initMapEditorTab(state, api); } catch (e) {
-      log(`Map editor init failed: ${e.message}`, 'error');
-    }
-  } else if (state.tab === 'Island Atlas') {
+  } else if (contentTab === 'Island Atlas') {
     document.body.classList.add('atlas-map-active');
-    document.body.classList.remove('map-editor-active');
+    document.body.classList.remove('workbench-open');
   } else {
     document.body.classList.remove('map-editor-active');
     document.body.classList.remove('atlas-map-active');
+    document.body.classList.remove('workbench-open');
   }
-  app.innerHTML = ({ Dashboard:dashboard, Compatibility:compatibility, Bugs:bugsEditor, Workshop:workshop, 'Island Atlas':() => atlasMapEditorHtml(state, esc, featureDossierDeps()), 'Map Editor':() => mapEditorHtml(state, esc), Milestones:milestonesEditor, Ideas:ideasEditor, Docs:docsEditor, 'Game Library':gameLibrary, 'Media Library':mediaLibrary, Models:modelsEditor, Characters:charactersEditor, 'Design Lab':designLab, Publish:publish }[state.tab] || dashboard)();
+  const deskKey = deskRenderKey(contentTab);
+  const deskRenderers = {
+    Dashboard: dashboard,
+    Compatibility: compatibility,
+    Workshop: workshop,
+    Library: library,
+    'Island Atlas': () => atlasMapEditorHtml(state, esc, featureDossierDeps()),
+    'Game Engine': gameEngine,
+    Publish: publish,
+  };
+  if (state.lastDeskKey !== deskKey) {
+    if (contentTab === 'Island Atlas') {
+      document.body.classList.add('atlas-map-active');
+      document.body.classList.remove('map-editor-active');
+    } else if (!workbenchOpen) {
+      document.body.classList.remove('map-editor-active');
+      document.body.classList.remove('atlas-map-active');
+    }
+    app.innerHTML = (deskRenderers[contentTab] || dashboard)();
+    state.lastDeskKey = deskKey;
+    state.atlasEditorToolbarBound = false;
+  }
+  if (workbenchOpen) {
+    document.body.classList.remove('workbench-open');
+    workbenchPanel.setAttribute('aria-hidden', 'false');
+    const activeTool = gameEngineToolById(state.gameEngineTools, state.gameEngineTool);
+    const title = workbenchTitleForTool(state.gameEngineTools, state.gameEngineTool);
+    workbenchPanel.innerHTML = workbenchLoadingShell(title);
+    bindWorkbenchEscape();
+    if (activeTool?.workbench === 'map') {
+      try { await initMapEditorTab(state, api); } catch (e) {
+        log(`Map editor init failed: ${e.message}`, 'error');
+      }
+      workbenchPanel.innerHTML = mapEditorHtml(state, esc);
+    } else if (activeTool?.workbench === 'character') {
+      try { await initCharacterEditorTab(state, api); } catch (e) {
+        log(`Character editor init failed: ${e.message}`, 'error');
+      }
+      workbenchPanel.innerHTML = characterEditorHtml(state, esc);
+    }
+    bindWorkbenchEscape();
+    requestAnimationFrame(() => {
+      document.body.classList.add('workbench-open');
+      bindWorkbenchEscape();
+    });
+  } else {
+    workbenchPanel.innerHTML = '';
+    workbenchPanel.setAttribute('aria-hidden', 'true');
+  }
   bind();
+  bindWorkbenchEscape();
 }
 async function runBatchBoxartFetch({ force = false, label = 'Batch fetch' } = {}) {
   const buttons = ['#fetchAllRecommended', '#refetchAllBoxart', '#searchBoxart', '#autoPickBoxart'];
@@ -2974,12 +3758,17 @@ async function applyCoverByUrl(imageUrl, label = '') {
   render();
 }
 function bind() {
-  document.querySelectorAll('[data-go]').forEach(btn => btn.onclick = () => { state.tab = btn.dataset.go; renderTabs(); render(); });
+  document.querySelectorAll('[data-go]').forEach(btn => btn.onclick = () => navigateToTab(btn.dataset.go));
+  document.querySelectorAll('[data-game-engine-launch]').forEach((btn) => {
+    btn.onclick = () => openGameEngineTool(btn.dataset.gameEngineLaunch);
+  });
   document.querySelectorAll('.list button[data-id]:not([data-workshop-kind]):not([data-milestone-id])').forEach(btn => btn.onclick = () => {
-    const keyMap = { Compatibility:'route', Bugs:'bug', 'Game Library':'game' };
-    const key = keyMap[state.tab] || 'game';
+    const deskTab = deskContentTab();
+    const keyMap = { Compatibility:'route' };
+    const key = keyMap[deskTab] || (deskTab === 'Library' && state.libraryTab === 'games' ? 'game' : null);
+    if (!key) return;
     state.selected[key] = btn.dataset.id;
-    if (state.tab === 'Compatibility') {
+    if (deskTab === 'Compatibility') {
       const route = state.data['compatibility.json'].routes.find((r) => r.id === btn.dataset.id);
       if (route) {
         state.selected.compatFromGen = route.from;
@@ -2989,13 +3778,13 @@ function bind() {
         return;
       }
     }
-    if (state.tab === 'Bugs' && btn.dataset.id) {
+    if (state.tab === 'Workshop' && state.workshopTab === 'bugs' && btn.dataset.id) {
       applyBugFromForm();
       state.selected.bug = btn.dataset.id;
       syncBugUIFromState();
       return;
     }
-    if (state.tab === 'Game Library') resetBoxartPicker();
+    if (deskTab === 'Library' && state.libraryTab === 'games') resetBoxartPicker();
     render();
   });
   bindSaveCompatibilityButtons();
@@ -3030,33 +3819,38 @@ function bind() {
   };
   bindStandaloneAssetButtons($('#app'));
   if (state.tab === 'Compatibility') syncCompatUIFromState();
-  if (state.tab === 'Bugs') bindBugDesk();
   if (state.tab === 'Workshop') bindWorkshopDesk();
+  if (state.tab === 'Library') bindLibraryDesk();
   if (state.tab === 'Island Atlas') {
     initAtlasMapEditorTab(state, {
       ...featureDossierDeps(),
-      markDirty: (file) => markDirty(files.atlasPins),
+      markDirty,
       saveFile,
       log,
     });
   }
-  if (state.tab === 'Map Editor') bindMapEditor(state, { api, log, esc, render });
-  if (state.tab === 'Milestones') bindMilestonesDesk();
-  if (state.tab === 'Ideas') bindIdeasDesk();
-  if (state.tab === 'Docs') bindDocsDesk();
-  const saveGames = $('#saveGames'); if (saveGames) saveGames.onclick = () => { updateGame(); saveFile(files.compatibility, state.data['compatibility.json']); };
-  const saveDesign = $('#saveDesign'); if (saveDesign) saveDesign.onclick = () => { updateDesign(); Promise.all([saveFile(files.theme, state.data['theme.json']), saveFile(files.homepage, state.data['homepage.json'])]); };
-  const saveJsonEditor = $('#saveJsonEditor'); if (saveJsonEditor) saveJsonEditor.onclick = () => { const fileMap = { 'Media Library':files.gallery, Models:files.models, Characters:files.characters, Milestones:files.roadmap, Ideas:files.ideas }; const file = fileMap[state.tab]; try { state.data[file] = JSON.parse($('#jsonEditor').value); markDirty(file); saveFile(file, state.data[file]); } catch(e) { toast('Invalid JSON: ' + e.message); } };
-  const saveModels = $('#saveModels'); if (saveModels) saveModels.onclick = () => { updateModels(); saveFile(files.models, state.data['models.json']); };
-  const newMilestone = $('#newMilestone'); if (newMilestone) newMilestone.onclick = () => {
-    applyMilestoneFromForm();
-    const item = { id:`milestone-${Date.now().toString().slice(-5)}`, title:'New milestone', status:'future', summary:'Describe the milestone.' };
-    state.data['roadmap.json'].milestones.push(item);
-    state.selected.milestone = item.id;
-    markDirty(files.roadmap);
-    syncMilestonesUI();
-    log(`Created ${item.id}. Save milestones when ready.`, 'ok');
-  };
+  if (state.tab === 'Game Engine') {
+    bindGameEngineHub(state, { openGameEngineTool });
+  }
+  const activeWorkbench = gameEngineToolById(state.gameEngineTools, state.gameEngineTool);
+  if (activeWorkbench?.workbench === 'map') bindMapEditor(state, { api, log, esc, render, navigateToTab });
+  if (activeWorkbench?.workbench === 'character') bindCharacterEditor(state, { api, log, esc, render, navigateToTab });
+  const saveGames = $('#saveGames'); if (saveGames) saveGames.onclick = () => { persistGameFromForm(); saveFile(files.compatibility, state.data['compatibility.json']).then(() => updateLibrarySaveHints()); };
+  const saveJsonEditor = $('#saveJsonEditor');
+  if (saveJsonEditor) {
+    saveJsonEditor.onclick = () => {
+      const fileMap = { media: files.gallery, models: files.models, characters: files.characters };
+      const file = state.tab === 'Library' ? fileMap[state.libraryTab] : null;
+      if (!file) return;
+      try {
+        state.data[file] = JSON.parse($('#jsonEditor').value);
+        if (state.tab === 'Library' && state.libraryTab === 'models') persistModelsFromForm();
+        markDirty(file);
+        saveFile(file, state.data[file]).then(() => updateLibrarySaveHints());
+      } catch (e) { toast('Invalid JSON: ' + e.message); }
+    };
+  }
+  const saveModels = $('#saveModels'); if (saveModels) saveModels.onclick = () => { persistModelsFromForm(); saveFile(files.models, state.data['models.json']).then(() => updateLibrarySaveHints()); };
   ['RouteTest','BugCheck','FeatureTask'].forEach(kind => { const btn = $(`#add${kind}`); if (btn) btn.onclick = () => addCheck(kind); });
   document.querySelectorAll('[data-remove]').forEach(btn => btn.onclick = () => btn.closest('.check-row')?.remove());
   const gitStatus = $('#gitStatus'); if (gitStatus) gitStatus.onclick = async () => { const res = await api('/api/status'); toast(res.output || 'Clean working tree'); };
@@ -3123,12 +3917,11 @@ function updateRouteFromForm() {
   markDirty(files.compatibility);
 }
 function updatePoi() { applyPoiFromForm(); }
-function updateGame() { const d = formData(); const game = state.data['compatibility.json'].games.find(g => g.id === state.selected.game); Object.assign(game, { id:d.id, title:d.title, generation:d.generation, shortTitle:d.shortTitle, platform:d.platform, releaseYear:Number(d.releaseYear), family:d.family, boxArt:d.boxArt }); state.selected.game=d.id; markDirty(files.compatibility); }
+function updateGame() { persistGameFromForm(); }
 
-function updateModels() { const d = formData(); const models = state.data['models.json']; Object.assign(models.mainModel, { name:d.mainName, status:d.mainStatus, file:d.mainFile, preview:d.mainPreview, summary:d.mainSummary }); markDirty(files.models); }
+function updateModels() { persistModelsFromForm(); }
 function updateMilestone() { applyMilestoneFromForm(); }
 function updateIdea() { applyIdeaFromForm(); }
-function updateDesign() { const d = formData(); Object.assign(state.data['theme.json'], { motion:d.motion, heroStyle:d.heroStyle, cardDensity:d.cardDensity, ontologyDensity:d.ontologyDensity, graphLineStyle:d.graphLineStyle, legalBannerStyle:d.legalBannerStyle }); state.data['homepage.json'].hero.headline = d.headline; state.data['homepage.json'].hero.subheadline = d.subheadline; try { state.data['homepage.json'].carousel = JSON.parse(d.homeCarousel || '[]'); } catch(e) { throw new Error('Homepage carousel JSON is invalid: ' + e.message); } markDirty(files.theme); markDirty(files.homepage); }
 async function saveAllDirty() {
   const jobs = [...state.dirty].map(file => saveFile(file, state.data[file]));
   await Promise.all(jobs);

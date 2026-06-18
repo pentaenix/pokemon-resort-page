@@ -3,12 +3,13 @@ import { RichContentBody } from '../RichContentBody.jsx';
 import { StatusPill } from '../StatusPill.jsx';
 import { AtlasFramePreview } from './AtlasFramePreview.jsx';
 import { routeHref } from '../../lib/data.js';
+import { ideaArticleHref } from '../../lib/ideas.js';
 import { ATLAS_PIN_COLORS } from '../../lib/atlasPins.js';
 import { recordHasRichContent } from '../../lib/richContent.js';
 
 const pinTone = { blue: 'blue', yellow: 'yellow', red: 'red' };
 
-export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinCover }) {
+export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinCover, ideasManifest }) {
   const colorMeta = ATLAS_PIN_COLORS[pin?.color] || ATLAS_PIN_COLORS.yellow;
   const hasDossier = useMemo(
     () => pin && recordHasRichContent({ dossier: pin.dossier }),
@@ -40,7 +41,7 @@ export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinC
           ) : null}
           <div className="atlas-pin-panel-body">
             {pin.summary && <p className="atlas-pin-summary">{pin.summary}</p>}
-            {(pin.linkedResearch?.length > 0 || pin.linkedFeatures?.length > 0) && (
+            {(pin.linkedResearch?.length > 0 || pin.linkedFeatures?.length > 0 || pin.linkedIdeas?.length > 0) && (
               <div className="atlas-pin-links">
                 {pin.linkedResearch?.map((id) => (
                   <a key={id} className="button small ghost" href={routeHref('/research', { entry: id })}>{id}</a>
@@ -48,6 +49,14 @@ export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinC
                 {pin.linkedFeatures?.map((id) => (
                   <a key={id} className="button small ghost" href={routeHref('/board')}>{id}</a>
                 ))}
+                {pin.linkedIdeas?.map((id) => {
+                  const idea = ideasManifest?.items?.find((item) => item.id === id || item.slug === id);
+                  return (
+                    <a key={id} className="button small ghost" href={ideaArticleHref(idea?.slug || id)}>
+                      {idea?.title || id}
+                    </a>
+                  );
+                })}
               </div>
             )}
             {hasDossier ? (

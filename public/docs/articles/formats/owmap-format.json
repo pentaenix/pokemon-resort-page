@@ -1,28 +1,41 @@
 {
   "dossier": {
-    "overview": "An `.owmap` file is the binary overworld map format (v1, magic `OWM1`) shared between the **Operations Desk Map Editor** and the Pokémon Resort C++ terrain loader. It combines a fast binary header, a UTF-8 metadata JSON blob (spawn, camera, NPC placements, 3D model hooks), and three packed terrain layers: height, special ramps, and collision bits.\n\nMaps are authored in the admin **Map Editor**, saved to `pokemon-resort/assets/overworld/maps/*.owmap`, and loaded at runtime by `loadOwmapScene`. Terrain meshes may come upstream from **Island Dreamforge** exports; character sprites on the map reference `.charbin` packages (see charbin-schema).\n\nCanonical encode/decode: `pokemon-resort-page/tools/admin/lib/owmap-format.mjs`. In-repo reference: `pokemon-resort/docs/gameplay/owmap_format.md`.",
+    "overview": "An `.owmap` file is the binary overworld map format (v1, magic `OWM1`) shared between the **Operations Desk Map Editor** and the Pokémon Resort C++ loader. On disk it still combines a fast binary header, a UTF-8 metadata JSON blob, and three packed terrain layers (height, special ramps, collision bits).\n\nWhat changed in practice: the **metadata JSON** now carries the live map state the game renders: **RTPKS tile paint layers** (`tileLayers` with `resortTileId` per cell), a bound **tile package** (`tilePackage`), optional **path paint** (`pathLayer`), placed **GLB props** (`models[]`), NPC slots, spawn, and camera. The Map Editor paints tiles from **RTPKS v2** packs (see rtpks-format); the runtime loads the same pack through `RtpksTilePackageLoader` and draws tiles in **bgfx** (`OverworldBgfxRenderer`).\n\nMaps save to `pokemon-resort/assets/overworld/maps/*.owmap`. Canonical encode/decode: `pokemon-resort-page/tools/admin/lib/owmap-format.mjs`. Short spec: `pokemon-resort/docs/gameplay/owmap_format.md`.",
     "sections": [
       {
         "id": "pipeline",
         "title": "Where .owmap fits",
-        "summary": "Dreamforge terrain → Map Editor bake → game runtime.",
+        "summary": "RTPKS tile pack → Map Editor paint → OWM1 on disk → bgfx runtime.",
         "blocks": [
           {
             "type": "figure",
-            "path": "media/docs/map-editor/map-editor-overview.webp",
-            "body": "Operations Desk → **Map Editor** (`npm run admin`, port 9477). Left: map file list. Center: unified paint grid (height tint + ramp glyphs + collision overlay + spawn marker). Right: brush tools, ramp presets, and metadata fields. Default maps folder: `pokemon-resort/assets/overworld/maps/`.",
-            "caption": "Map Editor with testing.owmap loaded",
+            "path": "media/docs/map-editor/map-editor-2d-tile-paint.png",
+            "body": "Operations Desk → **Map Editor** (`npm run admin`, port 9477). The 2D grid shows height tint plus **RTPKS tile paint** (palette on the right). Each painted cell stores a stable `resortTileId` from the bound `.rtpks` pack. Switch brushes for collision, ramp specials, spawn, props, and path paint.",
+            "caption": "2D tile paint view with RTPKS palette",
             "layout": "stacked"
           },
           {
             "type": "diagram",
             "title": "Authoring pipeline",
-            "caption": "Metadata stays JSON-shaped in the editor; terrain grids pack into binary on save",
-            "source": "flowchart LR\n    DF[Island Dreamforge] -->|GLB / textures| ME[Map Editor]\n    ME -->|paint height ramps collision| JSON[In-memory map object]\n    JSON -->|bakeTerrainSpecials + encodeOwmap| OWM[.owmap file]\n    OWM -->|loadOwmapScene| GAME[C++ SceneConfig]\n    CB[.charbin packages] -->|characters[] refs| ME"
+            "caption": "Terrain grids pack into binary; tile layers and package refs stay in metadata JSON",
+            "source": "flowchart LR\n    PDSMS[PDSMS RTPKS v2] -->|tilepacks/*.rtpks + .meta| ME[Map Editor]\n    ME -->|tileLayers + terrain| JSON[In-memory map]\n    JSON -->|bakeTerrainSpecials + encodeOwmap| OWM[.owmap]\n    OWM -->|loadOwmapScene| PARSE[SceneMetadataParser]\n    PARSE -->|tilePackage path| RTPKS[RtpksTilePackageLoader]\n    RTPKS --> BGFX[OverworldBgfxRenderer]"
           },
           {
             "type": "text",
-            "body": "Runtime default for the 3D test screen: `assets/overworld/maps/testing.owmap` (hardcoded in `Overworld3DTestScreen.cpp`).\n\nThe editor keeps full `terrain.{height,special,collision}` grids in memory while you paint. On **Save .owmap**, the server calls `bakeTerrainSpecials()` (resolves editor-only auto ramps) then `encodeOwmap()`, which strips terrain from the JSON header and appends the three binary layers.\n\nBoth JSON-era `.map.json` imports and binary `.owmap` files round-trip through the same in-memory map shape via `mapFromJson()` / `decodeOwmap()`."
+            "body": "Runtime default for the 3D test screen: `assets/overworld/maps/testing.owmap` (`Overworld3DTestScreen.cpp`).\n\n**On disk:** binary header + `metaJson` (includes `tileLayers`, `tilePackage`, `models[]`, spawn, camera) + packed `height` / `special` / `collision` grids.\n\n**In the editor:** full grids and tile layer cells live in memory. **Save .owmap** runs `bakeTerrainSpecials()` then `encodeOwmap()` (terrain stripped from JSON, appended as binary).\n\n**At runtime:** `parseSceneMetadata()` reads `tilePackage` and `tileLayers`; `OverworldBgfxRenderer` instantiates RTPKS meshes per cell and depth-sorts with props and characters."
+          },
+          {
+            "type": "video",
+            "path": "media/docs/map-editor/game-runtime-demo.mp4",
+            "poster": "media/docs/map-editor/game-runtime-in-game.png",
+            "caption": "C++ overworld demo: RTPKS tiles, terrain, follower, and props on a saved .owmap"
+          },
+          {
+            "type": "figure",
+            "path": "media/docs/map-editor/game-runtime-in-game.png",
+            "body": "Same map in the **game build** (bgfx path): painted RTPKS tiles sit on the height field, props use GLB placement, and the player/follower billboards depth-sort against buildings.",
+            "caption": "Map loaded in the main game",
+            "layout": "stacked"
           }
         ]
       },
@@ -30,7 +43,7 @@
         "id": "schema",
         "title": "Schema reference",
         "layout": "tabs-primary",
-        "summary": "Binary container, terrain semantics, and JSON metadata.",
+        "summary": "Binary container, terrain grids, RTPKS decoration layers (up to 7), and JSON metadata.",
         "blocks": [
           {
             "type": "tabs",
@@ -41,7 +54,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Little-endian, version 1. Row-major indexing for all terrain layers: `index = y * width + x`. The JSON metadata block never contains terrain grids — `encodeOwmap()` calls `stripTerrainForMeta()` before stringify."
+                    "body": "Little-endian, version 1. Row-major indexing for all terrain layers: `index = y * width + x`. The JSON metadata block never contains terrain grids: `encodeOwmap()` calls `stripTerrainForMeta()` before stringify."
                   },
                   {
                     "type": "html",
@@ -50,7 +63,7 @@
                   {
                     "type": "diagram",
                     "title": "File structure",
-                    "caption": "Reader validates exact payload size — no trailing bytes",
+                    "caption": "Reader validates exact payload size: no trailing bytes",
                     "source": "flowchart TD\n    H[18-byte header] --> J[metaJson UTF-8]\n    J --> HT[height W×H bytes]\n    HT --> SP[special W×H bytes]\n    SP --> CO[collision ceil W×H/8 bytes]\n    CO --> SC[SceneConfig via parseSceneMetadata + grids]"
                   },
                   {
@@ -59,7 +72,7 @@
                     "path": "tools/admin/lib/owmap-format.mjs",
                     "lines": "129-155",
                     "language": "javascript",
-                    "caption": "encodeOwmap — pack header, JSON, and terrain layers",
+                    "caption": "encodeOwmap: pack header, JSON, and terrain layers",
                     "body": "export function encodeOwmap(map) {\n  const width = map.grid?.width || map.terrain?.height?.[0]?.length || 16;\n  const height = map.grid?.height || map.terrain?.height?.length || 16;\n  const tileSize = Number(map.grid?.tileSize) || 16;\n  const metaJson = JSON.stringify(stripTerrainForMeta(map));\n  const metaBytes = new TextEncoder().encode(metaJson);\n  const heightBytes = packU8Grid(map.terrain.height, width, height);\n  const specialBytes = packU8Grid(map.terrain.special, width, height);\n  const collisionBytes = packCollisionBits(map.terrain.collision, width, height);\n  // … write OWM1 header + append payloads …\n  return buf;\n}"
                   },
                   {
@@ -68,35 +81,39 @@
                     "path": "src/gameplay/world3d/data/OwmapOverworldLoader.cpp",
                     "lines": "109-172",
                     "language": "cpp",
-                    "caption": "loadOwmapScene — validate magic, dimensions, parse JSON, unpack grids",
+                    "caption": "loadOwmapScene: validate magic, dimensions, parse JSON, unpack grids",
                     "body": "SceneConfig loadOwmapScene(const std::string& project_root, const std::string& owmap_path) {\n    // magic OWM1, version 1, width/height <= 256\n    // parse metaJson → parseSceneMetadata()\n    // unpack height, special, collision grids\n    // ERROR if special==1 (editor-only AUTO) remains on disk\n    return scene;\n}"
                   }
                 ]
               },
               {
                 "id": "terrain",
-                "label": "Terrain layers",
+                "label": "Terrain grids",
                 "blocks": [
+                  {
+                    "type": "text",
+                    "body": "These three **binary** layers are packed after `metaJson` in every `.owmap`. They define walkable geometry (height, ramps, blocked cells). **RTPKS decoration** is separate: up to seven `tileLayers` in metadata (next tab)."
+                  },
                   {
                     "type": "html",
                     "html": "<table><thead><tr><th>Layer</th><th>Storage</th><th>Range</th><th>Meaning</th></tr></thead><tbody><tr><td><code>height</code></td><td>u8 per cell</td><td>0…255</td><td>Discrete height level; multiplied by <code>tileSize</code> for world Y</td></tr><tr><td><code>special</code></td><td>u8 per cell</td><td>0…13</td><td>Ramp / corner shape (see table below)</td></tr><tr><td><code>collision</code></td><td>1 bit per cell</td><td>0/1</td><td><code>1</code> = blocked for pathfinding and player movement</td></tr></tbody></table>"
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th><code>special</code></th><th>Label</th><th>On disk?</th></tr></thead><tbody><tr><td>0</td><td>Flat</td><td>yes</td></tr><tr><td>1</td><td>Auto ramp (editor)</td><td><strong>no</strong> — baked to 2–5 or cleared on save</td></tr><tr><td>2</td><td>Ramp north</td><td>yes</td></tr><tr><td>3</td><td>Ramp east</td><td>yes</td></tr><tr><td>4</td><td>Ramp south</td><td>yes</td></tr><tr><td>5</td><td>Ramp west</td><td>yes</td></tr><tr><td>6–9</td><td>Convex corners NE/SE/SW/NW</td><td>yes</td></tr><tr><td>10–13</td><td>Concave corners NE/SE/SW/NW</td><td>yes</td></tr></tbody></table><p>Auto ramp (1) infers cardinal direction from neighbor height deltas in the editor preview. On save, <code>bakeTerrainSpecials()</code> writes 2–5 or clears to 0. The game loader logs an error if <code>special==1</code> is still present — always re-export from the Map Editor before shipping.</p>"
+                    "html": "<table><thead><tr><th><code>special</code></th><th>Label</th><th>On disk?</th></tr></thead><tbody><tr><td>0</td><td>Flat</td><td>yes</td></tr><tr><td>1</td><td>Auto ramp (editor)</td><td><strong>no</strong>: baked to 2–5 or cleared on save</td></tr><tr><td>2</td><td>Ramp north</td><td>yes</td></tr><tr><td>3</td><td>Ramp east</td><td>yes</td></tr><tr><td>4</td><td>Ramp south</td><td>yes</td></tr><tr><td>5</td><td>Ramp west</td><td>yes</td></tr><tr><td>6–9</td><td>Convex corners NE/SE/SW/NW</td><td>yes</td></tr><tr><td>10–13</td><td>Concave corners NE/SE/SW/NW</td><td>yes</td></tr></tbody></table><p>Auto ramp (1) infers cardinal direction from neighbor height deltas in the editor preview. On save, <code>bakeTerrainSpecials()</code> writes 2–5 or clears to 0. The game loader logs an error if <code>special==1</code> is still present: always re-export from the Map Editor before shipping.</p>"
                   },
                   {
                     "type": "figure",
-                    "path": "media/docs/map-editor/map-editor-ramp.webp",
-                    "body": "Ramp brush with preset picker (cardinals 2–5, convex 6–9, concave 10–13, auto 1). Grid cells show ramp shorthand glyphs overlaid on height tint.",
-                    "caption": "Ramp brush and special presets",
+                    "path": "media/docs/map-editor/map-editor-special-tiles.png",
+                    "body": "**Special tile** brush: ramp cardinals (stored on the lower-height cell), convex/concave corners, and editor-only auto ramps (baked on save). Glyphs overlay the height tint. Ownership matches runtime: a north ramp on `(x,y)` means the north neighbor is one height level taller.",
+                    "caption": "Special tile / ramp editor",
                     "layout": "side"
                   },
                   {
                     "type": "figure",
-                    "path": "media/docs/map-editor/map-editor-collision.webp",
-                    "body": "Blocked brush paints collision bits (red overlay). Follower pathfinding and player movement treat blocked cells as impassable. Height deltas of ±1 and ramp specials still govern step-up rules separately.",
-                    "caption": "Collision (blocked) brush",
+                    "path": "media/docs/map-editor/map-editor-2d-collision.png",
+                    "body": "**Collider** view paints impassable bits (red overlay). Separate from height and RTPKS decoration layers. Pathfinding and player movement respect blocked cells; ramp specials still govern step-up separately.",
+                    "caption": "2D collider view",
                     "layout": "side"
                   },
                   {
@@ -105,8 +122,48 @@
                     "path": "tools/admin/public/ramp-specials.js",
                     "lines": "152-180",
                     "language": "javascript",
-                    "caption": "bakeTerrainSpecials — resolve AUTO (1) before encodeOwmap",
+                    "caption": "bakeTerrainSpecials: resolve AUTO (1) before encodeOwmap",
                     "body": "export function bakeTerrainSpecials(map) {\n  // Clone map; for each cell with special===AUTO:\n  //   infer cardinal from neighbor heights → write 2–5, or clear to FLAT\n  return { map: next, bakedCount, clearedCount };\n}"
+                  }
+                ]
+              },
+              {
+                "id": "tile-layers",
+                "label": "Decoration layers",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "**`tileLayers`** stores RTPKS mesh placement: the same stacking idea as PDSMS map layers 0–7, but each cell holds a stable **`resortTileId`** (from the bound `.rtpks` pack), not a PDSMS local index. Maps support **up to 7 decoration layers** (`MAX_TILE_LAYERS` in the Map Editor). Layer 0 is drawn first (ground); higher indices stack on top. Empty cells are `null` in JSON and **-1** in C++ (`TileLayerConfig::cells`)."
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/map-editor/map-editor-2d-tile-paint.png",
+                    "body": "Layer chips on the left switch the active decoration layer. The 2D view composites visible layers bottom-to-top; the topmost non-empty tile at a cell is what you see in the thumbnail. Multi-cell RTPKS tiles anchor at the painted cell and occupy footprint cells on that layer only.",
+                    "caption": "Seven decoration layers: tile paint view",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead><tbody><tr><td><code>tileLayers.version</code></td><td>number</td><td>Editor schema version (currently 1)</td></tr><tr><td><code>tileLayers.activeLayer</code></td><td>number</td><td>Which layer the Map Editor paints on (0-based)</td></tr><tr><td><code>tileLayers.layers[]</code></td><td>array</td><td>1…7 entries; excess trimmed on load</td></tr><tr><td><code>layers[].id</code></td><td>string</td><td>Stable id e.g. <code>ground</code>, <code>path</code>, <code>detail_a</code></td></tr><tr><td><code>layers[].name</code></td><td>string</td><td>Display label in editor UI</td></tr><tr><td><code>layers[].visible</code></td><td>boolean</td><td>Hidden layers skip 2D composite and runtime draw</td></tr><tr><td><code>layers[].cells[y][x]</code></td><td>number | null</td><td><code>resortTileId</code> from bound RTPKS; empty = no tile</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Per-cell stack",
+                    "caption": "Each (x,y) can hold one tile per decoration layer; runtime iterates layers in order",
+                    "source": "flowchart BT\n    L0[Layer 0 ground] --> L1[Layer 1 paths]\n    L1 --> L2[Layer 2 detail …]\n    L2 --> L6[Layer 6 top overlay]\n    L6 --> DRAW[OverworldBgfxRenderer depth sort]"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<p><strong>Default layer names</strong> (Map Editor seeds these when creating a map): Ground, Paths, Detail A, Detail B, Overlay: you can add more up to the 7-layer cap.</p><p><strong>Runtime placement</strong> (<code>OverworldBgfxRenderer</code>): for each visible layer in order, non-empty cells load <code>runtime/meshes/tile_{resortTileId}.json</code> from the bound pack. Each layer index adds a small Y lift (<code>layer_index × 0.004</code> world units) so stacked tiles do not z-fight. Tiles sit on terrain height from the binary <code>height</code> grid at their anchor cell.</p><p><strong>Requires</strong> <code>tilePackage</code> pointing at an RTPKS v2 file on disk. Without a bound pack, decoration layers are stored but not rendered.</p>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "src/gameplay/world3d/data/SceneMetadataParser.cpp",
+                    "lines": "210-231",
+                    "language": "cpp",
+                    "caption": "applyTileLayersConfig: parse layers[] into SceneConfig",
+                    "body": "void applyTileLayersConfig(SceneConfig& out, const JsonValue* tile_layers) {\n    out.tile_layers.layers.clear();\n    for (const JsonValue& layer_value : layers->asArray()) {\n        TileLayerConfig layer;\n        layer.id = strOr(layer_value.get(\"id\"), \"\");\n        layer.visible = boolOr(layer_value.get(\"visible\"), true);\n        layer.cells = parseTileLayerCells(layer_value.get(\"cells\"), width, height);\n        out.tile_layers.layers.push_back(std::move(layer));\n    }\n}"
                   }
                 ]
               },
@@ -116,11 +173,11 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Metadata is everything except `terrain` grids. Parsed by `SceneMetadataParser.cpp` into `SceneConfig` (`Overworld3DConfig.hpp`). Paths in JSON are relative to the game project root unless absolute."
+                    "body": "Metadata is everything except packed `terrain` grids. Parsed by `SceneMetadataParser.cpp` into `SceneConfig`. Paths are relative to the game project root unless absolute.\n\nThe parser merges `config/gameplay/world3d/defaults.json`, camera presets, `sprites/shadow.json`, and `world3d/render.json` before applying map fields. **Tile paint** (`tileLayers`) and **tile package** (`tilePackage`) are read from map JSON and drive RTPKS mesh placement at runtime."
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th>Section</th><th>Key fields</th><th>Notes</th></tr></thead><tbody><tr><td>Identity</td><td><code>id</code>, <code>name</code>, <code>type</code></td><td><code>type</code>: <code>exterior</code> or <code>interior</code></td></tr><tr><td><code>grid</code></td><td><code>enabled</code>, <code>tileSize</code>, <code>width</code>, <code>height</code></td><td>Width/height also duplicated in binary header</td></tr><tr><td><code>visual</code></td><td><code>mesh</code>, <code>material</code>, <code>textureDirectory</code>, <code>origin[]</code>, <code>scale</code></td><td>3D terrain mesh hook for renderer</td></tr><tr><td><code>player</code></td><td><code>character</code>, <code>spawnTile[]</code>, <code>spawnHeight</code>, <code>facing</code></td><td><code>character</code> → sprite package path (.charbin or legacy .character.json)</td></tr><tr><td><code>camera</code></td><td><code>preset</code></td><td>Resolved via <code>config/gameplay/camera/presets.json</code></td></tr><tr><td><code>lighting</code></td><td><code>preset</code>, <code>brightness</code>, <code>tint[]</code></td><td>Exterior/interior presets</td></tr><tr><td><code>characters[]</code></td><td><code>id</code>, <code>characterId</code>, <code>tile[]</code>, <code>facing</code>, <code>movementProfile</code></td><td>NPC placements — not runtime party state</td></tr><tr><td><code>models[]</code></td><td><code>id</code>, <code>mesh</code>, <code>material</code>, <code>position[]</code>, <code>yawDeg</code>, <code>scale</code></td><td>Static 3D props on the map</td></tr></tbody></table>"
+                    "html": "<table><thead><tr><th>Section</th><th>Key fields</th><th>Notes</th></tr></thead><tbody><tr><td>Identity</td><td><code>id</code>, <code>name</code>, <code>type</code></td><td><code>exterior</code> or <code>interior</code></td></tr><tr><td><code>grid</code></td><td><code>tileSize</code>, <code>width</code>, <code>height</code></td><td>Duplicated in binary header</td></tr><tr><td><code>tilePackage</code></td><td><code>file</code>, <code>name</code>, <code>path</code></td><td>Bound <code>.rtpks</code> under <code>assets/overworld/tilepacks/</code></td></tr><tr><td><code>tileLayers</code></td><td><code>layers[]</code> with <code>cells[y][x]</code></td><td>Each cell: <code>resortTileId</code> number or empty. Up to 7 decoration layers.</td></tr><tr><td><code>pathLayer</code></td><td><code>cells[][]</code>, <code>activeSetId</code></td><td>Optional pathfinding / smart-object paint grid</td></tr><tr><td><code>terrainVisual</code></td><td><code>floorHeightScale</code>, recolor flags</td><td>Editor + software renderer tinting</td></tr><tr><td><code>player</code></td><td><code>character</code>, <code>spawnTile[]</code>, <code>facing</code></td><td><code>.charbin</code> package path</td></tr><tr><td><code>models[]</code></td><td><code>glb</code>, <code>position[]</code>, <code>yawDeg</code></td><td>Placed GLB props (see overworld-glb-models)</td></tr><tr><td><code>characters[]</code></td><td>NPC tile slots</td><td>Not party state</td></tr><tr><td>Merged defaults</td><td><code>defaults.json</code>, <code>render.json</code>, <code>shadow.json</code></td><td>Applied at load, not stored in file</td></tr></tbody></table>"
                   },
                   {
                     "type": "html",
@@ -128,7 +185,7 @@
                   },
                   {
                     "type": "text",
-                    "body": "What does **not** belong in metadata:\n\n• Party / box Pokémon state (use Resort + OpenHome — see compatibility-ontology)\n• Per-session follower config (see follower-pokemon / session.json)\n• Map-level wild Pokémon spawn tables — not in v1 yet (see overworld_pokemon_architecture_handoff.md in the game repo)"
+                    "body": "What does **not** belong in metadata:\n\n• Party / box Pokémon state (use Resort + OpenHome; see compatibility-ontology)\n• Per-session follower config (see follower-pokemon / session.json)\n• Map-level wild Pokémon spawn tables: not in v1 yet (see overworld_pokemon_architecture_handoff.md in the game repo)"
                   }
                 ]
               }
@@ -139,22 +196,29 @@
       {
         "id": "authoring",
         "title": "Authoring in the Map Editor",
-        "summary": "Brushes, tools, save path, and 3D preview.",
+        "summary": "Tile paint, terrain brushes, 3D preview, and save path.",
         "blocks": [
           {
             "type": "figure",
-            "path": "media/docs/map-editor/map-editor-3d-preview.webp",
-            "body": "Click **Open 3D** to preview the painted height field with ramp corner geometry. Drag to orbit, right-drag to pan. The preview uses the same corner-height rules as `OverworldMapRenderer.cpp`. Import GLB places terrain meshes referenced in `visual` / `models[]`.",
-            "caption": "3D terrain preview modal",
+            "path": "media/docs/map-editor/map-editor-rtpks-palette.png",
+            "body": "After binding a tile package, the right rail lists **RTPKS tabs** and tile thumbnails (from the `.rtpks.meta` sidecar previews). Pick a tile, paint on the active decoration layer, and use layer chips on the left to stack up to seven levels.",
+            "caption": "RTPKS tile palette in the Map Editor",
+            "layout": "side"
+          },
+          {
+            "type": "figure",
+            "path": "media/docs/map-editor/map-editor-3d-full.png",
+            "body": "Embedded **3D view**: orbit camera, RTPKS meshes placed from `tileLayers`, height field shading, and GLB props. Matches what the C++ bgfx renderer draws (preview uses three.js with the same tile placement rules).",
+            "caption": "Full 3D editor view",
             "layout": "stacked"
           },
           {
             "type": "html",
-            "html": "<table><thead><tr><th>Brush</th><th>Layer</th><th>Purpose</th></tr></thead><tbody><tr><td>Height</td><td><code>terrain.height</code></td><td>Paint discrete levels 0…255</td></tr><tr><td>Ramp</td><td><code>terrain.special</code></td><td>Cardinal, corner, or auto ramps</td></tr><tr><td>Blocked</td><td><code>terrain.collision</code></td><td>Impassable cells</td></tr><tr><td>Spawn</td><td><code>player.spawnTile</code></td><td>Player start tile (not a terrain layer)</td></tr></tbody></table><p>Tools: Paint, Area, Line, Clear, Fill, Raise, Lower, Eyedropper. Brush sizes 1×1 through 5×5.</p>"
+            "html": "<table><thead><tr><th>Brush / mode</th><th>Target</th><th>Purpose</th></tr></thead><tbody><tr><td>Tile</td><td><code>tileLayers.layers[].cells</code></td><td>Paint <code>resortTileId</code> from bound RTPKS pack</td></tr><tr><td>Height</td><td><code>terrain.height</code></td><td>Discrete levels 0…255</td></tr><tr><td>Special</td><td><code>terrain.special</code></td><td>Ramps and corner shapes</td></tr><tr><td>Collider</td><td><code>terrain.collision</code></td><td>Blocked cells</td></tr><tr><td>Path</td><td><code>pathLayer.cells</code></td><td>Pathfinding / activity paint</td></tr><tr><td>Props</td><td><code>models[]</code></td><td>GLB placement with footprint ghost</td></tr><tr><td>Spawn</td><td><code>player.spawnTile</code></td><td>Player start</td></tr></tbody></table>"
           },
           {
             "type": "text",
-            "body": "Workflow:\n\n1. `cd pokemon-resort-page && npm run admin` → http://127.0.0.1:9477 → **Map Editor** tab\n2. Set **Maps folder** (default `pokemon-resort/assets/overworld/maps`) → **Apply folder** → **Refresh**\n3. Load an existing `.owmap` or **New map** → paint terrain → set spawn / metadata\n4. **Save .owmap** — server bakes auto ramps, writes binary to the maps folder\n5. **Download .owmap** — export without saving (same bake path)\n6. **Import .map.json** — legacy JSON maps convert via `mapFromJson()` then save as `.owmap`\n\nAdmin API (see `tools/admin/server.mjs`): `POST /api/maps/save`, `GET /api/maps/list`, `POST /api/maps/export-owmap`. Feature flag: `owmap-bake`."
+            "body": "Workflow:\n\n1. In **PDSMS**, save tiles as **RTPKS v2** (`.rtpks` + `.rtpks.meta` sidecar). Copy both to `pokemon-resort/assets/overworld/tilepacks/`.\n2. `npm run admin` → **Map Editor** → set maps folder and **tile packages** folder → **Refresh**.\n3. Load or create a map → **Bind tile package** → paint `tileLayers`, terrain, collision, props.\n4. **Save .owmap** (bakes auto ramps, writes binary + metadata JSON).\n5. Run the game 3D test screen to verify RTPKS placement and props.\n\nLegacy `.map.json` imports still round-trip through `mapFromJson()` before save."
           }
         ]
       },
@@ -181,7 +245,7 @@
                     "path": "tools/admin/lib/owmap-format.mjs",
                     "lines": "157-186",
                     "language": "javascript",
-                    "caption": "decodeOwmap — re-open saved maps in the editor",
+                    "caption": "decodeOwmap: re-open saved maps in the editor",
                     "body": "export function decodeOwmap(buffer) {\n  // Validate OWM1 magic, version 1\n  // Parse metaJson → spread into map object\n  // Unpack height, special, collision into terrain.{height,special,collision}[][]\n  return { ...meta, grid: { tileSize, width, height }, terrain: { … } };\n}"
                   }
                 ]
@@ -192,16 +256,16 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "`loadSceneConfig()` routes `.owmap` paths to `loadOwmapScene()`. Metadata becomes `SceneConfig`; terrain grids populate `TerrainConfig`. Character packages on the map load separately via `loadCharacterDefinition()` when NPCs spawn.\n\nShared metadata parser: `SceneMetadataParser.cpp` (also used by legacy JSON scene loader in `JsonOverworldLoader.cpp`)."
+                    "body": "`loadOwmapScene()` unpacks terrain grids, then `parseSceneMetadata()` fills `SceneConfig` including `tile_package` and `tile_layers`. `RtpksTilePackageLoader` opens the bound **RTPKS v2** file; `OverworldBgfxRenderer` places each non-empty `tileLayers` cell using the mesh + materials from `runtime/meshes/tile_{id}.json`.\n\nBillboard characters and GLB props depth-sort with RTPKS tiles using ground-anchor bias from `render.json`."
                   },
                   {
                     "type": "code",
                     "repo": "pokemon-resort",
                     "path": "src/gameplay/world3d/data/SceneMetadataParser.cpp",
-                    "lines": "49-92",
+                    "lines": "176-358",
                     "language": "cpp",
-                    "caption": "parseSceneMetadata — visual, grid, player spawn",
-                    "body": "SceneConfig parseSceneMetadata(const JsonValue& root, const std::string& project_root) {\n    // Requires visual + player sections\n    // Resolves mesh/material paths relative to project_root\n    // Reads spawnTile, facing, camera preset id\n    return out;\n}"
+                    "caption": "parseSceneMetadata: defaults merge, render/shadow, models",
+                    "body": "SceneConfig parseSceneMetadata(const JsonValue& root, const std::string& project_root) {\n    // Merge config/gameplay/world3d/defaults.json sceneDefaults\n    // Require visual + player; resolve paths relative to project_root\n    // Load camera presets, sprites/shadow.json, world3d/render.json\n    // models[]: prefer glb, fall back to mesh; characters[] for NPC tiles\n    return out;\n}"
                   }
                 ]
               }
@@ -216,7 +280,7 @@
         "blocks": [
           {
             "type": "text",
-            "body": "**Safe extensions (v1):**\n\n• Add optional keys to metadata JSON — update `SceneMetadataParser.cpp` to read them; old maps ignore unknown fields\n• Add new `special` tile IDs (14+) — coordinate with `ramp-specials.js`, Map Editor presets, and `OverworldMapRenderer.cpp` corner math\n• Add NPC `movementProfile` values — extend `parseMovementProfile()` and editor dropdown\n\n**Breaking changes:**\n\n• Bump `version` u16 in the binary header (currently 1) and teach both `decodeOwmap()` and `OwmapOverworldLoader.cpp` to accept the new version\n• Change grid packing (e.g. wider collision flags) — requires coordinated writer/reader change\n• Never store terrain inside `metaJson` — keeps editor round-trip and binary size predictable\n\nUpdate `pokemon-resort/docs/gameplay/owmap_format.md` and this article in the same change."
+            "body": "**Safe extensions (v1):**\n\n• Add optional keys to metadata JSON: update `SceneMetadataParser.cpp` to read them; old maps ignore unknown fields\n• Add new `special` tile IDs (14+): coordinate with `ramp-specials.js`, Map Editor presets, and `OverworldMapRenderer.cpp` corner math\n• Add NPC `movementProfile` values: extend `parseMovementProfile()` and editor dropdown\n\n**Breaking changes:**\n\n• Bump `version` u16 in the binary header (currently 1) and teach both `decodeOwmap()` and `OwmapOverworldLoader.cpp` to accept the new version\n• Change grid packing (e.g. wider collision flags): requires coordinated writer/reader change\n• Never store terrain inside `metaJson`: keeps editor round-trip and binary size predictable\n\nUpdate `pokemon-resort/docs/gameplay/owmap_format.md` and this article in the same change."
           },
           {
             "type": "diagram",
@@ -237,22 +301,24 @@
           },
           {
             "type": "gallery",
-            "caption": "Map Editor captures (Playwright from npm run admin)",
+            "caption": "Map Editor and runtime captures (June 2026)",
             "images": [
-              { "path": "media/docs/map-editor/map-editor-overview.webp", "caption": "Overview — grid, map list, brushes" },
-              { "path": "media/docs/map-editor/map-editor-ramp.webp", "caption": "Ramp specials" },
-              { "path": "media/docs/map-editor/map-editor-collision.webp", "caption": "Collision overlay" },
-              { "path": "media/docs/map-editor/map-editor-3d-preview.webp", "caption": "3D preview" }
+              { "path": "media/docs/map-editor/map-editor-2d-tile-paint.png", "caption": "2D tile paint" },
+              { "path": "media/docs/map-editor/map-editor-special-tiles.png", "caption": "Special / ramp tiles" },
+              { "path": "media/docs/map-editor/map-editor-2d-collision.png", "caption": "Collider view" },
+              { "path": "media/docs/map-editor/map-editor-3d-full.png", "caption": "3D editor view" },
+              { "path": "media/docs/map-editor/game-runtime-in-game.png", "caption": "In-game (bgfx)" }
             ]
           },
           {
             "type": "text",
-            "body": "In-repo references:\n\n• `pokemon-resort/docs/gameplay/owmap_format.md` — short canonical spec\n• `pokemon-resort/docs/gameplay/overworld_pokemon_architecture_handoff.md` — future spawn contracts (not in owmap v1 yet)\n• `tools/admin/public/ramp-specials.js` — special tile IDs and bake rules\n• `tools/admin/public/map-editor.js` — editor UI and save flow"
+            "body": "In-repo references:\n\n• `pokemon-resort/docs/gameplay/owmap_format.md`: short canonical spec\n• `pokemon-resort/docs/gameplay/overworld_pokemon_architecture_handoff.md`: future spawn contracts (not in owmap v1 yet)\n• `tools/admin/public/ramp-specials.js`: special tile IDs and bake rules\n• `tools/admin/public/map-editor.js`: editor UI and save flow"
           },
           {
             "type": "links",
             "items": [
-              { "label": "Island Dreamforge (terrain upstream)", "href": "#/docs?article=island-dreamforge" },
+              { "label": "RTPKS format (tile packs for tileLayers)", "href": "#/docs?article=rtpks-format" },
+              { "label": "Overworld GLB props (models[] placement)", "href": "#/docs?article=overworld-glb-models" },
               { "label": "charbin schema (character packages on maps)", "href": "#/docs?article=charbin-schema" },
               { "label": "Overworld follower Pokémon (runtime on owmap terrain)", "href": "#/docs?article=follower-pokemon" }
             ]

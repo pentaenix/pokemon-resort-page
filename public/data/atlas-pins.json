@@ -105,11 +105,12 @@
       "color": "blue",
       "x": 0.6664202277095963,
       "y": 0.5084035684360984,
-      "summary": "Decorated tent-style guest rooms near the farm and climbing wall.",
+      "summary": "Glamping guest tents plus the accessory mirror building (dress Pokémon cosmetics here).",
       "linkedResearch": [],
       "linkedFeatures": [],
+      "linkedIdeas": ["idea-pokemon-accessories"],
       "dossier": {
-        "overview": "A small glamping area with hand-painted tent rooms set on raised wooden decks. The tents are used as guest rooms; one is shown with its wall torn open, revealing beds inside. The area includes outdoor seating, cushions, small tables, and planted walkways.",
+        "overview": "A small glamping area with hand-painted tent rooms set on raised wooden decks. The tents are used as guest rooms; one is shown with its wall torn open, revealing beds inside. The area includes outdoor seating, cushions, small tables, and planted walkways.\n\nBeside the tents: a small **accessory building** with an interactable **mirror** (see linked idea). Players bring a Pokémon here to equip one cosmetic accessory on the summary portrait and optional overworld sprite.",
         "researchMilestones": [],
         "sections": [
           {
@@ -167,7 +168,15 @@
                   },
                   {
                     "path": "media/atlas/pin-10/VS-Netflix-PokmonConciergeE1ImHarutheNewConcierge-8-08.jpg",
-                    "caption": ""
+                    "caption": "Show reference for Concierge-style dressing UI"
+                  },
+                  {
+                    "path": "media/ideas/pokemon-accessories/accessory-mirror-shop.png",
+                    "caption": "Pokémon Concierge — mirror dressing scene"
+                  },
+                  {
+                    "path": "media/ideas/pokemon-accessories/piloswine-summary.png",
+                    "caption": "Piloswine summary accessory layout (concept)"
                   }
                 ]
               }

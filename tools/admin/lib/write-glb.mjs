@@ -7,9 +7,14 @@ const CHUNK_BIN = 0x004e4942;
 /** glTF 2.0 enum values */
 const FILTER_NEAREST = 9720;
 const WRAP_REPEAT = 10497;
+const SOFT_SHADOW_OPACITY = 0.45;
 
 function align4(n) {
   return (n + 3) & ~3;
+}
+
+function isSoftShadowMaterialName(name = '') {
+  return /shadow|kage|shade/i.test(String(name));
 }
 
 function packGlb(json, binBuffer) {
@@ -129,11 +134,12 @@ export function writeGlbFromMesh(mesh) {
 
     // Alpha policy: decode the texture's alpha channel and only treat it as a cutout
     // when a meaningful fraction of texels are actually transparent (see texture-alpha).
-    // DS rips routinely ship RGBA PNGs that are fully opaque — those stay OPAQUE so we
+    // DS rips routinely ship RGBA PNGs that are fully opaque: those stay OPAQUE so we
     // never punch holes in roofs/walls. Genuine cutout art (banners, signs, glass) gets
     // a MASK with a crisp 0.5 cutoff, which matches DS 1-bit alpha and avoids the black
     // squares produced by tools that flatten transparency to OPAQUE.
-    const cutout = srcTex ? textureHasAlpha(srcTex) : false;
+    const softShadow = isSoftShadowMaterialName(prMat.name || `mat_${m}`);
+    const cutout = !softShadow && srcTex ? textureHasAlpha(srcTex) : false;
     const mat = {
       name: prMat.name || `mat_${m}`,
       pbrMetallicRoughness: {
@@ -141,8 +147,12 @@ export function writeGlbFromMesh(mesh) {
         roughnessFactor: 1,
       },
       doubleSided: true,
-      alphaMode: cutout ? 'MASK' : 'OPAQUE',
+      alphaMode: softShadow ? 'BLEND' : cutout ? 'MASK' : 'OPAQUE',
     };
+    if (softShadow) {
+      mat.pbrMetallicRoughness.baseColorFactor = [1, 1, 1, SOFT_SHADOW_OPACITY];
+      mat.extras = { rae: { renderClass: 'blend', materialRole: 'soft_shadow' } };
+    }
     if (cutout) mat.alphaCutoff = 0.5;
     if (gltfTexIndex != null) {
       mat.pbrMetallicRoughness.baseColorTexture = { index: gltfTexIndex };

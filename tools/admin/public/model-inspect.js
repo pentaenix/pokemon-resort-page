@@ -143,7 +143,7 @@ export function inspectModelFiles(files) {
     canCompile: Boolean(objPath) && rows.every((r) => !r.mapKd || r.ok),
     issues: [
       !objPath ? 'Missing .obj file' : null,
-      !mtlPath ? 'Missing .mtl file — textures cannot be baked' : null,
+      !mtlPath ? 'Missing .mtl file: textures cannot be baked' : null,
       missingCount ? `${missingCount} material(s) reference textures not found in the folder` : null,
       noMapKdCount ? `${noMapKdCount} material(s) have no map_Kd line` : null,
     ].filter(Boolean),

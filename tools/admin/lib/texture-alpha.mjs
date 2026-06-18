@@ -102,7 +102,7 @@ function decodePngAlpha(buf) {
 /**
  * Decide whether a texture carries *meaningful* transparency, by actually decoding
  * the alpha channel and measuring how much of it is below the cutoff. DS rips often
- * ship an RGBA PNG whose alpha is fully opaque — those must stay OPAQUE so we don't
+ * ship an RGBA PNG whose alpha is fully opaque: those must stay OPAQUE so we don't
  * punch holes in roofs/walls. Genuine cutout art (banners, signs, glass, lights) has
  * a sizeable fraction of transparent texels and should become a MASK material.
  *

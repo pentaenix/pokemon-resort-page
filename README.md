@@ -1,4 +1,4 @@
-# Pokémon Resort — Fan Research & Development Atlas
+# Pokémon Resort: Fan Research & Development Atlas
 
 A polished, data-driven, static GitHub Pages site for a non-commercial fan research/game-development project.
 
@@ -8,13 +8,13 @@ The public site is static: no comments, no accounts, no hosted database, no publ
 
 The public app intentionally keeps navigation compact:
 
-- **Home** — the resort lobby, project status, entry cards, and a clear “What is this?” about section.
-- **Island Atlas** — the 3D island viewport, confidence filters, media carousel, points of interest, submodels, character/sprite planning, and gallery resources.
-- **Compatibility** — the generation ontology with stable directional routes, focus mode, free-layout dragging, outward self-loops, large line hit boxes, and mobile route fallback.
-- **Operations** — On-Flight Board, internal bugs, and community issue links.
-- **Milestones** — a vertical scrollable project timeline centered on the current milestone.
-- **Source Guide** — repo structure and local update workflow.
-- **Legal** — full fan-project disclaimer and asset/credit stance.
+- **Home**: the resort lobby, project status, entry cards, and a clear “What is this?” about section.
+- **Island Atlas**: the 3D island viewport, confidence filters, media carousel, points of interest, submodels, character/sprite planning, and gallery resources.
+- **Compatibility**: the generation ontology with stable directional routes, focus mode, free-layout dragging, outward self-loops, large line hit boxes, and mobile route fallback.
+- **Operations**: On-Flight Board, internal bugs, and community issue links.
+- **Milestones**: a vertical scrollable project timeline centered on the current milestone.
+- **Source Guide**: repo structure and local update workflow.
+- **Legal**: full fan-project disclaimer and asset/credit stance.
 
 Aliases such as `#/issues`, `#/gallery`, `#/models`, and `#/characters` are redirected into the integrated pages. `#/roadmap` now routes to the dedicated Milestones page.
 
@@ -42,7 +42,7 @@ npm install
 npm run dev
 ```
 
-Open the local URL printed by Vite (default **5174** — see [`../DEV-PORTS.md`](../DEV-PORTS.md) for the workspace port map).
+Open the local URL printed by Vite (default **5174**: see [`../DEV-PORTS.md`](../DEV-PORTS.md) for the workspace port map).
 
 ## Build the site
 
@@ -75,7 +75,7 @@ The local tool includes guided editors for:
 - Bug/issue cards and issue checklists
 - Feature cards, progress, stages, and subtasks
 - Research POIs and 3D marker coordinates
-- Game library box-art paths (fetch from Libretro Thumbnails in the desk — not on the public site)
+- Game library box-art paths (fetch from Libretro Thumbnails in the desk: not on the public site)
 - Main island model metadata
 - Roadmap / milestone timeline items
 - Idea board cards
@@ -86,7 +86,7 @@ It also shows detected files under `public/media` so you can copy paths into gal
 
 ### Fetch box art (Libretro Thumbnails)
 
-Uses the public [Libretro Thumbnails](https://thumbnails.libretro.com/) CDN — **no login or `.env` file**.
+Uses the public [Libretro Thumbnails](https://thumbnails.libretro.com/) CDN: **no login or `.env` file**.
 
 1. `npm run admin` → **Game Library** tab.
 2. Select a game → **Find covers** → **Use this cover** (USA / USA+Europe preferred).
@@ -102,7 +102,7 @@ Switch-era games are not on Libretro yet; add those paths manually (see `RESOURC
 
 ### Import community GitHub issues
 
-Uses the GitHub REST API from the local desk only — your token never ships with the public site.
+Uses the GitHub REST API from the local desk only: your token never ships with the public site.
 
 1. Copy `.env.example` → `.env.local` and set `GITHUB_TOKEN` (fine-grained or classic PAT with `repo` or `public_repo` read access to issues).
 2. Set `GITHUB_REPO=owner/repo` or fix `public/data/site.json` → `repoUrl`.

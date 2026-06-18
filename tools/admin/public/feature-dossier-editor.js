@@ -22,7 +22,7 @@ const BLOCK_TYPES = [
   ['tabs', 'Tabbed section'],
 ];
 
-/** Button label for “Add …” — stays in sync with the section dropdown */
+/** Button label for “Add …”: stays in sync with the section dropdown */
 const BLOCK_ADD_VERBS = {
   text: 'Add text note',
   figure: 'Add text + image',
@@ -289,7 +289,7 @@ function linkRowHtml(item, idx, esc) {
   return `<div class="dossier-link-row${invalid ? ' dossier-link-row--invalid' : ''}" data-link-row="${idx}">
     <label>Label<input data-link-label value="${esc(item.label || '')}"></label>
     <label>URL<input data-link-href value="${esc(href)}" placeholder="https://…" spellcheck="false">
-    ${invalid ? '<span class="hint link-invalid-hint">Invalid URL — use https://… or mailto:name@example.com</span>' : ''}</label>
+    ${invalid ? '<span class="hint link-invalid-hint">Invalid URL: use https://… or mailto:name@example.com</span>' : ''}</label>
     <button type="button" class="btn ghost small" data-link-remove>×</button>
   </div>`;
 }
@@ -521,7 +521,7 @@ function dossierBlockHtml(block, sectionIndex, blockIndex, deps) {
       <div class="dossier-block-editor-body">
         <div class="dossier-block-toolbar"><select data-block-type>${BLOCK_TYPES.map(([v, l]) => `<option value="${v}" ${v === type ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <button type="button" class="btn ghost small" data-dossier-block-remove>Remove block</button></div>
-        <p class="hint dossier-block-hint">Text-based UML via Mermaid — class, state, sequence, and flowchart diagrams. Use the editor modal for the source.</p>
+        <p class="hint dossier-block-hint">Text-based UML via Mermaid: class, state, sequence, and flowchart diagrams. Use the editor modal for the source.</p>
         <label>Title (optional)<input data-block-diagram-title value="${esc(block?.title || '')}" placeholder="Pokémon follower AI"></label>
         <label>Caption (optional)<input data-block-diagram-caption value="${esc(block?.caption || '')}" placeholder="High-level behaviour overview"></label>
         <textarea hidden data-block-diagram-source>${esc(source)}</textarea>
@@ -613,14 +613,14 @@ export function dossierEditorHtml(record, deps, config = {}) {
     <div data-dossier-milestones class="check-editor">${dossierMilestoneRows(dossier.researchMilestones, esc) || '<p class="hint">Optional checkpoints for research (separate from card tasks).</p>'}</div>
     <button type="button" class="btn ghost small" data-add-dossier-milestone>Add milestone</button>` : '';
   return `<details class="dossier-editor-fold" data-dossier-host ${open ? 'open' : ''}>
-    <summary class="dossier-editor-fold-summary"><strong>${title}</strong> <span class="hint">— click to collapse</span></summary>
+    <summary class="dossier-editor-fold-summary"><strong>${title}</strong> <span class="hint">: click to collapse</span></summary>
     <section class="dossier-editor dossier-editor-fold-body">
       <p class="hint">${hint}</p>
       <label>Overview<textarea data-dossier-overview rows="4" placeholder="Long-form intro…">${esc(dossier.overview)}</textarea></label>
       ${mapBlock}
       ${milestoneBlock}
       <h4>Sections</h4>
-      <div data-dossier-sections>${dossier.sections.map((section, index) => dossierSectionHtml(section, index, editorDeps)).join('') || '<p class="hint">No sections yet — add one below.</p>'}</div>
+      <div data-dossier-sections>${dossier.sections.map((section, index) => dossierSectionHtml(section, index, editorDeps)).join('') || '<p class="hint">No sections yet: add one below.</p>'}</div>
       <button type="button" class="btn ghost small" data-add-dossier-section>Add section</button>
       ${renderDossierAssetPicker(editorDeps)}
       <div data-dossier-undo-bar class="dossier-undo-bar hidden" role="status">
@@ -635,7 +635,7 @@ export function dossierEditorHtml(record, deps, config = {}) {
 export function featureDossierEditorHtml(feature, deps) {
   return dossierEditorHtml(feature, deps, {
     title: 'Research dossier',
-    hint: 'Build notes, media, comparisons, galleries, and custom HTML. Map pin is optional — expand only when linking to a POI on the atlas.',
+    hint: 'Build notes, media, comparisons, galleries, and custom HTML. Map pin is optional: expand only when linking to a POI on the atlas.',
     showMap: true,
     showResearchMilestones: true,
     uploadFolder: 'media/features',
@@ -868,7 +868,7 @@ function showDossierHtmlPreview(previewBtn, deps) {
       if (src && deps?.adminAssetUrl) img.src = deps.adminAssetUrl(src);
     });
   } else {
-    preview.innerHTML = '<p class="hint">Nothing to preview — use allowed tags (e.g. &lt;p&gt;, &lt;ul&gt;, &lt;img src=\"media/…\"&gt;) and site asset paths for images.</p>';
+    preview.innerHTML = '<p class="hint">Nothing to preview: use allowed tags (e.g. &lt;p&gt;, &lt;ul&gt;, &lt;img src=\"media/…\"&gt;) and site asset paths for images.</p>';
   }
 }
 
@@ -892,11 +892,13 @@ function handleDossierMountClick(event, deps) {
     if (typeof getRecord !== 'function') return;
     const record = getRecord();
     if (!record) return;
-    record.dossier = readDossierFromDom($, { keepDrafts: true, mountSelector });
+    const nextDossier = readDossierFromDom($, { keepDrafts: true, mountSelector });
+    if (nextDossier === null) return;
+    record.dossier = nextDossier;
     onDirty?.();
   };
 
-  /** Re-render dossier UI from in-memory record (do not read DOM — would drop pending edits). */
+  /** Re-render dossier UI from in-memory record (do not read DOM: would drop pending edits). */
   const refresh = () => {
     if (typeof getRecord !== 'function') return;
     const record = getRecord();
@@ -1115,7 +1117,9 @@ function handleDossierMountChange(event, deps) {
     if (typeof getRecord !== 'function') return;
     const record = getRecord();
     if (!record) return;
-    record.dossier = readDossierFromDom($, { keepDrafts: true, mountSelector });
+    const nextDossier = readDossierFromDom($, { keepDrafts: true, mountSelector });
+    if (nextDossier === null) return;
+    record.dossier = nextDossier;
     onDirty?.();
   };
 
@@ -1186,7 +1190,7 @@ export function bindDossierEditor(deps) {
         row?.classList.toggle('dossier-link-row--invalid', Boolean(invalid));
         const hint = row?.querySelector('.link-invalid-hint');
         if (invalid && !hint) {
-          event.target.insertAdjacentHTML('afterend', '<span class="hint link-invalid-hint">Invalid URL — use https://… or mailto:name@example.com</span>');
+          event.target.insertAdjacentHTML('afterend', '<span class="hint link-invalid-hint">Invalid URL: use https://… or mailto:name@example.com</span>');
         } else if (!invalid) hint?.remove();
       }
       if (event.target.matches('[data-block-path], [data-compare-path], [data-carousel-path], [data-gallery-path], [data-block-poster]')) {
@@ -1196,7 +1200,9 @@ export function bindDossierEditor(deps) {
       dossierInputTimer = window.setTimeout(() => {
         const record = deps.getRecord?.();
         if (!record) return;
-        record.dossier = readDossierFromDom(deps.$, { keepDrafts: true, mountSelector });
+        const nextDossier = readDossierFromDom(deps.$, { keepDrafts: true, mountSelector });
+        if (nextDossier === null) return;
+        record.dossier = nextDossier;
         deps.onDirty?.();
       }, 280);
     });

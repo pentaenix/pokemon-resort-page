@@ -3,19 +3,33 @@
 // Builds a real three.js scene of the map being edited: a height-shaded terrain mesh from the
 // editor's height/special grids plus every placed prop loaded as its actual GLB (reusing the
 // same loader/material tuning as the prop previewer), under an orbit camera. This is a preview,
-// not an editor surface — painting still happens on the 2D grid. The controller exposes only
+// not an editor surface: painting still happens on the 2D grid. The controller exposes only
 // dispose(); the caller re-mounts after a render when the workspace is in 3D mode.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { loadGlbScene } from './model-glb-viewer.js';
-import { SPECIAL } from './ramp-specials.js';
+import { tuneGltfTexture } from './model-texture-alpha.js';
+import { cornerHeightsForTile, SPECIAL } from './ramp-specials.js';
 
-const TOP_A = [0x3f, 0x6b, 0x4a];
-const TOP_B = [0x4a, 0x7a, 0x55];
+const TOP_A = [116, 156, 190];
+const TOP_B = [125, 166, 200];
+const rtpksPackageCache = new Map();
+const rtpksMeshCache = new Map();
+const rtpksTextureCache = new Map();
+const rtpksThumbnailCache = new Map();
+const DECORATION_LAYER_Y_EPSILON = 0.004;
 
-function tileColor(level, special, blocked, parity) {
+function tileColor(level, special, blocked, parity, visual = {}) {
   const base = parity ? TOP_A : TOP_B;
+  if (visual.rampRecolorEnabled !== false && special >= SPECIAL.RAMP_N && special <= SPECIAL.CONCAVE_NW) {
+    return new THREE.Color(visual.rampColor || '#f4d03f');
+  }
+  if (visual.floorRecolorEnabled !== false && level > 0) {
+    const color = visual.floorColors?.[level] || visual.floorColors?.[1];
+    if (color) return new THREE.Color(color);
+  }
   const shade = Math.min(70, Math.max(0, level) * 12);
   let r = Math.min(255, base[0] + shade);
   let g = Math.min(255, base[1] + shade);
@@ -26,39 +40,525 @@ function tileColor(level, special, blocked, parity) {
   return new THREE.Color(r / 255, g / 255, b / 255);
 }
 
-function buildTerrain(map, tileSize) {
+function tileFootprintLookup(packageInfo) {
+  const lookup = new Map();
+  for (const tile of (packageInfo?.tiles || [])) {
+    lookup.set(Number(tile.resortTileId), {
+      w: Math.max(1, Number(tile.width || tile.footprint?.w || 1)),
+      h: Math.max(1, Number(tile.height || tile.footprint?.h || tile.footprint?.d || 1)),
+    });
+  }
+  return lookup;
+}
+
+function buildTerrain(map, tileSize, packageInfo = null) {
   const w = map.grid.width;
   const h = map.grid.height;
   const heights = map.terrain?.height || [];
   const specials = map.terrain?.special || [];
   const collision = map.terrain?.collision || [];
-  const baseThk = tileSize * 0.6;
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0.0, vertexColors: false });
-  const mesh = new THREE.InstancedMesh(geo, mat, w * h);
-  const m = new THREE.Matrix4();
-  const q = new THREE.Quaternion();
-  const pos = new THREE.Vector3();
-  const scl = new THREE.Vector3();
-  let i = 0;
+  const visual = map.terrainVisual || {};
+  const floorHeight = Number(visual.floorHeightScale) || tileSize;
+  const tileLayers = visibleTileLayers(map);
+  const footprints = tileFootprintLookup(packageInfo);
+  const positions = [];
+  const colors = [];
+  const sideShade = 0.72;
+
+  const pushVertex = (x, y, z, color, shade = 1) => {
+    positions.push(x, y, z);
+    colors.push(color.r * shade, color.g * shade, color.b * shade);
+  };
+
+  const pushQuad = (pts, color, shade = 1) => {
+    pushVertex(...pts[0], color, shade);
+    pushVertex(...pts[1], color, shade);
+    pushVertex(...pts[2], color, shade);
+    pushVertex(...pts[0], color, shade);
+    pushVertex(...pts[2], color, shade);
+    pushVertex(...pts[3], color, shade);
+  };
+
+  const cornersAt = (x, z) => {
+    if (x < 0 || z < 0 || x >= w || z >= h) return [0, 0, 0, 0];
+    return cornerHeightsForTile(specials?.[z]?.[x] ?? 0, heights, w, h, x, z, floorHeight);
+  };
+
+  const hasVisibleTile = (x, z) => {
+    if (!tileLayers?.length) return false;
+    return tileLayers.some(({ layer }) => {
+      for (let ay = 0; ay <= z; ay += 1) {
+        for (let ax = 0; ax <= x; ax += 1) {
+          const id = layer.cells?.[ay]?.[ax];
+          if (id == null || id === '') continue;
+          const fp = footprints.get(Number(id)) || { w: 1, h: 1 };
+          if (x >= ax && x < ax + fp.w && z >= ay && z < ay + fp.h) return true;
+        }
+      }
+      return false;
+    });
+  };
+
+  const edgeAbove = (a0, a1, b0, b1) => Math.max(a0 - b0, a1 - b1) > 0.001;
+
   for (let z = 0; z < h; z += 1) {
     for (let x = 0; x < w; x += 1) {
       const level = Math.max(0, heights?.[z]?.[x] ?? 0);
-      const top = level * tileSize;
-      const bottom = -baseThk;
-      const boxH = top - bottom;
-      pos.set((x + 0.5) * tileSize, (top + bottom) / 2, (z + 0.5) * tileSize);
-      scl.set(tileSize * 0.98, boxH, tileSize * 0.98);
-      m.compose(pos, q, scl);
-      mesh.setMatrixAt(i, m);
-      mesh.setColorAt(i, tileColor(level, specials?.[z]?.[x] ?? 0, Boolean(collision?.[z]?.[x]), ((x + z) & 1) === 0));
-      i += 1;
+      const special = specials?.[z]?.[x] ?? 0;
+      const color = tileColor(level, special, Boolean(collision?.[z]?.[x]), ((x + z) & 1) === 0, visual);
+      const c = cornersAt(x, z); // NW, NE, SE, SW, matching the C++ terrain renderer.
+      const nw = [x * tileSize, c[0], z * tileSize];
+      const ne = [(x + 1) * tileSize, c[1], z * tileSize];
+      const se = [(x + 1) * tileSize, c[2], (z + 1) * tileSize];
+      const sw = [x * tileSize, c[3], (z + 1) * tileSize];
+
+      // RTPKS mesh tiles are the visible top surface for painted cells. Keeping the
+      // fallback terrain top under them causes z-fighting in the editor preview.
+      if (!hasVisibleTile(x, z)) pushQuad([sw, se, ne, nw], color, 1);
+
+      const n = cornersAt(x, z - 1);
+      if (edgeAbove(c[0], c[1], n[3], n[2])) {
+        pushQuad([nw, ne, [(x + 1) * tileSize, n[2], z * tileSize], [x * tileSize, n[3], z * tileSize]], color, sideShade);
+      }
+      const e = cornersAt(x + 1, z);
+      if (edgeAbove(c[1], c[2], e[0], e[3])) {
+        pushQuad([ne, se, [(x + 1) * tileSize, e[3], (z + 1) * tileSize], [(x + 1) * tileSize, e[0], z * tileSize]], color, sideShade);
+      }
+      const s = cornersAt(x, z + 1);
+      if (edgeAbove(c[2], c[3], s[1], s[0])) {
+        pushQuad([se, sw, [x * tileSize, s[0], (z + 1) * tileSize], [(x + 1) * tileSize, s[1], (z + 1) * tileSize]], color, sideShade);
+      }
+      const west = cornersAt(x - 1, z);
+      if (edgeAbove(c[3], c[0], west[2], west[1])) {
+        pushQuad([sw, nw, [x * tileSize, west[1], z * tileSize], [x * tileSize, west[2], (z + 1) * tileSize]], color, sideShade);
+      }
     }
   }
-  mesh.instanceMatrix.needsUpdate = true;
-  if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  const mat = new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0.0, vertexColors: true, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geometry, mat);
   mesh.receiveShadow = false;
   return mesh;
+}
+
+function visibleTileLayers(map) {
+  const layers = map?.tileLayers?.layers;
+  if (!Array.isArray(layers) || !layers.length) return null;
+  return layers
+    .map((layer, index) => ({ layer, index }))
+    .filter((item) => item.layer?.visible !== false);
+}
+
+async function fetchJson(path) {
+  const res = await fetch(path);
+  const payload = await res.json().catch(() => null);
+  if (!res.ok || !payload) throw new Error(payload?.error || `Request failed (${res.status})`);
+  return payload;
+}
+
+async function loadRtpksPackage(fileName) {
+  if (!fileName) return null;
+  if (!rtpksPackageCache.has(fileName)) {
+    rtpksPackageCache.set(fileName, fetchJson(`/api/tile-packages/package?file=${encodeURIComponent(fileName)}`)
+      .then((payload) => payload.package));
+  }
+  return rtpksPackageCache.get(fileName);
+}
+
+async function loadRtpksMesh(fileName, resortTileId) {
+  const key = `${fileName}|${resortTileId}`;
+  if (!rtpksMeshCache.has(key)) {
+    rtpksMeshCache.set(key, fetchJson(`/api/tile-packages/mesh?file=${encodeURIComponent(fileName)}&tileId=${encodeURIComponent(resortTileId)}`));
+  }
+  return rtpksMeshCache.get(key);
+}
+
+function loadRtpksTexture(fileName, textureName) {
+  if (!fileName || !textureName) return null;
+  const key = `${fileName}|${textureName}`;
+  if (!rtpksTextureCache.has(key)) {
+    const loader = new THREE.TextureLoader();
+    const url = `/api/tile-packages/texture?file=${encodeURIComponent(fileName)}&texture=${encodeURIComponent(textureName)}`;
+    rtpksTextureCache.set(key, loader.load(url, (texture) => {
+      tuneGltfTexture(texture);
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.RepeatWrapping;
+      texture.magFilter = THREE.NearestFilter;
+      texture.minFilter = THREE.NearestFilter;
+      texture.generateMipmaps = false;
+      texture.needsUpdate = true;
+    }));
+  }
+  return rtpksTextureCache.get(key);
+}
+
+function materialForRtpks(fileName, packageInfo, materialId) {
+  const meta = (packageInfo.materials || []).find((mat) => Number(mat.materialId) === Number(materialId));
+  const texture = meta?.textureName ? loadRtpksTexture(fileName, meta.textureName) : null;
+  const shadowLike = /shadow|kage|shade/i.test(`${meta?.name || ''} ${meta?.textureName || ''}`);
+  return new THREE.MeshStandardMaterial({
+    map: texture || null,
+    color: texture ? 0xffffff : 0xd9f99d,
+    roughness: 0.95,
+    metalness: 0,
+    vertexColors: true,
+    side: THREE.DoubleSide,
+    alphaTest: shadowLike ? 0.02 : 0.5,
+    transparent: shadowLike,
+    opacity: shadowLike ? 0.45 : 1,
+    depthWrite: !shadowLike,
+    polygonOffset: shadowLike,
+    polygonOffsetFactor: shadowLike ? -1 : 0,
+    polygonOffsetUnits: shadowLike ? -1 : 0,
+  });
+}
+
+function appendVertex(out, mesh, source, uvSource, colorSource, vertexIndex, tileSize) {
+  const vi = vertexIndex * 3;
+  const ui = vertexIndex * 2;
+  out.positions.push(
+    (source[vi] || 0) * tileSize,
+    (source[vi + 2] || 0) * tileSize,
+    ((mesh.height || 1) - (source[vi + 1] || 0)) * tileSize,
+  );
+  out.uvs.push(uvSource?.[ui] ?? 0, uvSource?.[ui + 1] ?? 0);
+  out.colors.push(
+    colorSource?.[vi] ?? 1,
+    colorSource?.[vi + 1] ?? 1,
+    colorSource?.[vi + 2] ?? 1,
+  );
+}
+
+export async function renderRtpksTileThumbnail(fileName, packageInfo, resortTileId, options = {}) {
+  const size = Math.max(48, Number(options.size || 88));
+  const key = `${fileName}|${resortTileId}|${size}`;
+  if (rtpksThumbnailCache.has(key)) return rtpksThumbnailCache.get(key);
+  const promise = (async () => {
+    const tile = (packageInfo?.tiles || []).find((entry) => Number(entry.resortTileId) === Number(resortTileId));
+    const tileSize = 32;
+    const root = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize);
+    const scene = new THREE.Scene();
+    scene.background = null;
+    scene.add(root);
+    scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+    sun.position.set(2, 5, 3);
+    scene.add(sun);
+    const w = Math.max(1, Number(tile?.width || 1)) * tileSize;
+    const h = Math.max(1, Number(tile?.height || 1)) * tileSize;
+    const center = new THREE.Vector3(w * 0.5, 0, h * 0.5);
+    const extent = Math.max(w, h, tileSize);
+    const camera = new THREE.OrthographicCamera(-extent * 0.58, extent * 0.58, extent * 0.58, -extent * 0.58, 0.1, extent * 8);
+    camera.position.set(center.x, extent * 3, center.z);
+    camera.up.set(0, 0, -1);
+    camera.lookAt(center.x, 0, center.z);
+    const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true });
+    renderer.setSize(size, size, false);
+    renderer.setPixelRatio(1);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.render(scene, camera);
+    const url = renderer.domElement.toDataURL('image/png');
+    renderer.dispose();
+    root.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+    });
+    return url;
+  })();
+  rtpksThumbnailCache.set(key, promise);
+  return promise;
+}
+
+function lightingPresetConfig(visual = {}) {
+  const preset = visual.lightPreset || 'day';
+  const presets = {
+    day: { hemi: 0.95, key: 1.25, fill: 0.35, bg: 0x0b2a3a, color: 0xffffff, ground: 0x3a4a3a, yaw: 38, pitch: 58 },
+    sunset: { hemi: 0.68, key: 1.05, fill: 0.22, bg: 0x16263f, color: 0xffc07a, ground: 0x4a3448, yaw: -42, pitch: 26 },
+    night: { hemi: 0.38, key: 0.42, fill: 0.12, bg: 0x071426, color: 0x9fc6ff, ground: 0x111827, yaw: 25, pitch: 48 },
+  };
+  return presets[preset] || presets.day;
+}
+
+function appendTri(out, mesh, triIndex, tileSize) {
+  const base = triIndex * 3;
+  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base, tileSize);
+  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 1, tileSize);
+  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 2, tileSize);
+}
+
+function appendQuad(out, mesh, quadIndex, tileSize) {
+  const base = quadIndex * 4;
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base, tileSize);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 1, tileSize);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 2, tileSize);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base, tileSize);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 2, tileSize);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 3, tileSize);
+}
+
+function buildRangeGeometry(mesh, range, tileSize) {
+  const out = { positions: [], uvs: [], colors: [] };
+  for (let i = 0; i < (range.triCount || 0); i += 1) appendTri(out, mesh, (range.triStart || 0) + i, tileSize);
+  for (let i = 0; i < (range.quadCount || 0); i += 1) appendQuad(out, mesh, (range.quadStart || 0) + i, tileSize);
+  if (!out.positions.length) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(out.positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(out.uvs, 2));
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(out.colors, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+async function buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize) {
+  const meshPayload = await loadRtpksMesh(fileName, resortTileId);
+  const group = new THREE.Group();
+  group.name = `rtpks_tile_${resortTileId}`;
+  const ranges = Array.isArray(meshPayload.materialRanges) && meshPayload.materialRanges.length
+    ? meshPayload.materialRanges
+    : [{ materialId: meshPayload.textureIds?.[0] ?? 0, triStart: 0, triCount: (meshPayload.triangles || []).length / 9, quadStart: 0, quadCount: (meshPayload.quads || []).length / 12 }];
+  for (const range of ranges) {
+    const geometry = buildRangeGeometry(meshPayload, range, tileSize);
+    if (!geometry) continue;
+    const mat = materialForRtpks(fileName, packageInfo, range.materialId);
+    const part = new THREE.Mesh(geometry, mat);
+    part.castShadow = false;
+    part.receiveShadow = false;
+    group.add(part);
+  }
+  return group;
+}
+
+export async function mountRtpksTilePreview(host, fileName, packageInfo, resortTileId, options = {}) {
+  if (!host || !fileName || resortTileId == null) return { dispose() {} };
+  let disposed = false;
+  let raf = 0;
+  let resizeObserver = null;
+
+  const tileSize = Math.max(8, Number(options.tileSize || 32));
+  const viewW = Math.max(180, Math.round(host.clientWidth || 260));
+  const viewH = Math.max(140, Math.round(host.clientHeight || 180));
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x18212a);
+
+  const root = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize);
+  if (disposed || (typeof options.isCurrent === 'function' && !options.isCurrent())) {
+    root.traverse((obj) => obj.geometry?.dispose?.());
+    return { dispose() {} };
+  }
+  scene.add(root);
+
+  const box = new THREE.Box3().setFromObject(root);
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, tileSize);
+  const pivot = new THREE.Group();
+  pivot.add(root);
+  root.position.sub(center);
+  scene.add(pivot);
+
+  const ambient = new THREE.AmbientLight(0xffffff, 1.25);
+  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(maxDim * 0.75, maxDim * 1.6, maxDim * 1.1);
+  const fill = new THREE.DirectionalLight(0x9fc6ff, 0.35);
+  fill.position.set(-maxDim, maxDim * 0.6, -maxDim * 0.8);
+  scene.add(ambient, key, fill);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+  renderer.setPixelRatio(dpr);
+  renderer.setSize(viewW, viewH, false);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.NoToneMapping;
+  renderer.domElement.className = 'map-selected-preview-canvas';
+  host.replaceChildren(renderer.domElement);
+
+  const aspect = viewW / Math.max(1, viewH);
+  const halfH = Math.max(tileSize * 0.65, maxDim * 0.68);
+  const camera = new THREE.OrthographicCamera(-halfH * aspect, halfH * aspect, halfH, -halfH, 0.1, maxDim * 16);
+  camera.position.set(maxDim * 1.35, maxDim * 1.05, maxDim * 1.45);
+  camera.lookAt(0, 0, 0);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.enablePan = false;
+  controls.minZoom = 0.35;
+  controls.maxZoom = 6;
+  controls.target.set(0, 0, 0);
+  controls.update();
+
+  const renderFrame = () => {
+    if (disposed) return;
+    controls.update();
+    renderer.render(scene, camera);
+  };
+
+  const tick = () => {
+    if (disposed) return;
+    renderFrame();
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+
+  const onResize = () => {
+    if (disposed) return;
+    const w = Math.max(180, Math.round(host.clientWidth || viewW));
+    const h = Math.max(140, Math.round(host.clientHeight || viewH));
+    const nextAspect = w / Math.max(1, h);
+    camera.left = -halfH * nextAspect;
+    camera.right = halfH * nextAspect;
+    camera.top = halfH;
+    camera.bottom = -halfH;
+    camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(w, h, false);
+    renderFrame();
+  };
+
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(onResize);
+    resizeObserver.observe(host);
+  } else {
+    window.addEventListener('resize', onResize);
+  }
+
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    cancelAnimationFrame(raf);
+    controls.dispose();
+    if (resizeObserver) resizeObserver.disconnect();
+    else window.removeEventListener('resize', onResize);
+    renderer.dispose();
+    root.traverse((obj) => obj.geometry?.dispose?.());
+    if (host.isConnected) host.replaceChildren();
+  };
+
+  return { dispose, refresh: renderFrame };
+}
+
+function collectMaterialTextures(root) {
+  const textures = new Set();
+  root.traverse((obj) => {
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of mats) {
+      if (mat?.map) textures.add(mat.map);
+    }
+  });
+  return [...textures];
+}
+
+function waitForTexture(texture, timeoutMs = 8000) {
+  if (!texture) return Promise.resolve();
+  if (texture.image?.complete && texture.image.naturalWidth > 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    const timer = setTimeout(done, timeoutMs);
+    const onUpdate = () => {
+      if (texture.image?.complete && texture.image.naturalWidth > 0) {
+        clearTimeout(timer);
+        texture.removeEventListener?.('update', onUpdate);
+        done();
+      }
+    };
+    texture.addEventListener?.('update', onUpdate);
+    onUpdate();
+  });
+}
+
+async function waitForObjectTextures(root) {
+  await Promise.all(collectMaterialTextures(root).map((tex) => waitForTexture(tex)));
+}
+
+function disposeExportObject3D(root) {
+  root.traverse((obj) => {
+    obj.geometry?.dispose?.();
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of mats) {
+      if (mat) mat.map = null;
+      mat?.dispose?.();
+    }
+  });
+}
+
+/**
+ * Build and download a GLB for one RTPKS tile (same geometry/materials as the sidebar preview).
+ * @returns {Promise<string>} suggested download filename
+ */
+export async function downloadRtpksTileGlb(fileName, packageInfo, resortTileId, options = {}) {
+  if (!fileName || resortTileId == null) throw new Error('Tile package and id are required.');
+  const tileSize = Math.max(8, Number(options.tileSize || 32));
+  const root = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize);
+  try {
+    await waitForObjectTextures(root);
+    const exporter = new GLTFExporter();
+    const buffer = await new Promise((resolve, reject) => {
+      exporter.parse(
+        root,
+        (result) => {
+          if (result instanceof ArrayBuffer) resolve(result);
+          else reject(new Error('GLB export produced JSON instead of binary.'));
+        },
+        (err) => reject(err || new Error('GLB export failed.')),
+        { binary: true },
+      );
+    });
+    const packBase = String(fileName).replace(/\.rtpks$/i, '').replace(/^.*[/\\]/, '') || 'tilepack';
+    const downloadName = `${packBase}_tile_${Number(resortTileId)}.glb`;
+    const blob = new Blob([buffer], { type: 'model/gltf-binary' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = downloadName;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    return downloadName;
+  } finally {
+    disposeExportObject3D(root);
+  }
+}
+
+async function addRtpksTiles(scene, map, tileSize, packageInfo, fileName, disposedRef) {
+  const layers = visibleTileLayers(map);
+  if (!layers?.length) return;
+  const group = new THREE.Group();
+  group.name = 'rtpks_tile_layer';
+  scene.add(group);
+  const templates = new Map();
+  const heights = map.terrain?.height || [];
+  const floorHeight = Number(map.terrainVisual?.floorHeightScale) || tileSize;
+  for (const { layer, index } of layers) {
+    if (!layer?.cells?.length) continue;
+    for (let z = 0; z < map.grid.height; z += 1) {
+      for (let x = 0; x < map.grid.width; x += 1) {
+        const id = layer.cells?.[z]?.[x];
+        if (id == null || id === '') continue;
+        const resortTileId = Number(id);
+        if (!Number.isFinite(resortTileId)) continue;
+        if (!templates.has(resortTileId)) {
+          templates.set(resortTileId, buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize));
+        }
+        const template = await templates.get(resortTileId);
+        if (disposedRef.disposed) return;
+        const instance = template.clone(true);
+        instance.position.set(
+          x * tileSize,
+          Math.max(0, heights?.[z]?.[x] ?? 0) * floorHeight + index * DECORATION_LAYER_Y_EPSILON,
+          z * tileSize,
+        );
+        group.add(instance);
+      }
+    }
+  }
 }
 
 /**
@@ -73,6 +573,7 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
   if (!host || !map) return { dispose() {} };
   host.innerHTML = '';
   let disposed = false;
+  const disposedRef = { disposed: false };
   let raf = 0;
 
   const tileSize = map.grid?.tileSize || 16;
@@ -94,7 +595,8 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
   host.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b2a3a);
+  const lightCfg = lightingPresetConfig(map.terrainVisual || {});
+  scene.background = new THREE.Color(lightCfg.bg);
 
   const camera = new THREE.PerspectiveCamera(45, viewW / viewH, 0.1, span * 12);
   camera.position.set(cx + span * 0.7, span * 0.85, cz + span * 0.9);
@@ -108,15 +610,31 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
   controls.maxDistance = span * 6;
   controls.update();
 
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x3a4a3a, 0.85));
-  const key = new THREE.DirectionalLight(0xffffff, 1.1);
-  key.position.set(span, span * 1.4, span * 0.6);
+  scene.add(new THREE.HemisphereLight(0xffffff, lightCfg.ground, lightCfg.hemi));
+  const key = new THREE.DirectionalLight(lightCfg.color, lightCfg.key);
+  const customYaw = Number(map.terrainVisual?.lightYawDeg);
+  const customPitch = Number(map.terrainVisual?.lightPitchDeg);
+  const yaw = (Number.isFinite(customYaw) ? customYaw : lightCfg.yaw) * Math.PI / 180;
+  const pitch = (Number.isFinite(customPitch) ? customPitch : lightCfg.pitch) * Math.PI / 180;
+  const lightDist = span * 1.6;
+  key.position.set(
+    Math.sin(yaw) * Math.cos(pitch) * lightDist,
+    Math.sin(pitch) * lightDist,
+    Math.cos(yaw) * Math.cos(pitch) * lightDist,
+  );
   scene.add(key);
-  const fill = new THREE.DirectionalLight(0xfff0e0, 0.4);
+  const fill = new THREE.DirectionalLight(0xfff0e0, lightCfg.fill);
   fill.position.set(-span * 0.6, span * 0.8, -span);
   scene.add(fill);
 
-  scene.add(buildTerrain(map, tileSize));
+  scene.add(buildTerrain(map, tileSize, opts.tilePackage || null));
+
+  const tilePackageFile = map.tilePackage?.file || opts.tilePackage?.fileName;
+  if (tilePackageFile) {
+    loadRtpksPackage(tilePackageFile)
+      .then((packageInfo) => addRtpksTiles(scene, map, tileSize, packageInfo, tilePackageFile, disposedRef))
+      .catch(() => { /* RTPKS preview is optional; bad packages should not kill the 3D view */ });
+  }
 
   const modelUrl = opts.modelUrl || ((id) => `/api/overworld-models/glb?id=${encodeURIComponent(id)}`);
   const props = new THREE.Group();
@@ -130,7 +648,7 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
         const g = new THREE.Group();
         g.add(obj);
         g.position.set(mdl.position?.[0] ?? 0, mdl.position?.[1] ?? 0, mdl.position?.[2] ?? 0);
-        g.rotation.y = -((mdl.yawDeg || 0) * Math.PI) / 180;
+        g.rotation.y = ((mdl.yawDeg || 0) * Math.PI) / 180;
         const s = mdl.scale || 1;
         g.scale.set(s, s, s);
         props.add(g);
@@ -141,6 +659,7 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    disposedRef.disposed = true;
     cancelAnimationFrame(raf);
     ro.disconnect();
     controls.dispose();

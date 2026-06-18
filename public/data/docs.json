@@ -63,7 +63,7 @@
       "apps": ["pokemon-resort-page"],
       "summary": "Tabbed authoring guide: structure, blocks, screenshots, templates, and freshness checks.",
       "publishedAt": "2026-05-27",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-09",
       "heroImage": {
         "path": "media/docs/docs-hub.webp",
         "caption": "Docs hub in the local development site."
@@ -95,9 +95,9 @@
       "category": "formats",
       "tags": ["charbin", "SPMK", "sprites", "characters"],
       "apps": ["pokemon-resort", "spmk"],
-      "summary": "Portable character packages: binary layout, JSON schema, sprite profiles, SPMK authoring, and extension guide.",
+      "summary": "Portable character packages: binary layout, JSON schema, sprite profiles, activity actions, SPMK authoring, and extension guide.",
       "publishedAt": "2026-05-27",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-12",
       "heroImage": {
         "path": "media/docs/spmk/charbin-detail.webp",
         "caption": "SPMK package editor. Metadata, embedded sheets, and direction previews.",
@@ -113,12 +113,12 @@
       "category": "formats",
       "tags": ["owmap", "overworld", "map editor", "terrain"],
       "apps": ["pokemon-resort", "pokemon-resort-page"],
-      "summary": "Binary overworld map v1 (OWM1): height grids, ramp specials, collision bits, JSON metadata, Map Editor authoring, and C++ loader.",
+      "summary": "Binary overworld map v1 (OWM1): terrain grids plus JSON metadata for RTPKS tile layers, props, spawn, and camera. Map Editor authoring and bgfx runtime loader.",
       "publishedAt": "2026-05-27",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-11",
       "heroImage": {
-        "path": "media/docs/map-editor/map-editor-3d-preview.webp",
-        "caption": "Map Editor 3D terrain preview. Height and ramp geometry before bake.",
+        "path": "media/docs/map-editor/map-editor-3d-full.png",
+        "caption": "Map Editor 3D view with RTPKS tiles, terrain, and placed props.",
         "fit": "contain"
       },
       "featured": true,
@@ -131,12 +131,30 @@
       "category": "formats",
       "tags": ["rtpks", "PDSMS", "tileset", "tiles", "Gen 4"],
       "apps": ["pokemon-ds-map-studio", "pokemon-resort", "pokemon-resort-page"],
-      "summary": "Resort Tile Pack Source: ZIP tileset + stable Resort tile IDs from Pokémon DS Map Studio, for handoff to the Map Editor pipeline.",
+      "summary": "RTPKS v2: PDSMS tileset plus runtime mesh pack (.rpak) and editor sidecar (.rtpks.meta) for Map Editor and C++ bgfx rendering.",
       "publishedAt": "2026-06-01",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-11",
       "heroImage": {
-        "path": "media/docs/pdsms/rtpks-resort-menu.webp",
-        "caption": "PDSMS. Pokémon Resort menu with Open / Save / Append RTPKS actions.",
+        "path": "media/docs/pdsms/pdsms-tile-selector.png",
+        "caption": "PDSMS tile selector with RTPKS-backed stable resort tile ids.",
+        "fit": "contain"
+      },
+      "featured": true,
+      "author": "Resort Operations"
+    },
+    {
+      "id": "game-engine-tools",
+      "slug": "game-engine-tools",
+      "title": "Game Engine tools",
+      "category": "apps",
+      "tags": ["game-engine", "admin", "operations-desk", "map-editor", "charbin"],
+      "apps": ["pokemon-resort-page", "pokemon-resort"],
+      "summary": "Operations Desk Game Engine tab: hub of editors for real game files (.owmap, .charbin). Open tools, workbench flow, catalog, and roadmap.",
+      "publishedAt": "2026-06-17",
+      "updatedAt": "2026-06-17",
+      "heroImage": {
+        "path": "media/docs/game-engine/hub.png",
+        "caption": "Game Engine hub in the Resort Operations Desk.",
         "fit": "contain"
       },
       "featured": true,
@@ -151,10 +169,10 @@
       "apps": ["island-dreamforge", "pokemon-resort"],
       "summary": "Fantasy color map → height field → procedural materials → 3D editor → web and game ZIP exports.",
       "publishedAt": "2026-06-01",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-09",
       "heroImage": {
         "path": "media/docs/island-dreamforge-3d-export.webp",
-        "caption": "Step 5 · 3D / Export. Orbit viewport and export profiles."
+        "caption": "Step 4 · 3D / Export. Orbit viewport and export profiles."
       },
       "featured": true,
       "author": "Resort Operations"
@@ -168,7 +186,7 @@
       "apps": ["pokemon-resort"],
       "summary": "Single companion follower: summon, pathfinding follow, and nature-weighted idle behaviours with full behaviour catalog.",
       "publishedAt": "2026-06-01",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-03",
       "heroImage": {
         "path": "media/docs/pokemon-resort/follower-overworld.webp",
         "caption": "Overworld 3D test with follower (overworld3d_test.webp)."
@@ -185,7 +203,7 @@
       "apps": ["pokemon-resort", "pokemon-resort-page"],
       "summary": "OBJ to GLB conversion, three.js preview, map editor placement, and C++ GlbModelLoader rendering. Covers alpha, footprint overlays, and common roof or banner pitfalls.",
       "publishedAt": "2026-06-01",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-09",
       "heroImage": {
         "path": "assets/docs/article-placeholder.svg",
         "caption": "Pokémon Center prop: OBJ rip → GLB → preview, placement, and in-game render."
@@ -202,7 +220,7 @@
       "apps": ["pokemon-resort", "pokemon-resort-page"],
       "summary": "What compatible means: Game A to Resort to Game B, play, return to Resort, then back to Game A with identity preserved. Includes the public route matrix.",
       "publishedAt": "2026-06-01",
-      "updatedAt": "2026-06-01",
+      "updatedAt": "2026-06-05",
       "heroImage": {
         "path": "media/docs/pokemon-resort/compatibility-ontology-graph.webp",
         "caption": "Compatibility ontology graph on #/ontology.",

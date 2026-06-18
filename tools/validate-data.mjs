@@ -160,6 +160,8 @@ try {
 
   assert(atlasPins.map?.layers?.terrain, 'atlas-pins.json requires map.layers.terrain');
 
+  const ideaSlugs = unique((ideas.items || []).map((item) => ({ ...item, id: item.slug || item.id })), 'idea');
+
   for (const pin of atlasPins.pins || []) {
     assert(typeof pin.x === 'number' && pin.x >= 0 && pin.x <= 1, `Atlas pin ${pin.id} x must be 0–1`);
     assert(typeof pin.y === 'number' && pin.y >= 0 && pin.y <= 1, `Atlas pin ${pin.id} y must be 0–1`);
@@ -167,6 +169,7 @@ try {
     assert(pin.summary, `Atlas pin ${pin.id} needs summary`);
     for (const id of pin.linkedFeatures || []) assert(featureIds.has(id), `Atlas pin ${pin.id} links to unknown feature ${id}`);
     for (const id of pin.linkedResearch || []) assert(researchIds.has(id), `Atlas pin ${pin.id} links to unknown research ${id}`);
+    for (const id of pin.linkedIdeas || []) assert(ideaSlugs.has(id), `Atlas pin ${pin.id} links to unknown idea ${id}`);
     assertDossierBlocks(`Atlas pin ${pin.id}`, pin.dossier);
   }
 
@@ -205,7 +208,6 @@ try {
   assert(Array.isArray(roadmapItems), 'roadmap.json requires milestones or horizons');
   const milestoneIds = unique(roadmapItems.map((item, index) => ({ ...item, id: item.id || `roadmap-${index}` })), 'roadmap milestone');
   if (roadmap.currentMilestoneId) assert(milestoneIds.has(roadmap.currentMilestoneId), `currentMilestoneId points to unknown milestone ${roadmap.currentMilestoneId}`);
-  const ideaSlugs = unique((ideas.items || []).map((item) => ({ ...item, id: item.slug || item.id })), 'idea');
   for (const idea of ideas.items || []) {
     assert(idea.slug || idea.id, `Idea ${idea.id || '(missing id)'} needs slug`);
     assert(idea.title, `Idea ${idea.id} needs title`);

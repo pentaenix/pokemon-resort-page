@@ -5,7 +5,7 @@ const INLINE_MARKDOWN_RE = /(\*\*(?:[^*]|\*(?!\*))+\*\*|`[^`\n]+`)/g;
 
 /**
  * Turn lightweight markdown in text blocks into React nodes.
- * Supports **bold** and `inline code` only — keeps HTML blocks separate.
+ * Supports **bold** and `inline code` only: keeps HTML blocks separate.
  */
 export function renderInlineMarkdown(text) {
   if (text == null || text === '') return null;

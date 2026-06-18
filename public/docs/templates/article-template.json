@@ -5,11 +5,11 @@
       {
         "id": "summary",
         "title": "Summary",
-        "summary": "One paragraph lede for this section — what the reader will learn.",
+        "summary": "One paragraph lede for this section: what the reader will learn.",
         "blocks": [
           {
             "type": "text",
-            "body": "REPLACE_SUMMARY — plain-language explanation of the topic, audience, and where it lives in the repo."
+            "body": "REPLACE_SUMMARY: plain-language explanation of the topic, audience, and where it lives in the repo."
           }
         ]
       },
@@ -25,7 +25,7 @@
           {
             "type": "diagram",
             "title": "High-level flow",
-            "caption": "Optional — delete if not needed",
+            "caption": "Optional: delete if not needed",
             "source": "flowchart LR\n    A[Input] --> B[Process]\n    B --> C[Output]"
           }
         ]
@@ -45,7 +45,7 @@
             "path": "REPLACE/path/from/app/root.ext",
             "lines": "1-20",
             "language": "cpp",
-            "caption": "Primary runtime entry — REPLACE description",
+            "caption": "Primary runtime entry: REPLACE description",
             "body": "// REPLACE with excerpt from the linked file\nnamespace example {\n  void run();\n}"
           },
           {
@@ -67,7 +67,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "REPLACE — how data is authored, edited, or serialized."
+                    "body": "REPLACE: how data is authored, edited, or serialized."
                   },
                   {
                     "type": "code",
@@ -86,7 +86,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "REPLACE — how the game or tools load and validate the format."
+                    "body": "REPLACE: how the game or tools load and validate the format."
                   },
                   {
                     "type": "code",
@@ -117,7 +117,7 @@
       {
         "id": "media",
         "title": "Screenshots & diagrams",
-        "summary": "Optional — capture real UI with npm run docs:screenshots.",
+        "summary": "Optional: capture real UI with npm run docs:screenshots.",
         "blocks": [
           {
             "type": "figure",
@@ -135,7 +135,7 @@
         "blocks": [
           {
             "type": "text",
-            "body": "Apps in this workspace:\n\n• pokemon-resort/ — C++ game runtime\n• pokemon-resort-page/ — public site + Operations Desk\n• spmk/ — character/sprite tooling\n• island-dreamforge/ — separate frontend/backend experiment"
+            "body": "Apps in this workspace:\n\n• pokemon-resort/: C++ game runtime\n• pokemon-resort-page/: public site + Operations Desk\n• spmk/: character/sprite tooling\n• island-dreamforge/: separate frontend/backend experiment"
           },
           {
             "type": "links",

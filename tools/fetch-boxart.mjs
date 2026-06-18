@@ -44,7 +44,7 @@ export function getLibretroStatus() {
     configured: true,
     source: 'Libretro Thumbnails',
     baseUrl: LIBRETRO_BASE,
-    authHint: 'No API keys — downloads from the public Libretro thumbnail CDN.',
+    authHint: 'No API keys: downloads from the public Libretro thumbnail CDN.',
     mediaType: 'Named_Boxarts',
     mediaNote: 'No-Intro style ROM names. Prefers USA / USA+Europe box art when available.',
   };

@@ -25,7 +25,94 @@
   gap: 16px;
   align-items: start;
 }
-.atlas-map-editor-footer { min-width: 0; }
+.atlas-map-editor-footer { min-width: 0; display: grid; gap: 16px; }
+
+.atlas-island-model-panel { padding: 16px; }
+.atlas-island-model-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.atlas-island-model-head h3 { margin: 0 0 4px; font-size: 15px; }
+.atlas-island-model-head .hint { margin: 0; max-width: 52ch; }
+.atlas-island-model-controls-block {
+  display: grid;
+  gap: 12px;
+  max-width: 520px;
+}
+.atlas-island-model-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.atlas-island-model-replace {
+  cursor: pointer;
+  margin: 0;
+}
+.atlas-island-model-replace input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.atlas-island-model-file { font-weight: 800; color: #0d4f66; }
+.atlas-island-model-size {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #0d4f66;
+}
+.atlas-island-model-size input[type="range"] { width: 100%; max-width: 320px; }
+.atlas-island-model-size output {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0e7592;
+}
+.atlas-island-model-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 1.2em;
+}
+.atlas-island-model-status--ok { color: #1a7a52; }
+.atlas-island-model-status--error { color: #a32a2a; }
+.atlas-island-model-status--busy { color: #0e7592; }
+.atlas-island-model-preview-wrap {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.atlas-island-model-preview-label {
+  margin: 0;
+  text-align: center;
+  font-weight: 800;
+  color: rgba(14, 70, 88, 0.72);
+  letter-spacing: 0.02em;
+}
+.atlas-island-model-preview-wrap .atlas-card--3d {
+  width: 100%;
+  max-width: min(920px, 100%);
+  margin-top: 0;
+}
+.island-stage-hint.soft-label {
+  display: block;
+  margin: 10px auto 0;
+  text-align: center;
+  color: rgba(14, 70, 88, 0.62);
+  font-weight: 850;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .atlas-map-sidebar {
   padding: 16px;
   max-height: calc(100vh - 180px);

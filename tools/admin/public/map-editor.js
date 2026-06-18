@@ -12,7 +12,7 @@ import {
   closeModelViewport,
   renderGlbThumbnail,
 } from './model-viewer.js';
-import { mountMap3DView } from './map-3d-view.js';
+import { downloadRtpksTileGlb, mountMap3DView, mountRtpksTilePreview } from './map-3d-view.js';
 
 const LAYER_META = {
   height: { label: 'Height', min: 0, max: 255, default: 0 },
@@ -21,23 +21,35 @@ const LAYER_META = {
 };
 
 const TILE_SIZE = 16;
+const MAP_HISTORY_LIMIT = 80;
+const DEFAULT_TILE_LAYERS = [
+  { id: 'ground', name: 'Ground' },
+  { id: 'path', name: 'Paths' },
+  { id: 'detail_a', name: 'Detail A' },
+  { id: 'detail_b', name: 'Detail B' },
+  { id: 'overlay', name: 'Overlay' },
+];
+const MAX_TILE_LAYERS = 7;
 
 const BRUSHES = [
   { id: 'height', label: 'Height', layer: 'height', color: '#74d4e5' },
+  { id: 'tile', label: 'Tile', layer: null, color: '#22c55e' },
+  { id: 'path', label: 'Path', layer: null, color: '#c084fc' },
   { id: 'ramp', label: 'Ramp', layer: 'special', color: '#fbbf24' },
   { id: 'collision', label: 'Blocked', layer: 'collision', color: '#ef6461' },
   { id: 'spawn', label: 'Spawn', layer: null, color: '#f59e0b' },
 ];
 
 const TOOLS = [
-  { id: 'paint', label: 'Paint', title: 'Paint with the active brush' },
-  { id: 'area', label: 'Area', title: 'Click and drag a rectangle' },
-  { id: 'line', label: 'Line', title: 'Click start point, drag to end' },
-  { id: 'clear', label: 'Clear', title: 'Reset height, ramps, and collision on cells (not spawn)' },
-  { id: 'fill', label: 'Fill', title: 'Flood fill matching cells' },
-  { id: 'raise', label: 'Raise', title: 'Raise height by 1' },
-  { id: 'lower', label: 'Lower', title: 'Lower height by 1' },
-  { id: 'eyedropper', label: 'Pick', title: 'Pick value from a cell' },
+  { id: 'paint', label: 'Paint', icon: 'brush', title: 'Paint on the active layer' },
+  { id: 'erase', label: 'Erase', icon: 'eraser', title: 'Erase only the active layer' },
+  { id: 'clear', label: 'Clear Cell', icon: 'clear-cell', title: 'Clear this cell across all map layers' },
+  { id: 'area', label: 'Area', icon: 'rect', title: 'Apply the active tool to a rectangle' },
+  { id: 'line', label: 'Line', icon: 'line', title: 'Apply the active tool along a line' },
+  { id: 'fill', label: 'Fill', icon: 'fill', title: 'Flood fill matching cells on the active layer' },
+  { id: 'raise', label: 'Raise', icon: 'arrow-up', title: 'Raise height by 1' },
+  { id: 'lower', label: 'Lower', icon: 'arrow-down', title: 'Lower height by 1' },
+  { id: 'eyedropper', label: 'Pick', icon: 'eyedropper', title: 'Pick from the active layer' },
 ];
 
 function brushLayer(brushId) {
@@ -61,6 +73,10 @@ function catalogEntry(editor, modelId) {
   return (editor.modelCatalog || []).find((c) => c.id === modelId);
 }
 
+function modelAuthoringFootprint(model) {
+  return model?.authoringFootprintTiles || model?.footprintTiles || { w: 1, d: 1, h: 1 };
+}
+
 function catalogFiltered(editor) {
   const q = (editor.modelSearch || '').trim().toLowerCase();
   const list = editor.modelCatalog || [];
@@ -69,6 +85,341 @@ function catalogFiltered(editor) {
     const name = (m.displayName || m.id).toLowerCase();
     return name.includes(q) || m.id.toLowerCase().includes(q);
   });
+}
+
+function tileCatalogFiltered(editor) {
+  const q = (editor.tileSearch || '').trim().toLowerCase();
+  const activeTabId = editor.tileTabId || editor.tilePackage?.tabs?.[0]?.id || '';
+  const list = (editor.tilePackage?.tiles || [])
+    .filter((tile) => !activeTabId || tile.tabId === activeTabId);
+  if (!q) return list;
+  return list.filter((tile) => {
+    const key = String(tile.key || '').toLowerCase();
+    return key.includes(q)
+      || String(tile.localIndex).includes(q);
+  });
+}
+
+function tileEntry(editor, resortTileId) {
+  const id = Number(resortTileId);
+  return (editor.tilePackage?.tiles || []).find((tile) => Number(tile.resortTileId) === id);
+}
+
+function tileFootprint(tile) {
+  return {
+    w: Math.max(1, Number(tile?.width || tile?.footprint?.w || 1)),
+    h: Math.max(1, Number(tile?.height || tile?.footprint?.h || tile?.footprint?.d || 1)),
+  };
+}
+
+function tileSizeLabel(fp) {
+  return fp.w > 1 || fp.h > 1 ? `${fp.w}x${fp.h}` : '';
+}
+
+function tileCardSpanStyle(fp) {
+  const cols = Math.max(1, Math.min(4, Number(fp?.w) || 1));
+  const rows = Math.max(1, Math.min(4, Number(fp?.h) || 1));
+  if (cols === 1 && rows === 1) return '';
+  return `grid-column:span ${cols};grid-row:span ${rows};`;
+}
+
+function tileTextureUrl(editor, tile) {
+  if (!editor.tilePackage?.fileName || !tile?.previewTexture) return '';
+  return `/api/tile-packages/texture?file=${encodeURIComponent(editor.tilePackage.fileName)}&texture=${encodeURIComponent(tile.previewTexture)}`;
+}
+
+function tilePreviewSource(editor, tileId) {
+  const tile = tileEntry(editor, tileId);
+  return tile?.previewImage || '';
+}
+
+function tileHashColor(id) {
+  const n = Number(id) || 0;
+  const hue = (n * 47) % 360;
+  return `hsl(${hue} 62% 66%)`;
+}
+
+function iconHtml(name) {
+  return `<span class="map-icon map-icon-${name}" aria-hidden="true"></span>`;
+}
+
+function cloneMapForHistory(map) {
+  return map ? JSON.parse(JSON.stringify(map)) : null;
+}
+
+function mapHistoryKey(map) {
+  return map ? JSON.stringify(map) : '';
+}
+
+function normalizeRestoredMap(map) {
+  if (!map) return null;
+  map.grid.tileSize = TILE_SIZE;
+  ensureTileLayers(map);
+  ensurePathLayer(map);
+  ensureTerrainVisual(map);
+  return map;
+}
+
+function clearMapHistory(editor) {
+  editor.undoStack = [];
+  editor.redoStack = [];
+  editor._pendingHistorySnapshot = null;
+  editor._pendingHistoryKey = '';
+}
+
+function beginMapHistory(editor) {
+  if (!editor?.map || editor._pendingHistorySnapshot) return;
+  editor._pendingHistorySnapshot = cloneMapForHistory(editor.map);
+  editor._pendingHistoryKey = mapHistoryKey(editor.map);
+}
+
+function commitMapHistory(editor) {
+  if (!editor?._pendingHistorySnapshot) return false;
+  const before = editor._pendingHistoryKey || '';
+  const after = mapHistoryKey(editor.map);
+  if (before !== after) {
+    if (!Array.isArray(editor.undoStack)) editor.undoStack = [];
+    editor.undoStack.push(editor._pendingHistorySnapshot);
+    if (editor.undoStack.length > MAP_HISTORY_LIMIT) editor.undoStack.shift();
+    editor.redoStack = [];
+  }
+  editor._pendingHistorySnapshot = null;
+  editor._pendingHistoryKey = '';
+  return before !== after;
+}
+
+function cancelMapHistory(editor) {
+  editor._pendingHistorySnapshot = null;
+  editor._pendingHistoryKey = '';
+}
+
+function undoMapEdit(editor) {
+  if (!editor?.map || !editor.undoStack?.length) return false;
+  if (!Array.isArray(editor.redoStack)) editor.redoStack = [];
+  editor.redoStack.push(cloneMapForHistory(editor.map));
+  editor.map = normalizeRestoredMap(editor.undoStack.pop());
+  editor.dirty = true;
+  cancelMapHistory(editor);
+  return true;
+}
+
+function redoMapEdit(editor) {
+  if (!editor?.map || !editor.redoStack?.length) return false;
+  if (!Array.isArray(editor.undoStack)) editor.undoStack = [];
+  editor.undoStack.push(cloneMapForHistory(editor.map));
+  if (editor.undoStack.length > MAP_HISTORY_LIMIT) editor.undoStack.shift();
+  editor.map = normalizeRestoredMap(editor.redoStack.pop());
+  editor.dirty = true;
+  cancelMapHistory(editor);
+  return true;
+}
+
+function createDefaultProject(files = []) {
+  return {
+    version: 1,
+    id: 'default',
+    name: 'Default Project',
+    maps: files.map((file, index) => ({
+      id: file.name.replace(/\.(owmap|map\.json)$/i, ''),
+      name: file.name.replace(/\.(owmap|map\.json)$/i, '').replace(/_/g, ' '),
+      file: file.name,
+      gridX: index,
+      gridY: 0,
+    })),
+    tilePackages: [],
+    defaultTilePackageId: '',
+    pathSets: [],
+    editor: { activeMapId: '', viewMode: '2d', zoom: 1, overlays: { values: true, neighbors: true } },
+    export: {},
+  };
+}
+
+function ensureTerrainVisual(map) {
+  if (!map) return null;
+  if (!map.terrainVisual || typeof map.terrainVisual !== 'object') map.terrainVisual = {};
+  map.terrainVisual = {
+    floorHeightScale: Number(map.terrainVisual.floorHeightScale) || TILE_SIZE,
+    floorRecolorEnabled: map.terrainVisual.floorRecolorEnabled !== false,
+    rampRecolorEnabled: map.terrainVisual.rampRecolorEnabled !== false,
+    floorColors: {
+      1: '#d84f5f',
+      ...(map.terrainVisual.floorColors || {}),
+    },
+    rampColor: map.terrainVisual.rampColor || '#f4d03f',
+    lightPreset: map.terrainVisual.lightPreset || 'day',
+    lightYawDeg: Number.isFinite(Number(map.terrainVisual.lightYawDeg)) ? Number(map.terrainVisual.lightYawDeg) : 38,
+    lightPitchDeg: Number.isFinite(Number(map.terrainVisual.lightPitchDeg)) ? Number(map.terrainVisual.lightPitchDeg) : 58,
+  };
+  return map.terrainVisual;
+}
+
+function ensurePathLayer(map) {
+  if (!map) return null;
+  const width = map.grid?.width || 16;
+  const height = map.grid?.height || 16;
+  if (!map.pathLayer || typeof map.pathLayer !== 'object') {
+    map.pathLayer = { version: 1, activeSetId: '', cells: createTileGrid(width, height, 0) };
+  }
+  const next = createTileGrid(width, height, 0);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) next[y][x] = map.pathLayer.cells?.[y]?.[x] ? 1 : 0;
+  }
+  map.pathLayer.cells = next;
+  map.pathLayer.version = 1;
+  if (typeof map.pathLayer.activeSetId !== 'string') map.pathLayer.activeSetId = '';
+  return map.pathLayer;
+}
+
+function pathCellValue(map, x, y) {
+  const layer = ensurePathLayer(map);
+  return layer?.cells?.[y]?.[x] ? 1 : 0;
+}
+
+function setPathCell(map, x, y, value) {
+  if (!inBounds(map, x, y)) return;
+  const layer = ensurePathLayer(map);
+  layer.cells[y][x] = value ? 1 : 0;
+}
+
+const PDSMS_SMART_UNITS = [
+  [true, false, false, true, false, false, false, false],
+  [true, false, true, true, false, false, false, false],
+  [true, false, true, false, false, false, false, false],
+  [true, true, true, true, true, false, true, true],
+  [true, true, true, true, false, true, true, true],
+  [true, true, false, true, false, false, false, false],
+  [true, true, true, true, true, true, true, true],
+  [true, true, true, false, false, false, false, false],
+  [true, true, true, true, true, true, true, false],
+  [true, true, true, true, true, true, false, true],
+  [false, true, false, true, false, false, false, false],
+  [false, true, true, true, false, false, false, false],
+  [false, true, true, false, false, false, false, false],
+];
+
+function activePathSet(editor) {
+  const id = editor.activePathSetId || editor.map?.pathLayer?.activeSetId;
+  const smartSets = (editor.tilePackage?.smartSets || []).map((set) => ({ ...set, source: 'rtpks-smart' }));
+  return smartSets.find((set) => set.id === id)
+    || smartSets[0]
+    || null;
+}
+
+function tileIdFromPathSet(set, key) {
+  const raw = set?.tiles?.[key];
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+function pathTileKeyForCell(map, x, y) {
+  const n = inBounds(map, x, y - 1) && pathCellValue(map, x, y - 1);
+  const e = inBounds(map, x + 1, y) && pathCellValue(map, x + 1, y);
+  const s = inBounds(map, x, y + 1) && pathCellValue(map, x, y + 1);
+  const w = inBounds(map, x - 1, y) && pathCellValue(map, x - 1, y);
+  const count = Number(n) + Number(e) + Number(s) + Number(w);
+  if (count === 0) return 'center';
+  if (count === 4) return 'cross';
+  if (count === 3) return 'cross';
+  if (count === 1) {
+    if (n) return 'endN';
+    if (e) return 'endE';
+    if (s) return 'endS';
+    return 'endW';
+  }
+  if (n && s) return 'n';
+  if (e && w) return 'e';
+  if (n && e) return 'ne';
+  if (e && s) return 'se';
+  if (s && w) return 'sw';
+  if (w && n) return 'nw';
+  return 'center';
+}
+
+function pathTileIdForCell(map, set, x, y) {
+  if (set?.source === 'rtpks-smart' || Array.isArray(set?.grid)) {
+    return smartTileIdForCell(map, set, x, y);
+  }
+  const key = pathTileKeyForCell(map, x, y);
+  return tileIdFromPathSet(set, key)
+    ?? tileIdFromPathSet(set, key[0])
+    ?? tileIdFromPathSet(set, 'center');
+}
+
+function smartSame(map, x, y) {
+  if (!inBounds(map, x, y)) return true;
+  return Boolean(pathCellValue(map, x, y));
+}
+
+function smartUnitForCell(map, x, y) {
+  return [
+    smartSame(map, x, y - 1),
+    smartSame(map, x, y + 1),
+    smartSame(map, x - 1, y),
+    smartSame(map, x + 1, y),
+    smartSame(map, x - 1, y - 1),
+    smartSame(map, x + 1, y - 1),
+    smartSame(map, x - 1, y + 1),
+    smartSame(map, x + 1, y + 1),
+  ];
+}
+
+function sameCross(a, b) {
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+}
+
+function sameCorners(a, b) {
+  return sameCross(a, b) && a[4] === b[4] && a[5] === b[5] && a[6] === b[6] && a[7] === b[7];
+}
+
+function fullCross(unit) {
+  return unit[0] && unit[1] && unit[2] && unit[3];
+}
+
+function smartTileIdForCell(map, set, x, y) {
+  const unit = smartUnitForCell(map, x, y);
+  let index = -1;
+  for (let i = 0; i < PDSMS_SMART_UNITS.length; i += 1) {
+    if ((fullCross(unit) ? sameCorners : sameCross)(PDSMS_SMART_UNITS[i], unit)) {
+      index = i;
+      break;
+    }
+  }
+  if (index < 0) index = 6;
+  const sx = index % (set.width || 5);
+  const sy = Math.floor(index / (set.width || 5));
+  const tileId = Number(set.grid?.[sx]?.[sy]);
+  return Number.isFinite(tileId) && tileId >= 0 ? tileId : null;
+}
+
+function resolvePathTiles(editor, changedCells = null) {
+  if (!editor.map) return;
+  const set = activePathSet(editor);
+  const layer = ensurePathLayer(editor.map);
+  if (!set || !layer) return;
+  const pathTileLayer = tileLayerIndexById(editor.map, 'path');
+  const cells = new Map();
+  const add = (x, y) => {
+    if (inBounds(editor.map, x, y)) cells.set(`${x},${y}`, [x, y]);
+  };
+  if (changedCells?.length) {
+    for (const [x, y] of changedCells) {
+      add(x, y); add(x + 1, y); add(x - 1, y); add(x, y + 1); add(x, y - 1);
+    }
+  } else {
+    for (let y = 0; y < editor.map.grid.height; y += 1) {
+      for (let x = 0; x < editor.map.grid.width; x += 1) add(x, y);
+    }
+  }
+  for (const [x, y] of cells.values()) {
+    if (pathCellValue(editor.map, x, y)) {
+      const tileId = pathTileIdForCell(editor.map, set, x, y);
+      if (tileId != null) setTileCell(editor.map, x, y, tileId, pathTileLayer);
+    } else if (changedCells?.some(([cx, cy]) => cx === x && cy === y)) {
+      setTileCell(editor.map, x, y, null, pathTileLayer);
+    }
+  }
+  editor.map.pathLayer.activeSetId = set.id;
+  editor.activePathSetId = set.id;
 }
 
 function placementDefaults(editor, modelOrId) {
@@ -103,6 +454,10 @@ function selectedPlacement(editor) {
   return editor.map.models[i];
 }
 
+function isPropLayerActive(editor) {
+  return editor.propTool === 'select' || editor.propTool === 'place';
+}
+
 function propToolRailHtml(editor, esc) {
   if (!editor.map) return '';
   const sel = selectedPlacement(editor);
@@ -112,19 +467,19 @@ function propToolRailHtml(editor, esc) {
   const scale = sel ? (Number(sel.scale) || 1) : (meta?.defaultScale ?? 1);
   const yaw = sel ? (Math.round(sel.yawDeg || 0)) : (Math.round(meta?.defaultYawDeg || 0));
   return `<div class="tool-group map-prop-tools" role="group" aria-label="3D props">
-    <button type="button" class="tool-btn map-prop-tool ${!editor.propTool ? 'active' : ''}" data-prop-tool="terrain" title="Terrain brushes">🗺</button>
-    <button type="button" class="tool-btn map-prop-tool ${editor.propTool === 'select' ? 'active' : ''}" data-prop-tool="select" title="Select and drag placed props">◎</button>
-    <button type="button" class="tool-btn map-prop-tool ${editor.propTool === 'place' ? 'active' : ''}" data-prop-tool="place" title="Place props on the grid" ${activeId ? '' : 'disabled'}>＋</button>
+    <button type="button" class="tool-btn map-prop-tool ${!editor.propTool ? 'active' : ''}" data-prop-tool="terrain" title="Terrain brushes" aria-label="Terrain brushes">${iconHtml('grid')}</button>
+    <button type="button" class="tool-btn map-prop-tool ${editor.propTool === 'select' ? 'active' : ''}" data-prop-tool="select" title="Select and drag placed props" aria-label="Select and drag placed props">${iconHtml('select')}</button>
+    <button type="button" class="tool-btn map-prop-tool ${editor.propTool === 'place' ? 'active' : ''}" data-prop-tool="place" title="Place props on the grid" aria-label="Place props on the grid" ${activeId ? '' : 'disabled'}>${iconHtml('plus')}</button>
     ${editor.propTool === 'select' && selIdx != null ? `
       <span class="map-prop-tool-sep"></span>
-      <button type="button" class="tool-btn map-prop-action" data-placement-rotate="-90" title="Rotate −90°">⟲</button>
-      <button type="button" class="tool-btn map-prop-action" data-placement-rotate="90" title="Rotate +90°">⟳</button>
+      <button type="button" class="tool-btn map-prop-action" data-placement-rotate="-90" title="Rotate -90 degrees" aria-label="Rotate selected prop left">${iconHtml('rotate-left')}</button>
+      <button type="button" class="tool-btn map-prop-action" data-placement-rotate="90" title="Rotate +90 degrees" aria-label="Rotate selected prop right">${iconHtml('rotate-right')}</button>
       <label class="map-prop-scale" title="Scale selected prop">
         <span>Scale</span>
         <input type="range" id="mapPlacementScale" min="0.25" max="4" step="0.05" value="${scale}">
         <strong id="mapPlacementScaleLabel">${scale.toFixed(2)}×</strong>
       </label>
-      <button type="button" class="tool-btn map-prop-action map-prop-action-del" data-placement-delete title="Remove selected prop">✕</button>
+      <button type="button" class="tool-btn map-prop-action map-prop-action-del" data-placement-delete title="Remove selected prop" aria-label="Remove selected prop">${iconHtml('x')}</button>
     ` : ''}
     ${editor.propTool === 'place' && activeId ? `<span class="map-prop-active-chip" title="Placing from catalog">${esc(meta?.displayName || activeId)}</span>` : ''}
     ${editor.propTool === 'select' && sel ? `<span class="map-prop-active-chip">${esc(sel.id)} · ${yaw}° · ×${scale.toFixed(2)}</span>` : ''}
@@ -156,6 +511,222 @@ function clearTerrainCell(map, x, y) {
   setCell(map, 'collision', x, y, 0);
 }
 
+function createTileGrid(width, height, fill = null) {
+  return Array.from({ length: height }, () => Array.from({ length: width }, () => fill));
+}
+
+function normalizeTileGridCells(cells, width, height, fill = null) {
+  const next = createTileGrid(width, height, fill);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const value = cells?.[y]?.[x];
+      next[y][x] = value === undefined ? fill : value;
+    }
+  }
+  return next;
+}
+
+function ensureTileLayers(map) {
+  if (!map) return null;
+  const width = map.grid?.width || 16;
+  const height = map.grid?.height || 16;
+  if (!map.tileLayers || !Array.isArray(map.tileLayers.layers)) {
+    map.tileLayers = {
+      version: 1,
+      activeLayer: 0,
+      layers: [{ id: 'base', name: 'Base tiles', visible: true, cells: createTileGrid(width, height, null) }],
+    };
+  }
+  if (!map.tileLayers.layers.length) {
+    map.tileLayers.layers.push({ id: 'base', name: 'Base tiles', visible: true, cells: createTileGrid(width, height, null) });
+  }
+  map.tileLayers.layers = map.tileLayers.layers.map((layer, index) => ({
+    id: String(layer.id || DEFAULT_TILE_LAYERS[index]?.id || `layer_${index + 1}`),
+    name: String(layer.name || DEFAULT_TILE_LAYERS[index]?.name || `Layer ${index + 1}`),
+    visible: layer.visible !== false,
+    cells: normalizeTileGridCells(layer.cells, width, height, null),
+  }));
+  if (map.tileLayers.layers.length > MAX_TILE_LAYERS) map.tileLayers.layers.length = MAX_TILE_LAYERS;
+  map.tileLayers.activeLayer = Math.max(0, Math.min(map.tileLayers.layers.length - 1, map.tileLayers.activeLayer || 0));
+  return map.tileLayers.layers[map.tileLayers.activeLayer];
+}
+
+function activeTileLayer(map) {
+  return ensureTileLayers(map);
+}
+
+function tileLayerAt(map, layerIndex) {
+  ensureTileLayers(map);
+  return map.tileLayers.layers[layerIndex] || map.tileLayers.layers[0];
+}
+
+function tileLayerHasTiles(layer) {
+  return (layer?.cells || []).some((row) => (row || []).some((value) => value != null && value !== ''));
+}
+
+function tileLayerIndexById(map, id) {
+  ensureTileLayers(map);
+  const index = map.tileLayers.layers.findIndex((layer) => layer.id === id);
+  return index >= 0 ? index : 0;
+}
+
+function tileCellValueAtLayer(map, x, y, layerIndex = map.tileLayers?.activeLayer || 0) {
+  const layer = tileLayerAt(map, layerIndex);
+  const value = layer?.cells?.[y]?.[x];
+  return value == null || value === '' ? null : Number(value);
+}
+
+function tileCellValue(map, x, y) {
+  return tileCellValueAtLayer(map, x, y, map.tileLayers?.activeLayer || 0);
+}
+
+function visibleTileStack(map, x, y) {
+  ensureTileLayers(map);
+  const stack = [];
+  for (let i = 0; i < map.tileLayers.layers.length; i += 1) {
+    const layer = map.tileLayers.layers[i];
+    if (layer.visible === false) continue;
+    const value = layer.cells?.[y]?.[x];
+    if (value != null && value !== '') stack.push({ layer, layerIndex: i, tileId: Number(value) });
+  }
+  return stack;
+}
+
+function displayTileCellValue(map, x, y) {
+  const stack = visibleTileStack(map, x, y);
+  return stack.length ? stack[stack.length - 1].tileId : null;
+}
+
+function visibleTileFootprintAt(editor, map, x, y) {
+  ensureTileLayers(map);
+  for (let i = map.tileLayers.layers.length - 1; i >= 0; i -= 1) {
+    const layer = map.tileLayers.layers[i];
+    if (layer.visible === false) continue;
+    for (let ay = 0; ay <= y; ay += 1) {
+      for (let ax = 0; ax <= x; ax += 1) {
+        const value = layer.cells?.[ay]?.[ax];
+        if (value == null || value === '') continue;
+        const tile = tileEntry(editor, Number(value));
+        const fp = tileFootprint(tile);
+        if (x >= ax && x < ax + fp.w && y >= ay && y < ay + fp.h) {
+          return { tileId: Number(value), anchorX: ax, anchorY: ay, layerIndex: i, footprint: fp };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function visibleTileFootprintAtLayer(editor, map, x, y, layerIndex = map.tileLayers?.activeLayer || 0) {
+  ensureTileLayers(map);
+  const layer = tileLayerAt(map, layerIndex);
+  if (!layer || layer.visible === false) return null;
+  for (let ay = 0; ay <= y; ay += 1) {
+    for (let ax = 0; ax <= x; ax += 1) {
+      const value = layer.cells?.[ay]?.[ax];
+      if (value == null || value === '') continue;
+      const tile = tileEntry(editor, Number(value));
+      const fp = tileFootprint(tile);
+      if (x >= ax && x < ax + fp.w && y >= ay && y < ay + fp.h) {
+        return { tileId: Number(value), anchorX: ax, anchorY: ay, layerIndex, footprint: fp };
+      }
+    }
+  }
+  return null;
+}
+
+function setTileCell(map, x, y, resortTileId, layerIndex = map.tileLayers?.activeLayer || 0) {
+  if (!inBounds(map, x, y)) return;
+  const layer = tileLayerAt(map, layerIndex);
+  layer.cells[y][x] = resortTileId == null ? null : Number(resortTileId);
+}
+
+function clearTileAt(editor, map, x, y, layerIndex = map.tileLayers?.activeLayer || 0) {
+  const hit = visibleTileFootprintAtLayer(editor, map, x, y, layerIndex);
+  if (hit) {
+    setTileCell(map, hit.anchorX, hit.anchorY, null, layerIndex);
+    return true;
+  }
+  setTileCell(map, x, y, null, layerIndex);
+  return true;
+}
+
+function clearTileAtAllLayers(editor, map, x, y) {
+  ensureTileLayers(map);
+  for (let layerIndex = 0; layerIndex < map.tileLayers.layers.length; layerIndex += 1) {
+    clearTileAt(editor, map, x, y, layerIndex);
+  }
+}
+
+function clearAllAt(editor, map, x, y) {
+  clearTerrainCell(map, x, y);
+  clearTileAtAllLayers(editor, map, x, y);
+  setPathCell(map, x, y, 0);
+  if (map.player?.spawnTile?.[0] === x && map.player?.spawnTile?.[1] === y) {
+    map.player.spawnTile = null;
+  }
+  resolvePathTiles(editor, [[x, y]]);
+}
+
+function deleteActiveTileLayer(editor) {
+  if (!editor?.map) return false;
+  ensureTileLayers(editor.map);
+  const layers = editor.map.tileLayers.layers;
+  if (layers.length <= 1) return false;
+  const index = Math.max(0, Math.min(layers.length - 1, Number(editor.map.tileLayers.activeLayer) || 0));
+  const layer = layers[index];
+  if (tileLayerHasTiles(layer)) {
+    const ok = window.confirm(`Delete decoration layer ${index + 1}? This only removes tiles on that decoration layer.`);
+    if (!ok) return false;
+  }
+  layers.splice(index, 1);
+  editor.map.tileLayers.activeLayer = Math.max(0, Math.min(layers.length - 1, index));
+  editor.brush = 'tile';
+  editor.sidebarTab = 'tiles';
+  editor.dirty = true;
+  return true;
+}
+
+function floodFillTile(map, x, y, target, replacement) {
+  if (target === replacement) return;
+  const w = map.grid.width;
+  const h = map.grid.height;
+  const stack = [[x, y]];
+  const seen = new Set();
+  while (stack.length) {
+    const [cx, cy] = stack.pop();
+    const key = `${cx},${cy}`;
+    if (seen.has(key) || !inBounds(map, cx, cy)) continue;
+    if (tileCellValue(map, cx, cy) !== target) continue;
+    seen.add(key);
+    setTileCell(map, cx, cy, replacement);
+    stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+  }
+}
+
+function floodFillPath(editor, x, y, target, replacement) {
+  const map = editor.map;
+  if (!map || target === replacement) return;
+  const w = map.grid.width;
+  const h = map.grid.height;
+  const stack = [[x, y]];
+  const seen = new Set();
+  const changed = [];
+  const pathTileLayer = tileLayerIndexById(map, 'path');
+  while (stack.length) {
+    const [cx, cy] = stack.pop();
+    const key = `${cx},${cy}`;
+    if (seen.has(key) || !inBounds(map, cx, cy)) continue;
+    if (pathCellValue(map, cx, cy) !== target) continue;
+    seen.add(key);
+    setPathCell(map, cx, cy, replacement);
+    if (!replacement) setTileCell(map, cx, cy, null, pathTileLayer);
+    changed.push([cx, cy]);
+    stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
+  }
+  resolvePathTiles(editor, changed);
+}
+
 function inBounds(map, x, y) {
   const w = map.grid.width;
   const h = map.grid.height;
@@ -170,6 +741,19 @@ function heightColor(v) {
   return `rgb(${r},${g},${b})`;
 }
 
+function heightOverlayColor(v) {
+  const palette = [
+    'rgba(255,255,255,.04)',
+    'rgba(74,144,226,.28)',
+    'rgba(104,211,145,.28)',
+    'rgba(250,204,21,.30)',
+    'rgba(251,146,60,.32)',
+    'rgba(244,114,182,.32)',
+    'rgba(167,139,250,.34)',
+  ];
+  return palette[Math.max(0, Math.min(palette.length - 1, Number(v) || 0))];
+}
+
 function specialColor(v) {
   const palette = [
     '#e2e8f0', '#fde68a', '#60a5fa', '#34d399', '#f472b6', '#a78bfa',
@@ -181,6 +765,15 @@ function specialColor(v) {
 
 function collisionColor(v) {
   return v ? 'rgba(239,100,97,.55)' : 'rgba(255,255,255,.35)';
+}
+
+function emptyTileCheckerBackground() {
+  return 'none';
+}
+
+function emptyTileCheckerStyle(x = 0, y = 0) {
+  const rgb = ((x + y) & 1) === 0 ? PREVIEW_TOP_A : PREVIEW_TOP_B;
+  return `background-color:rgb(${rgb[0]},${rgb[1]},${rgb[2]});background-image:none;background-size:auto;background-position:0 0`;
 }
 
 function unifiedCellStyle(map, x, y, showValues) {
@@ -266,6 +859,8 @@ function applyBrush(map, editor, x, y) {
 }
 
 function activeBrushValue(editor) {
+  if (editor.brush === 'tile') return editor.tileBrushId ?? null;
+  if (editor.brush === 'path') return 1;
   const layer = brushLayer(editor.brush);
   if (!layer) return 0;
   return editor.values[editor.brush] ?? LAYER_META[layer].default;
@@ -275,8 +870,57 @@ function applyToolAt(map, editor, x, y) {
   const brush = editor.brush;
   const layer = brushLayer(brush);
   const tool = editor.tool;
+  if (tool === 'clear') {
+    clearAllAt(editor, map, x, y);
+    return;
+  }
   if (brush === 'spawn' || tool === 'spawn') {
+    if (tool === 'erase') {
+      if (map.player?.spawnTile?.[0] === x && map.player?.spawnTile?.[1] === y) {
+        map.player.spawnTile = null;
+      }
+      return;
+    }
     map.player.spawnTile = [x, y];
+    return;
+  }
+  if (brush === 'tile') {
+    if (tool === 'eyedropper') {
+      editor.tileBrushId = tileCellValue(map, x, y);
+      editor.tool = 'paint';
+      return;
+    }
+    if (tool === 'fill') {
+      floodFillTile(map, x, y, tileCellValue(map, x, y), editor.tileBrushId ?? null);
+      return;
+    }
+    if (tool === 'erase') {
+      clearTileAt(editor, map, x, y);
+      return;
+    }
+    if (tool === 'raise' || tool === 'lower') return;
+    setTileCell(map, x, y, editor.tileBrushId ?? null);
+    return;
+  }
+  if (brush === 'path') {
+    const before = pathCellValue(map, x, y);
+    if (tool === 'eyedropper') {
+      editor.brush = 'path';
+      editor.tool = 'paint';
+      return;
+    }
+    if (tool === 'fill') {
+      floodFillPath(editor, x, y, before, 1);
+      return;
+    }
+    if (tool === 'erase') {
+      setPathCell(map, x, y, 0);
+      setTileCell(map, x, y, null, tileLayerIndexById(map, 'path'));
+      resolvePathTiles(editor, [[x, y]]);
+      return;
+    }
+    if (tool === 'raise' || tool === 'lower') return;
+    setPathCell(map, x, y, 1);
     return;
   }
   if (!layer) return;
@@ -296,8 +940,8 @@ function applyToolAt(map, editor, x, y) {
     setCell(map, layer, x, y, cellValue(map, layer, x, y) + delta);
     return;
   }
-  if (tool === 'clear') {
-    clearTerrainCell(map, x, y);
+  if (tool === 'erase') {
+    setCell(map, layer, x, y, LAYER_META[layer].default);
     return;
   }
   setCell(map, layer, x, y, activeBrushValue(editor));
@@ -310,6 +954,7 @@ function applyToolToCells(map, editor, cells) {
     unique.set(`${x},${y}`, [x, y]);
   }
   for (const [x, y] of unique.values()) applyToolAt(map, editor, x, y);
+  if (editor.brush === 'path') resolvePathTiles(editor, [...unique.values()]);
 }
 
 function previewCellsForDrag(editor) {
@@ -351,8 +996,6 @@ function previewModalViewSize(editor) {
 function refreshMapPreview(state) {
   const editor = ensureMapEditorState(state);
   if (!editor.map) return;
-  const dock = document.querySelector('#mapPreviewCanvasDock');
-  if (dock) drawMapPreview(dock, editor.map, { fit: true }, { editor, state });
   if (editor.previewOpen) {
     const canvas = document.querySelector('#mapPreviewCanvas');
     if (canvas) {
@@ -441,6 +1084,8 @@ function pushFace(bucket, pts, fill) {
 function buildPreviewScene(map) {
   const w = map.grid.width;
   const h = map.grid.height;
+  const visual = ensureTerrainVisual(map);
+  const floorHeight = Number(visual?.floorHeightScale) || TILE_SIZE;
   const heights = map.terrain.height;
   const specials = map.terrain.special;
   const tileH = (tx, ty) => heights?.[ty]?.[tx] ?? 0;
@@ -453,9 +1098,9 @@ function buildPreviewScene(map) {
     h,
     tx,
     ty,
-    TILE_SIZE,
+    floorHeight,
   );
-  return { w, h, tileH, tileSpecial, inBounds, cornerHeights };
+  return { w, h, tileH, tileSpecial, inBounds, cornerHeights, visual, floorHeight };
 }
 
 function drawSortedFaces(ctx, faces, strokeTops = false) {
@@ -478,6 +1123,228 @@ function drawSortedFaces(ctx, faces, strokeTops = false) {
 // so each prop reads as its roof/top, cached per id+hash and decoded to an Image for fast
 // canvas compositing. Returns the Image when ready, else kicks off a render and returns null.
 const modelTopThumbCache = new Map();
+const tilePreviewImageCache = new Map();
+const rtpksTileThumbUrlCache = new Map();
+const rtpksTileMeshPreviewCache = new Map();
+const rtpksTextureSamplerCache = new Map();
+const RTPKS_TILE_THUMB_SIZE = 128;
+
+function rtpksTileThumbKey(editor, tileId, size = RTPKS_TILE_THUMB_SIZE) {
+  return `${editor.tilePackage?.fileName || ''}|${Number(tileId)}|${size}`;
+}
+
+function rememberRtpksTileThumb(editor, tileId, dataUrl) {
+  if (!dataUrl) return;
+  if (!editor._rtpksThumbUrls) editor._rtpksThumbUrls = {};
+  editor._rtpksThumbUrls[Number(tileId)] = dataUrl;
+}
+
+function cachedRtpksTileThumb(editor, tileId, size = RTPKS_TILE_THUMB_SIZE) {
+  const tile = tileEntry(editor, tileId);
+  if (tile?.previewImage) {
+    rememberRtpksTileThumb(editor, tileId, tile.previewImage);
+    return tile.previewImage;
+  }
+  const local = editor._rtpksThumbUrls?.[Number(tileId)];
+  if (local) return local;
+  const cached = rtpksTileThumbUrlCache.get(rtpksTileThumbKey(editor, tileId, size));
+  if (typeof cached === 'string') {
+    rememberRtpksTileThumb(editor, tileId, cached);
+    return cached;
+  }
+  return '';
+}
+
+function applyTilePreviewImage(target, src) {
+  if (!target || !src) return;
+  target.innerHTML = `<img src="${src}" alt="" loading="lazy">`;
+}
+
+async function fetchRtpksPreviewMesh(fileName, tileId) {
+  const key = `${fileName}|${Number(tileId)}`;
+  if (!rtpksTileMeshPreviewCache.has(key)) {
+    rtpksTileMeshPreviewCache.set(key, fetch(`/api/tile-packages/mesh?file=${encodeURIComponent(fileName)}&tileId=${encodeURIComponent(Number(tileId))}`)
+      .then(async (res) => {
+        const payload = await res.json().catch(() => null);
+        if (!res.ok || !payload) throw new Error(payload?.error || `Mesh request failed (${res.status})`);
+        return payload;
+      }));
+  }
+  return rtpksTileMeshPreviewCache.get(key);
+}
+
+function loadPreviewImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Image load failed: ${url}`));
+    img.src = url;
+  });
+}
+
+function wrap01(value) {
+  const wrapped = value - Math.floor(value);
+  return wrapped < 0 ? wrapped + 1 : wrapped;
+}
+
+async function textureSampler(url) {
+  if (!url) return null;
+  if (!rtpksTextureSamplerCache.has(url)) {
+    rtpksTextureSamplerCache.set(url, loadPreviewImage(url).then((img) => {
+      const canvas = document.createElement('canvas');
+      const w = Math.max(1, img.naturalWidth || img.width || 1);
+      const h = Math.max(1, img.naturalHeight || img.height || 1);
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0);
+      const pixels = ctx.getImageData(0, 0, w, h).data;
+      return {
+        sample(u, v) {
+          const x = Math.min(w - 1, Math.max(0, Math.floor(wrap01(u) * w)));
+          const y = Math.min(h - 1, Math.max(0, Math.floor(wrap01(v) * h)));
+          const i = (y * w + x) * 4;
+          return [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]];
+        },
+      };
+    }));
+  }
+  return rtpksTextureSamplerCache.get(url);
+}
+
+function rtpksMaterial(editor, materialId) {
+  return (editor.tilePackage?.materials || []).find((mat) => Number(mat.materialId) === Number(materialId));
+}
+
+function meshPreviewVertex(mesh, source, uvs, colors, index, scale, pad, minX, minY) {
+  const vi = index * 3;
+  const ui = index * 2;
+  const x = source?.[vi] ?? 0;
+  const y = (mesh.height || 1) - (source?.[vi + 1] ?? 0);
+  return {
+    x: pad + (x - minX) * scale,
+    y: pad + (y - minY) * scale,
+    u: uvs?.[ui] ?? 0,
+    v: uvs?.[ui + 1] ?? 0,
+    r: colors?.[vi] ?? 1,
+    g: colors?.[vi + 1] ?? 1,
+    b: colors?.[vi + 2] ?? 1,
+  };
+}
+
+function drawPreviewTriangle(ctx, verts, sampler, fallbackColor) {
+  if (!verts.every((v) => Number.isFinite(v.x) && Number.isFinite(v.y))) return;
+  const u = (verts[0].u + verts[1].u + verts[2].u) / 3;
+  const v = (verts[0].v + verts[1].v + verts[2].v) / 3;
+  const tex = sampler?.sample(u, v) || fallbackColor;
+  if (!tex || tex[3] <= 8) return;
+  const vr = (verts[0].r + verts[1].r + verts[2].r) / 3;
+  const vg = (verts[0].g + verts[1].g + verts[2].g) / 3;
+  const vb = (verts[0].b + verts[1].b + verts[2].b) / 3;
+  ctx.fillStyle = `rgba(${Math.round(tex[0] * vr)},${Math.round(tex[1] * vg)},${Math.round(tex[2] * vb)},${Math.min(1, tex[3] / 255)})`;
+  ctx.beginPath();
+  ctx.moveTo(verts[0].x, verts[0].y);
+  ctx.lineTo(verts[1].x, verts[1].y);
+  ctx.lineTo(verts[2].x, verts[2].y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+async function renderRtpksTileCanvasThumbnail(editor, tileId, size = RTPKS_TILE_THUMB_SIZE) {
+  const fileName = editor.tilePackage?.fileName;
+  if (!fileName) return '';
+  const mesh = await fetchRtpksPreviewMesh(fileName, tileId);
+  const tile = tileEntry(editor, tileId);
+  const fp = tileFootprint(tile);
+  const pad = 4;
+  const width = Math.max(1, Number(mesh.width || fp.w || 1));
+  const height = Math.max(1, Number(mesh.height || fp.h || 1));
+  const scale = Math.max(1, Math.min((size - pad * 2) / width, (size - pad * 2) / height));
+  const drawW = width * scale;
+  const drawH = height * scale;
+  const ox = (size - drawW) * 0.5;
+  const oy = (size - drawH) * 0.5;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+  ctx.imageSmoothingEnabled = false;
+  const ranges = Array.isArray(mesh.materialRanges) && mesh.materialRanges.length
+    ? mesh.materialRanges
+    : [{ materialId: mesh.textureIds?.[0] ?? tile?.materialId ?? 0, triStart: 0, triCount: (mesh.triangles || []).length / 9, quadStart: 0, quadCount: (mesh.quads || []).length / 12 }];
+  for (const range of ranges) {
+    const material = rtpksMaterial(editor, range.materialId);
+    const sampler = material?.textureName
+      ? await textureSampler(`/api/tile-packages/texture?file=${encodeURIComponent(fileName)}&texture=${encodeURIComponent(material.textureName)}`)
+      : null;
+    const fallback = [120, 190, 140, 255];
+    for (let i = 0; i < (range.triCount || 0); i += 1) {
+      const base = ((range.triStart || 0) + i) * 3;
+      drawPreviewTriangle(ctx, [
+        meshPreviewVertex(mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base, scale, ox, 0, -oy / scale),
+        meshPreviewVertex(mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 1, scale, ox, 0, -oy / scale),
+        meshPreviewVertex(mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 2, scale, ox, 0, -oy / scale),
+      ], sampler, fallback);
+    }
+    for (let i = 0; i < (range.quadCount || 0); i += 1) {
+      const base = ((range.quadStart || 0) + i) * 4;
+      const verts = [
+        meshPreviewVertex(mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base, scale, ox, 0, -oy / scale),
+        meshPreviewVertex(mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 1, scale, ox, 0, -oy / scale),
+        meshPreviewVertex(mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 2, scale, ox, 0, -oy / scale),
+        meshPreviewVertex(mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 3, scale, ox, 0, -oy / scale),
+      ];
+      drawPreviewTriangle(ctx, [verts[0], verts[1], verts[2]], sampler, fallback);
+      drawPreviewTriangle(ctx, [verts[0], verts[2], verts[3]], sampler, fallback);
+    }
+  }
+  return canvas.toDataURL('image/png');
+}
+
+function requestRtpksTileThumbnail(editor, tileId, { size = RTPKS_TILE_THUMB_SIZE, onReady } = {}) {
+  if (!editor.tilePackage?.fileName || !tileEntry(editor, tileId)) return Promise.resolve('');
+  const preview = tileEntry(editor, tileId)?.previewImage;
+  if (preview) {
+    rememberRtpksTileThumb(editor, tileId, preview);
+    onReady?.(preview);
+    return Promise.resolve(preview);
+  }
+  const key = rtpksTileThumbKey(editor, tileId, size);
+  const cached = rtpksTileThumbUrlCache.get(key);
+  if (typeof cached === 'string') {
+    rememberRtpksTileThumb(editor, tileId, cached);
+    onReady?.(cached);
+    return Promise.resolve(cached);
+  }
+  if (cached && typeof cached.then === 'function') {
+    cached.then((dataUrl) => {
+      if (!dataUrl) return;
+      rememberRtpksTileThumb(editor, tileId, dataUrl);
+      onReady?.(dataUrl);
+    });
+    return cached;
+  }
+  const promise = renderRtpksTileCanvasThumbnail(editor, Number(tileId), size)
+    .then(async (dataUrl) => {
+      if (!(await dataUrlHasVisiblePixels(dataUrl))) {
+        return '';
+      }
+      rtpksTileThumbUrlCache.set(key, dataUrl);
+      rememberRtpksTileThumb(editor, tileId, dataUrl);
+      onReady?.(dataUrl);
+      return dataUrl;
+    })
+    .catch((error) => {
+      console.warn(`RTPKS tile preview failed for tile ${tileId}:`, error);
+      rtpksTileThumbUrlCache.delete(key);
+      return '';
+    });
+  rtpksTileThumbUrlCache.set(key, promise);
+  return promise;
+}
+
 function roofThumbForModel(model, onReady) {
   if (!model) return null;
   const key = `${model.id}|${model.modelHash || ''}`;
@@ -485,7 +1352,7 @@ function roofThumbForModel(model, onReady) {
   if (entry instanceof Image) return entry;
   if (entry === 'pending') return null;
   modelTopThumbCache.set(key, 'pending');
-  renderGlbThumbnail(modelAssetUrl(model.id, model), { width: 128, height: 128, yaw: 0, pitch: 88, zoomFactor: 1 })
+  renderGlbThumbnail(modelAssetUrl(model.id, model), { width: 160, height: 160, yaw: 0, pitch: 88, zoomFactor: 1.0 })
     .then((dataUrl) => {
       const img = new Image();
       img.onload = () => { modelTopThumbCache.set(key, img); onReady?.(); };
@@ -496,19 +1363,49 @@ function roofThumbForModel(model, onReady) {
   return null;
 }
 
+function tilePreviewImage(editor, tileId, onReady) {
+  const tile = tileEntry(editor, tileId);
+  const url = cachedRtpksTileThumb(editor, tileId) || tile?.previewImage || '';
+  if (!url) return null;
+  const key = `${editor.tilePackage?.fileName || ''}|${tileId}|${url}`;
+  const cached = tilePreviewImageCache.get(key);
+  if (cached instanceof Image) return cached;
+  if (cached === 'pending') return null;
+  tilePreviewImageCache.set(key, 'pending');
+  const img = new Image();
+  img.onload = () => { tilePreviewImageCache.set(key, img); onReady?.(); };
+  img.onerror = () => { tilePreviewImageCache.delete(key); };
+  img.src = url;
+  requestRtpksTileThumbnail(editor, tileId, { onReady });
+  return null;
+}
+
 // Tile-space footprint of a placed prop: catalog w×d (swapped for 90/270 yaw), centered on
 // the tile that holds the model's origin. Used to highlight the cells it occupies and to
 // position the roof overlay on the 2D grid.
 function placedModelFootprint(editor, mdl) {
   const ts = editor.map?.grid?.tileSize || TILE_SIZE;
   const meta = (editor.modelCatalog || []).find((c) => c.id === mdl.id);
-  const fp = meta?.footprintTiles || { w: 1, d: 1 };
+  const fp = modelAuthoringFootprint(meta);
   const swap = Math.abs(Math.round((mdl.yawDeg || 0) / 90)) % 2 !== 0;
   const fw = Math.max(1, swap ? fp.d : fp.w);
   const fd = Math.max(1, swap ? fp.w : fp.d);
   const ox = Math.floor((mdl.position?.[0] ?? 0) / ts);
   const oy = Math.floor((mdl.position?.[2] ?? 0) / ts);
   return { meta, fw, fd, ox, oy, tlx: ox - Math.floor((fw - 1) / 2), tly: oy - Math.floor((fd - 1) / 2) };
+}
+
+function isTilePlacementMode(editor) {
+  return editor.map
+    && editor.brush === 'tile'
+    && editor.propTool == null
+    && editor.tool !== 'fill'
+    && editor.tool !== 'eyedropper'
+    && editor.tool !== 'raise'
+    && editor.tool !== 'lower'
+    && editor.tool !== 'erase'
+    && editor.tool !== 'clear'
+    && editor.tileBrushId != null;
 }
 
 // Draw roof/top snapshots over each placed prop's footprint on the 2D grid, plus a ghost
@@ -540,15 +1437,43 @@ function refreshPropOverlays(editor) {
     return roof ? `<img src="${roof.src}" alt="" style="transform:rotate(${yawDeg || 0}deg)">` : '';
   };
   const items = [];
+  const activeLayerIndex = editor.map.tileLayers?.activeLayer || 0;
+  ensureTileLayers(editor.map);
+  for (let layerIndex = 0; layerIndex < editor.map.tileLayers.layers.length; layerIndex += 1) {
+    const layer = editor.map.tileLayers.layers[layerIndex];
+    if (layer.visible === false) continue;
+    for (let y = 0; y < editor.map.grid.height; y += 1) {
+      for (let x = 0; x < editor.map.grid.width; x += 1) {
+        const tileId = layer.cells?.[y]?.[x];
+        if (tileId == null || tileId === '') continue;
+        const fp = tileFootprint(tileEntry(editor, tileId));
+        if (fp.w <= 1 && fp.h <= 1) continue;
+        const r = box(x, y, fp.w, fp.h);
+        const src = tilePreviewSource(editor, tileId);
+        const muted = layerIndex === activeLayerIndex ? '' : ' is-muted-layer';
+        const img = src ? `<img src="${src}" alt="" loading="lazy">` : `<span class="map-tile-color" style="background:${tileHashColor(tileId)}"></span>`;
+        items.push(`<div class="map-tile-footprint-overlay${muted}" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${img}${tileSizeLabel(fp) ? `<span class="map-tile-size">${tileSizeLabel(fp)}</span>` : ''}</div>`);
+      }
+    }
+  }
   for (const mdl of (editor.map.models || [])) {
     const fpc = placedModelFootprint(editor, mdl);
     const r = box(fpc.tlx, fpc.tly, fpc.fw, fpc.fd);
     items.push(`<div class="map-prop-roof" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${roofImg(fpc.meta, mdl.yawDeg)}</div>`);
   }
+  if (isTilePlacementMode(editor) && Array.isArray(editor._ghostTile)) {
+    const tile = tileEntry(editor, editor.tileBrushId);
+    const fp = tileFootprint(tile);
+    const [gx, gy] = editor._ghostTile;
+    const r = box(gx, gy, fp.w, fp.h);
+    const src = tilePreviewSource(editor, editor.tileBrushId);
+    const img = src ? `<img src="${src}" alt="" loading="lazy">` : `<span class="map-tile-color" style="background:${tileHashColor(editor.tileBrushId)}"></span>`;
+    items.push(`<div class="map-tile-footprint-overlay is-ghost" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${img}${tileSizeLabel(fp) ? `<span class="map-tile-size">${tileSizeLabel(fp)}</span>` : ''}</div>`);
+  }
   if (editor.placeModelId && Array.isArray(editor._ghostTile)) {
     const meta = (editor.modelCatalog || []).find((c) => c.id === editor.placeModelId);
     if (meta) {
-      const fp = meta.footprintTiles || { w: 1, d: 1 };
+      const fp = modelAuthoringFootprint(meta);
       const fw = Math.max(1, fp.w);
       const fd = Math.max(1, fp.d);
       const [gx, gy] = editor._ghostTile;
@@ -571,6 +1496,9 @@ function drawMapPreviewTopDown(canvas, map, cam = {}, opts = {}) {
   const pad = 12;
   const heights = map.terrain?.height;
   const specials = map.terrain?.special;
+  const visual = ensureTerrainVisual(map);
+  const editor = opts.editor;
+  const onTileReady = () => { if (opts.state) refreshMapPreview(opts.state); };
 
   const viewW = cam.fit ? (canvas.clientWidth || 240) : (cam.viewW || 480);
   const viewH = cam.fit ? (canvas.clientHeight || 200) : (cam.viewH || 360);
@@ -611,12 +1539,30 @@ function drawMapPreviewTopDown(canvas, map, cam = {}, opts = {}) {
       const r = Math.min(255, base[0] + shade);
       const g = Math.min(255, base[1] + shade);
       const b = Math.min(255, base[2] + shade);
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const floorColor = visual?.floorRecolorEnabled && hv > 0 ? visual.floorColors?.[hv] || visual.floorColors?.[1] : null;
+      ctx.fillStyle = floorColor || `rgb(${r},${g},${b})`;
       ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
+      ctx.fillStyle = ((x + z) & 1) === 0 ? 'rgba(255,255,255,.28)' : 'rgba(70,82,94,.15)';
+      ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
+      ctx.fillStyle = floorColor || `rgba(${r},${g},${b},.28)`;
+      ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
+      const tileStack = visibleTileStack(map, x, z);
+      if (editor && tileStack.length) {
+        for (const item of tileStack) {
+          const img = tilePreviewImage(editor, item.tileId, onTileReady);
+          if (img) {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, ox + x * cell, oy + z * cell, cell, cell);
+          } else {
+            ctx.fillStyle = tileHashColor(item.tileId);
+            ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
+          }
+        }
+      }
       const special = specials?.[z]?.[x] ?? 0;
       const eff = effectiveSpecial(special, heights, w, h, x, z);
       if (eff >= SPECIAL.RAMP_N && eff <= SPECIAL.CONCAVE_NW) {
-        ctx.fillStyle = 'rgba(251,191,36,.18)';
+        ctx.fillStyle = visual?.rampRecolorEnabled ? `${visual.rampColor}66` : 'rgba(251,191,36,.18)';
         ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
       }
     }
@@ -642,7 +1588,7 @@ function drawMapPreviewTopDown(canvas, map, cam = {}, opts = {}) {
     const cx = ox + ((mdl.position?.[0] ?? 0) / propTs) * cell;
     const cz = oy + ((mdl.position?.[2] ?? 0) / propTs) * cell;
     const meta = catalog.find((c) => c.id === mdl.id);
-    const fp = meta?.footprintTiles || { w: 1, d: 1 };
+    const fp = modelAuthoringFootprint(meta);
     const rw = Math.max(1, fp.w) * cell;
     const rd = Math.max(1, fp.d) * cell;
     const yaw = (mdl.yawDeg || 0) * Math.PI / 180;
@@ -694,7 +1640,7 @@ function drawMapPreview(canvas, map, cam = {}, opts = {}) {
     return;
   }
   const ctx = canvas.getContext('2d');
-  const { w, h, tileSpecial, inBounds, cornerHeights } = buildPreviewScene(map);
+  const { w, h, tileSpecial, inBounds, cornerHeights, visual } = buildPreviewScene(map);
   const { project } = createPreviewProjector(map, cam);
   const wallEw = `rgb(${PREVIEW_WALL_EW.join(',')})`;
   const wallNs = `rgb(${PREVIEW_WALL_NS.join(',')})`;
@@ -760,9 +1706,13 @@ function drawMapPreview(canvas, map, cam = {}, opts = {}) {
       const special = tileSpecial(x, z);
       const eff = effectiveSpecial(special, map.terrain.height, w, h, x, z);
       const ramp = eff >= SPECIAL.RAMP_N && eff <= SPECIAL.CONCAVE_NW;
-      const fill = ramp
-        ? `rgb(${Math.min(255, rgb[0] + 18)},${Math.min(255, rgb[1] + 24)},${rgb[2]})`
-        : `rgb(${rgb.join(',')})`;
+      const floorLevel = Math.max(0, Math.round(Math.max(...c) / (Number(visual?.floorHeightScale) || TILE_SIZE)));
+      const floorColor = visual?.floorRecolorEnabled && floorLevel > 0 ? visual.floorColors?.[floorLevel] || visual.floorColors?.[1] : null;
+      const fill = ramp && visual?.rampRecolorEnabled
+        ? visual.rampColor
+        : floorColor || (ramp
+          ? `rgb(${Math.min(255, rgb[0] + 18)},${Math.min(255, rgb[1] + 24)},${rgb[2]})`
+          : `rgb(${rgb.join(',')})`);
       pushFace(tops, quad(x, z, c[0], x + 1, z, c[1], x + 1, z + 1, c[2], x, z + 1, c[3]), fill);
     }
   }
@@ -844,6 +1794,7 @@ function drawMapPreview(canvas, map, cam = {}, opts = {}) {
 }
 
 function paletteButtons(brush, value, esc) {
+  if (brush === 'tile') return '';
   const layer = brushLayer(brush);
   if (!layer) return '';
   const meta = LAYER_META[layer];
@@ -868,6 +1819,8 @@ function paletteButtons(brush, value, esc) {
 
 function brushHint(brush) {
   if (brush === 'height') return 'Height brush edits elevation (0 = ground). Use Raise/Lower or the palette.';
+  if (brush === 'tile') return 'Tile brush paints visual RTPKS tile IDs. These are graphics only; collision and ramps stay on their own layers.';
+  if (brush === 'path') return 'Path brush paints a logical path mask and resolves it into the configured RTPKS path tile set.';
   if (brush === 'ramp') return 'Ramp brush: cardinals 2–5, corner ramps 6–13. Auto (1) is baked to N/E/S/W on save. Pick a type below.';
   if (brush === 'collision') return 'Blocked brush marks unwalkable tiles (red outline on the grid).';
   return 'Spawn brush sets the player start tile (gold ring).';
@@ -881,7 +1834,12 @@ export function ensureMapEditorState(state) {
       files: [],
       currentFile: null,
       map: null,
+      projects: [],
+      project: null,
+      projectId: 'default',
+      projectValidation: null,
       dirty: false,
+      projectDirty: false,
       brush: 'height',
       tool: 'paint',
       brushSize: 1,
@@ -897,6 +1855,13 @@ export function ensureMapEditorState(state) {
       previewPanning: false,
       previewOrbiting: false,
       modelsResolvedPath: '',
+      tilePackagesResolvedPath: '',
+      tilePackages: [],
+      tilePackage: null,
+      tileBrushId: null,
+      tileSearch: '',
+      tilePage: 0,
+      activePathSetId: '',
       modelCatalog: [],
       selectedModelId: null,
       modelViewportOpen: false,
@@ -913,21 +1878,40 @@ export function ensureMapEditorState(state) {
       modelsApiHint: '',
       placeModelId: null,
       workspaceView: '2d',
+      editorZoom: 1,
+      showNeighbors: true,
       propTool: null,
       modelSearch: '',
       selectedPlacementIndex: null,
       compileDisplayName: '',
       compileDefaultYaw: 0,
       compileDefaultScale: 1,
+      undoStack: [],
+      redoStack: [],
     };
   }
   if (state.mapEditor.workspaceView !== '3d') state.mapEditor.workspaceView = '2d';
+  if (!state.mapEditor.projects) state.mapEditor.projects = [];
+  if (!state.mapEditor.project) state.mapEditor.project = createDefaultProject(state.mapEditor.files || []);
+  if (!state.mapEditor.projectId) state.mapEditor.projectId = state.mapEditor.project.id || 'default';
+  if (state.mapEditor.projectValidation === undefined) state.mapEditor.projectValidation = null;
+  if (state.mapEditor.projectDirty === undefined) state.mapEditor.projectDirty = false;
+  if (state.mapEditor.editorZoom === undefined) state.mapEditor.editorZoom = state.mapEditor.project?.editor?.zoom || 1;
+  if (state.mapEditor.showNeighbors === undefined) state.mapEditor.showNeighbors = state.mapEditor.project?.editor?.overlays?.neighbors !== false;
   if (state.mapEditor.propTool === undefined) state.mapEditor.propTool = null;
   if (state.mapEditor.modelSearch === undefined) state.mapEditor.modelSearch = '';
+  if (state.mapEditor.tileSearch === undefined) state.mapEditor.tileSearch = '';
+  if (state.mapEditor.tilePage === undefined) state.mapEditor.tilePage = 0;
+  if (!state.mapEditor.tilePackages) state.mapEditor.tilePackages = [];
+  if (state.mapEditor.tileBrushId === undefined) state.mapEditor.tileBrushId = null;
+  if (state.mapEditor.activePathSetId === undefined) state.mapEditor.activePathSetId = state.mapEditor.project?.pathSets?.[0]?.id || '';
   if (state.mapEditor.selectedPlacementIndex === undefined) state.mapEditor.selectedPlacementIndex = null;
   if (!state.mapEditor.modelCatalog) state.mapEditor.modelCatalog = [];
+  if (!Array.isArray(state.mapEditor.undoStack)) state.mapEditor.undoStack = [];
+  if (!Array.isArray(state.mapEditor.redoStack)) state.mapEditor.redoStack = [];
   if (state.mapEditor.placeModelId === undefined) state.mapEditor.placeModelId = null;
-  if (!state.mapEditor.sidebarTab) state.mapEditor.sidebarTab = 'maps';
+  if (!state.mapEditor.leftTab) state.mapEditor.leftTab = 'maps';
+  if (!state.mapEditor.sidebarTab || state.mapEditor.sidebarTab === 'project' || state.mapEditor.sidebarTab === 'maps') state.mapEditor.sidebarTab = 'tiles';
   if (!state.mapEditor.previewCam) {
     state.mapEditor.previewCam = { ...PREVIEW_CAM_DEFAULT };
   }
@@ -952,10 +1936,33 @@ export function ensureMapEditorState(state) {
 function syncCellButton(btn, map, x, y, editor) {
   if (!btn) return;
   const st = unifiedCellStyle(map, x, y, editor.showCellValues);
-  btn.style.background = st.bg;
+  const tileId = displayTileCellValue(map, x, y);
+  const tile = tileId == null ? null : tileEntry(editor, tileId);
+  const footprintHit = visibleTileFootprintAt(editor, map, x, y);
+  const activeLayerIndex = map.tileLayers?.activeLayer || 0;
+  btn.style.background = '';
+  if (tile) {
+    const texture = tileTextureUrl(editor, tile);
+    btn.style.backgroundImage = texture ? `linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,.08)), url("${texture}")` : '';
+    btn.style.backgroundColor = texture ? '' : tileHashColor(tileId);
+    btn.style.backgroundSize = texture ? 'cover' : '';
+    btn.style.backgroundPosition = texture ? 'center' : '';
+  } else {
+    const rgb = ((x + y) & 1) === 0 ? PREVIEW_TOP_A : PREVIEW_TOP_B;
+    btn.style.backgroundColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    btn.style.backgroundImage = emptyTileCheckerBackground();
+    btn.style.backgroundSize = 'auto';
+    btn.style.backgroundPosition = '0 0';
+  }
+  btn.style.setProperty('--height-overlay', heightOverlayColor(st.hv));
+  btn.style.setProperty('--collision-overlay', st.blocked ? 'rgba(220,38,38,.72)' : 'rgba(255,255,255,.035)');
   btn.classList.toggle('is-spawn', st.isSpawn);
   btn.classList.toggle('is-collision', st.blocked);
   btn.classList.toggle('has-ramp', Boolean(st.rampLabel));
+  btn.classList.toggle('has-tile', tileId != null);
+  btn.classList.toggle('has-tile-footprint', Boolean(footprintHit && (footprintHit.anchorX !== x || footprintHit.anchorY !== y)));
+  btn.classList.toggle('is-muted-layer', Boolean(footprintHit && footprintHit.layerIndex !== activeLayerIndex));
+  btn.classList.toggle('has-path', pathCellValue(map, x, y) === 1);
   let rampEl = btn.querySelector('.cell-ramp');
   if (st.rampLabel) {
     const rampShort = RAMP_PRESETS.find((r) => r.id === st.special)?.short || '';
@@ -973,6 +1980,40 @@ function syncCellButton(btn, map, x, y, editor) {
   } else if (valEl) valEl.remove();
 }
 
+function placedTileIds(map) {
+  if (!map?.tileLayers?.layers) return [];
+  const ids = new Set();
+  ensureTileLayers(map);
+  for (const layer of map.tileLayers.layers) {
+    if (layer.visible === false) continue;
+    for (const row of (layer.cells || [])) {
+      for (const value of (row || [])) {
+        if (value != null && value !== '') ids.add(Number(value));
+      }
+    }
+  }
+  return Array.from(ids).filter((id) => Number.isFinite(id));
+}
+
+function refreshPlacedTileVisuals(editor) {
+  if (!editor.map) return;
+  document.querySelectorAll('[data-cell]').forEach((btn) => {
+    const [x, y] = (btn.dataset.cell || '').split(',').map(Number);
+    if (Number.isFinite(x) && Number.isFinite(y)) syncCellButton(btn, editor.map, x, y, editor);
+  });
+  refreshPropOverlays(editor);
+}
+
+function ensurePlacedRtpksTileThumbnails(editor, onReady) {
+  if (!editor.map || !editor.tilePackage?.fileName) return;
+  for (const tileId of placedTileIds(editor.map)) {
+    if (cachedRtpksTileThumb(editor, tileId)) continue;
+    requestRtpksTileThumbnail(editor, tileId, {
+      onReady: () => onReady?.(tileId),
+    });
+  }
+}
+
 export function mapEditorHtml(state, esc) {
   const editor = ensureMapEditorState(state);
   const map = editor.map;
@@ -983,6 +2024,9 @@ export function mapEditorHtml(state, esc) {
   const dirtyBadge = editor.dirty
     ? '<span class="map-dirty-badge">Unsaved changes</span>'
     : '<span class="map-dirty-badge clean">Saved</span>';
+  const projectBadge = editor.projectDirty
+    ? '<span class="map-dirty-badge">Project unsaved</span>'
+    : '<span class="map-dirty-badge clean">Project saved</span>';
 
   const fileList = (editor.files || []).map((f) => {
     const active = editor.currentFile === f.name ? 'active' : '';
@@ -1015,10 +2059,18 @@ export function mapEditorHtml(state, esc) {
     for (let y = 0; y < h; y += 1) {
       for (let x = 0; x < w; x += 1) {
         const st = unifiedCellStyle(map, x, y, editor.showCellValues);
+        const tileId = displayTileCellValue(map, x, y);
+        const tile = tileId == null ? null : tileEntry(editor, tileId);
+        const footprintHit = visibleTileFootprintAt(editor, map, x, y);
+        const activeLayerIndex = map.tileLayers?.activeLayer || 0;
         const classes = ['map-cell'];
         if (st.isSpawn) classes.push('is-spawn');
         if (st.blocked) classes.push('is-collision');
         if (st.rampLabel) classes.push('has-ramp');
+        if (tileId != null) classes.push('has-tile');
+        if (footprintHit && (footprintHit.anchorX !== x || footprintHit.anchorY !== y)) classes.push('has-tile-footprint');
+        if (footprintHit && footprintHit.layerIndex !== activeLayerIndex) classes.push('is-muted-layer');
+        if (pathCellValue(map, x, y)) classes.push('has-path');
         const propCount = propTiles.get(`${x},${y}`) || 0;
         if (propFootprint.has(`${x},${y}`)) classes.push('has-prop-cell');
         if (selFootprint && x >= selFootprint.tlx && x < selFootprint.tlx + selFootprint.fw
@@ -1029,28 +2081,42 @@ export function mapEditorHtml(state, esc) {
         const val = st.showValues ? `<span class="cell-val">${st.hv}</span>` : '';
         const rampShort = RAMP_PRESETS.find((r) => r.id === st.special)?.short || '';
         const ramp = st.rampLabel ? `<span class="cell-ramp" title="${esc(st.rampLabel)}">${esc(rampShort)}</span>` : '';
-        const prop = propCount ? `<span class="cell-prop" title="${propCount} prop${propCount > 1 ? 's' : ''}">${propCount > 1 ? propCount : '▲'}</span>` : '';
-        cells.push(`<button type="button" class="${classes.join(' ')}" data-cell="${x},${y}" style="background:${st.bg}" aria-label="cell ${x},${y}">${ramp}${prop}${val}</button>`);
+        const prop = propCount ? `<span class="cell-prop" title="${propCount} prop${propCount > 1 ? 's' : ''}">${propCount > 1 ? propCount : ''}</span>` : '';
+        const tileTexture = tile ? tileTextureUrl(editor, tile) : '';
+        const cellVars = `--height-overlay:${heightOverlayColor(st.hv)};--collision-overlay:${st.blocked ? 'rgba(220,38,38,.72)' : 'rgba(255,255,255,.035)'}`;
+        const tileStyle = tile
+          ? (tileTexture
+            ? `${cellVars};background:#d8e0e6;background-image:linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,.08)),url('${esc(tileTexture)}')`
+            : `${cellVars};background:${tileHashColor(tileId)}`)
+          : `${cellVars};${emptyTileCheckerStyle(x, y)}`;
+        cells.push(`<button type="button" class="${classes.join(' ')}" data-cell="${x},${y}" style="${tileStyle}" aria-label="cell ${x},${y}">${ramp}${prop}${val}</button>`);
       }
     }
-    const gridModeCls = placing ? 'is-placing' : (editor.propTool === 'select' ? 'is-prop-select' : '');
-    gridHtml = `<div class="map-grid-wrap ${gridModeCls}" id="mapGridWrap"><div class="map-grid" id="mapPaintGrid" style="grid-template-columns:repeat(${w}, 28px)">${cells.join('')}<div class="map-prop-overlay" id="mapPropOverlay"></div></div><div class="map-drag-overlay" id="mapDragOverlay" hidden></div></div>`;
+    const gridModeCls = [
+      placing ? 'is-placing' : (editor.propTool === 'select' ? 'is-prop-select' : ''),
+      editor.brush === 'collision' ? 'is-editing-collision' : '',
+      editor.brush === 'height' ? 'is-editing-height' : '',
+    ].filter(Boolean).join(' ');
+    gridHtml = `<div class="map-grid-wrap ${gridModeCls}" id="mapGridWrap"><div class="map-grid" id="mapPaintGrid" style="grid-template-columns:repeat(${w}, 24px)">${cells.join('')}<div class="map-prop-overlay" id="mapPropOverlay"></div></div><div class="map-drag-overlay" id="mapDragOverlay" hidden></div></div>`;
   } else {
     gridHtml = '<p class="hint">Load a map or create a new one to start painting.</p>';
   }
 
-  return `<section class="map-editor-page">
-    <section class="toolbar map-editor-toolbar">
-      <div>
-        <h2>Overworld Map Editor</h2>
-        <p>One grid — pick a brush (height, ramp, blocked, spawn), then paint, area-fill, or draw lines.</p>
+  return `<section class="map-editor-page map-editor-workbench">
+    <section class="toolbar map-editor-toolbar map-editor-commandbar">
+      <div class="map-workbench-brand">
+        <button type="button" class="map-menu-btn" id="mapExitWorkbench">Back to Admin</button>
+        <span class="map-menu-title">Pokemon Resort Map Studio</span>
       </div>
       <div class="actions">
+        ${projectPickerHtml(editor, esc)}
         ${dirtyBadge}
-        <button type="button" class="btn ghost" id="mapTogglePreview" ${map ? '' : ' disabled'}>${editor.previewOpen ? 'Hide 3D' : 'Open 3D'}</button>
+        ${projectBadge}
+        <button type="button" class="btn ghost map-history-btn" id="mapUndo" title="Undo" aria-label="Undo" ${editor.undoStack?.length ? '' : 'disabled'}>${iconHtml('undo')} Undo</button>
+        <button type="button" class="btn ghost map-history-btn" id="mapRedo" title="Redo" aria-label="Redo" ${editor.redoStack?.length ? '' : 'disabled'}>${iconHtml('redo')} Redo</button>
         <button type="button" class="btn ghost" id="mapRefreshList">Refresh</button>
-        <button type="button" class="btn ghost" id="mapCompileModel" ${editor.modelsApiAvailable === false ? 'disabled title="Restart Operations Desk first"' : ''}>${editor.compilingModel ? 'Importing…' : 'Import GLB…'}</button>
         <button type="button" class="btn ghost" id="mapNew">New map</button>
+        <button type="button" class="btn ghost" id="mapSaveProject">Save project</button>
         <button type="button" class="btn" id="mapSave" ${map ? '' : ' disabled'}>Save .owmap</button>
       </div>
     </section>
@@ -1062,6 +2128,9 @@ export function mapEditorHtml(state, esc) {
         <label>Models folder (game assets)
           <input id="mapModelsDirInput" value="${esc(editor.settings?.modelsDirectory || '')}" placeholder="pokemon-resort/assets/overworld/models">
         </label>
+        <label>RTPKS folder (game assets)
+          <input id="mapTilePackagesDirInput" value="${esc(editor.settings?.tilePackagesDirectory || '')}" placeholder="pokemon-resort/assets/overworld/tilepacks">
+        </label>
       </div>
       <div class="row" style="margin-top:10px">
         <label>Maps path
@@ -1069,6 +2138,9 @@ export function mapEditorHtml(state, esc) {
         </label>
         <label>Models path
           <input readonly value="${esc(editor.modelsResolvedPath || '')}">
+        </label>
+        <label>RTPKS path
+          <input readonly value="${esc(editor.tilePackagesResolvedPath || '')}">
         </label>
       </div>
       <div class="map-meta-actions">
@@ -1079,42 +2151,47 @@ export function mapEditorHtml(state, esc) {
       ${map ? `<div class="row" style="margin-top:10px">
         <label>Map id<input id="mapId" value="${esc(map.id)}"></label>
         <label>Display name<input id="mapName" value="${esc(map.name)}"></label>
-        <label>Width (tiles)<input id="mapWidth" type="number" min="4" max="128" value="${w}"></label>
-        <label>Height (tiles)<input id="mapHeight" type="number" min="4" max="128" value="${h}"></label>
         <label>Save as<input id="mapFileName" value="${esc(editor.currentFile || `${map.id || 'map'}.owmap`)}"></label>
-        <div class="actions" style="align-self:end"><button type="button" class="btn" id="mapApplySize">Apply size</button></div>
       </div>` : ''}
     </section>
     <section class="map-editor-layout">
-      <aside class="panel map-sidebar">
+      <aside class="panel map-sidebar map-left-panel">
+        ${mapAuthoringLayersHtml(editor, esc)}
         <div class="map-sidebar-tabs" role="tablist">
-          <button type="button" class="map-sidebar-tab ${editor.sidebarTab === 'maps' ? 'active' : ''}" data-sidebar-tab="maps" role="tab">Maps</button>
-          <button type="button" class="map-sidebar-tab ${editor.sidebarTab === 'props' ? 'active' : ''}" data-sidebar-tab="props" role="tab">3D props</button>
+          <button type="button" class="map-sidebar-tab ${editor.leftTab === 'project' ? 'active' : ''}" data-left-tab="project" role="tab">Project</button>
+          <button type="button" class="map-sidebar-tab ${editor.leftTab === 'maps' ? 'active' : ''}" data-left-tab="maps" role="tab">Maps</button>
+          <button type="button" class="map-sidebar-tab ${editor.leftTab === 'visuals' ? 'active' : ''}" data-left-tab="visuals" role="tab">Visuals</button>
         </div>
-        <div class="map-sidebar-panel ${editor.sidebarTab === 'maps' ? '' : 'hidden'}" id="mapSidebarMaps" role="tabpanel">
+        <div class="map-sidebar-panel ${editor.leftTab === 'project' ? '' : 'hidden'}" id="mapSidebarProject" role="tabpanel">
+          <h3>${esc(editor.project?.name || 'Project')}</h3>
+          ${mapSizePanelHtml(map, esc)}
+          <div class="map-adjacent-actions" role="group" aria-label="Create adjacent maps">
+            <button type="button" class="btn small" data-create-adjacent="north" ${map ? '' : 'disabled'}>North</button>
+            <button type="button" class="btn small" data-create-adjacent="west" ${map ? '' : 'disabled'}>West</button>
+            <button type="button" class="btn small" data-create-adjacent="east" ${map ? '' : 'disabled'}>East</button>
+            <button type="button" class="btn small" data-create-adjacent="south" ${map ? '' : 'disabled'}>South</button>
+          </div>
+          ${mapMatrixHtml(editor, esc)}
+          <div class="map-edge-box">${edgeValidationHtml(editor, esc)}</div>
+        </div>
+        <div class="map-sidebar-panel ${editor.leftTab === 'maps' ? '' : 'hidden'}" id="mapSidebarMaps" role="tabpanel">
           <h3>Maps (.owmap)</h3>
           <p class="hint">Click a map to load and edit terrain.</p>
           <div class="list map-file-list" id="mapFileList">${fileList}</div>
         </div>
-        <div class="map-sidebar-panel ${editor.sidebarTab === 'props' ? '' : 'hidden'}" id="mapSidebarProps" role="tabpanel">
-          <h3>Prop library</h3>
-          ${editor.modelsApiAvailable === false ? `<p class="map-api-warn">${esc(editor.modelsApiHint || 'Restart the Operations Desk to enable model import.')}</p>` : '<p class="hint">GLB models for map props.</p>'}
-          <button type="button" class="btn small" id="mapOpenCompileWizard" style="width:100%;margin-bottom:10px" ${editor.modelsApiAvailable === false ? 'disabled' : ''}>Import GLB…</button>
-          <label class="map-model-search">Search models
-            <input type="search" id="mapModelSearch" placeholder="name or id…" value="${esc(editor.modelSearch || '')}" autocomplete="off">
-          </label>
-          <div class="map-model-catalog" id="mapModelCatalog">${modelCatalogHtml(editor, esc)}</div>
-          ${placedPropsHtml(editor, esc)}
+        <div class="map-sidebar-panel ${editor.leftTab === 'visuals' ? '' : 'hidden'}" id="mapSidebarVisuals" role="tabpanel">
+          ${map ? terrainVisualHtml(editor, esc) : '<p class="hint">Load a map to edit terrain visuals.</p>'}
         </div>
       </aside>
       <div class="map-workspace">
         <section class="panel">
           <div class="map-tool-rail">
-            <div class="tool-group map-brush-group" role="group" aria-label="Brush">
-              ${BRUSHES.map((b) => `<button type="button" class="tool-btn brush-btn ${brush === b.id ? 'active' : ''}" data-brush="${b.id}" title="${esc(b.label)} brush" style="--brush-accent:${b.color}">${b.label}</button>`).join('')}
-            </div>
-            <div class="tool-group" role="group" aria-label="Tool">
-              ${TOOLS.map((t) => `<button type="button" class="tool-btn map-tool ${editor.tool === t.id ? 'active' : ''}" data-tool="${t.id}" title="${esc(t.title)}">${t.label}</button>`).join('')}
+            <div class="map-active-layer-chip" title="Choose the edited layer from the left panel">Layer: <strong>${esc(isPropLayerActive(editor) ? 'Props' : brush === 'tile' ? `Deco ${(editor.map?.tileLayers?.activeLayer || 0) + 1}` : BRUSHES.find((b) => b.id === brush)?.label || 'Paint')}</strong></div>
+            <div class="tool-group map-shared-tools" role="group" aria-label="Drawing tools">
+              ${TOOLS.map((t) => {
+                const disabled = isPropLayerActive(editor) || ((t.id === 'raise' || t.id === 'lower') && brush !== 'height');
+                return `<button type="button" class="tool-btn map-tool ${editor.tool === t.id ? 'active' : ''}" data-tool="${t.id}" title="${esc(t.title)}" aria-label="${esc(t.label)}" ${disabled ? 'disabled' : ''}>${iconHtml(t.icon)}<span>${esc(t.label)}</span></button>`;
+              }).join('')}
             </div>
             <label>Size <input id="mapBrushSize" type="range" min="1" max="5" value="${editor.brushSize}"> <strong id="mapBrushSizeLabel">${editor.brushSize}</strong></label>
             <label><input type="checkbox" id="mapShowValues" ${editor.showCellValues ? 'checked' : ''}> Heights</label>
@@ -1131,20 +2208,56 @@ export function mapEditorHtml(state, esc) {
               <div class="map-ramp-group"><span>Concave</span>${RAMP_PRESETS.filter((r) => r.group === 'concave').map((r) => `<button type="button" class="ramp-btn ${brushVal === r.id ? 'active' : ''}" data-ramp="${r.id}" title="${esc(r.label)}">${esc(r.short)}</button>`).join('')}</div>
             </div>` : ''}
             <p class="hint" style="margin:8px 0">${esc(brushHint(brush))}</p>
-            ${brush !== 'spawn' ? `<div class="map-palette" id="mapPalette">${paletteButtons(brush, brushVal, esc)}</div>` : '<p class="hint">Click cells to place spawn.</p>'}
+            ${brush === 'tile'
+              ? `<div class="map-tile-active-strip">${editor.tileBrushId == null
+                ? 'Pick an RTPKS tile from the Tiles workflow.'
+                : (() => {
+                  const fp = tileFootprint(tileEntry(editor, editor.tileBrushId));
+                  const size = tileSizeLabel(fp);
+                  return `Painting selected tile${size ? ` · ${size}` : ''}`;
+                })()}</div>`
+              : brush === 'path'
+                ? `<div class="map-tile-active-strip">${activePathSet(editor)
+                  ? `Drawing path set <strong>${esc(activePathSet(editor).name || activePathSet(editor).id)}</strong>`
+                  : 'Create a path set in the Paths workflow before drawing paths.'}</div>`
+              : (brush !== 'spawn' ? `<div class="map-palette" id="mapPalette">${paletteButtons(brush, brushVal, esc)}</div>` : '<p class="hint">Click cells to place spawn.</p>')}
           </div>
         </section>
         ${editor.workspaceView === '3d' && map
           ? '<div class="map-3d-mount" id="map3dMount"><p class="hint map-3d-loading">Building 3D scene…</p></div>'
           : gridHtml}
       </div>
-      ${map ? `<aside class="panel map-preview-dock" id="mapPreviewDock" title="Click to open enlarged 3D view">
-        <h3>3D preview</h3>
-        <div class="map-preview-dock-frame">
-          <canvas id="mapPreviewCanvasDock" width="240" height="200" aria-label="Map 3D thumbnail"></canvas>
-          <span class="map-preview-dock-hint">Click to expand</span>
+      <aside class="panel map-workflow-panel">
+        <div class="map-sidebar-tabs map-workflow-tabs" role="tablist">
+          <button type="button" class="map-sidebar-tab ${editor.sidebarTab === 'tiles' ? 'active' : ''}" data-sidebar-tab="tiles" role="tab">Tiles</button>
+          <button type="button" class="map-sidebar-tab ${editor.sidebarTab === 'paths' ? 'active' : ''}" data-sidebar-tab="paths" role="tab">Paths</button>
+          <button type="button" class="map-sidebar-tab ${editor.sidebarTab === 'props' ? 'active' : ''}" data-sidebar-tab="props" role="tab">3D props</button>
         </div>
-      </aside>` : ''}
+        <div class="map-sidebar-panel ${editor.sidebarTab === 'tiles' ? '' : 'hidden'}" id="mapSidebarTiles" role="tabpanel">
+          <h3>RTPKS tiles</h3>
+          ${tilePackagePickerHtml(editor, esc)}
+          <label class="map-model-search">Search tiles
+            <input type="search" id="mapTileSearch" placeholder="Search tiles..." value="${esc(editor.tileSearch || '')}" autocomplete="off">
+          </label>
+          <div class="map-tile-catalog" id="mapTileCatalog">${tileCatalogHtml(editor, esc)}</div>
+          ${selectedAssetPreviewHtml(editor, esc, { showTileGlbDownload: true })}
+        </div>
+        <div class="map-sidebar-panel ${editor.sidebarTab === 'paths' ? '' : 'hidden'}" id="mapSidebarPaths" role="tabpanel">
+          <h3>Autotile paths</h3>
+          ${pathSetEditorHtml(editor, esc)}
+        </div>
+        <div class="map-sidebar-panel ${editor.sidebarTab === 'props' ? '' : 'hidden'}" id="mapSidebarProps" role="tabpanel">
+          <h3>Prop library</h3>
+          ${editor.modelsApiAvailable === false ? `<p class="map-api-warn">${esc(editor.modelsApiHint || 'Restart the Operations Desk to enable model import.')}</p>` : '<p class="hint">GLB models for map props.</p>'}
+          <button type="button" class="btn small" id="mapOpenCompileWizard" style="width:100%;margin-bottom:10px" ${editor.modelsApiAvailable === false ? 'disabled' : ''}>Import GLB…</button>
+          <label class="map-model-search">Search models
+            <input type="search" id="mapModelSearch" placeholder="name or id…" value="${esc(editor.modelSearch || '')}" autocomplete="off">
+          </label>
+          <div class="map-model-catalog" id="mapModelCatalog">${modelCatalogHtml(editor, esc)}</div>
+          ${selectedAssetPreviewHtml(editor, esc)}
+          ${placedPropsHtml(editor, esc)}
+        </div>
+      </aside>
     </section>
     ${map && editor.previewOpen ? (() => {
       const psz = editor.previewSize || { w: 504, h: 400 };
@@ -1157,7 +2270,7 @@ export function mapEditorHtml(state, esc) {
             <button type="button" class="map-preview-viewbtn ${editor.previewCam.mode === '2d' ? 'active' : ''}" data-view="2d" title="Top-down footprint view">2D</button>
           </div>
           <button type="button" class="map-preview-zoom" data-zoom="out" title="Zoom out">−</button>
-          <button type="button" class="map-preview-zoom" data-zoom="reset" title="Reset view">⟲</button>
+          <button type="button" class="map-preview-zoom" data-zoom="reset" title="Reset view" aria-label="Reset view">${iconHtml('rotate-left')}</button>
           <button type="button" class="map-preview-zoom" data-zoom="in" title="Zoom in">+</button>
           <button type="button" class="map-preview-close" id="mapPreviewClose" title="Close">×</button>
         </div>
@@ -1187,9 +2300,118 @@ function resizeMapLocal(map, width, height) {
   next.terrain.height = copy(map.terrain.height, 0);
   next.terrain.special = copy(map.terrain.special, 0);
   next.terrain.collision = copy(map.terrain.collision, 0);
+  if (map.tileLayers?.layers?.length) {
+    next.tileLayers = {
+      ...map.tileLayers,
+      layers: map.tileLayers.layers.map((layer) => ({
+        ...layer,
+        cells: (() => {
+          const rows = createTileGrid(width, height, null);
+          for (let y = 0; y < height; y += 1) {
+            for (let x = 0; x < width; x += 1) rows[y][x] = layer.cells?.[y]?.[x] ?? null;
+          }
+          return rows;
+        })(),
+      })),
+    };
+  }
+  if (map.pathLayer?.cells) {
+    next.pathLayer = {
+      ...map.pathLayer,
+      cells: (() => {
+        const rows = createTileGrid(width, height, 0);
+        for (let y = 0; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) rows[y][x] = map.pathLayer.cells?.[y]?.[x] ? 1 : 0;
+        }
+        return rows;
+      })(),
+    };
+  }
   const sx = Math.min(width - 1, Math.max(0, next.player.spawnTile?.[0] ?? 0));
   const sy = Math.min(height - 1, Math.max(0, next.player.spawnTile?.[1] ?? 0));
   next.player.spawnTile = [sx, sy];
+  return next;
+}
+
+function expandMapLocal(map, direction, amount) {
+  const oldW = map.grid?.width || map.terrain?.height?.[0]?.length || 16;
+  const oldH = map.grid?.height || map.terrain?.height?.length || 16;
+  const requested = Math.max(1, Math.min(64, Math.floor(Number(amount) || 0)));
+  if (!requested) return map;
+
+  let newW = oldW;
+  let newH = oldH;
+  let offsetX = 0;
+  let offsetY = 0;
+  switch (direction) {
+    case 'north':
+      newH = Math.min(128, oldH + requested);
+      offsetY = newH - oldH;
+      break;
+    case 'south':
+      newH = Math.min(128, oldH + requested);
+      break;
+    case 'west':
+      newW = Math.min(128, oldW + requested);
+      offsetX = newW - oldW;
+      break;
+    case 'east':
+      newW = Math.min(128, oldW + requested);
+      break;
+    default:
+      return map;
+  }
+  if (newW === oldW && newH === oldH) return map;
+
+  const copyWithOffset = (grid, fill = 0) => {
+    const rows = Array.from({ length: newH }, () => Array.from({ length: newW }, () => fill));
+    for (let y = 0; y < oldH; y += 1) {
+      for (let x = 0; x < oldW; x += 1) {
+        rows[y + offsetY][x + offsetX] = grid?.[y]?.[x] ?? fill;
+      }
+    }
+    return rows;
+  };
+
+  const next = JSON.parse(JSON.stringify(map));
+  const ts = Number(next.grid?.tileSize) || TILE_SIZE;
+  next.grid.width = newW;
+  next.grid.height = newH;
+  next.grid.tileSize = TILE_SIZE;
+  next.terrain.height = copyWithOffset(map.terrain?.height, 0);
+  next.terrain.special = copyWithOffset(map.terrain?.special, 0);
+  next.terrain.collision = copyWithOffset(map.terrain?.collision, 0);
+  if (map.tileLayers?.layers?.length) {
+    next.tileLayers = {
+      ...map.tileLayers,
+      layers: map.tileLayers.layers.map((layer) => ({
+        ...layer,
+        cells: copyWithOffset(layer.cells, null),
+      })),
+    };
+  }
+  if (map.pathLayer?.cells) {
+    next.pathLayer = {
+      ...map.pathLayer,
+      cells: copyWithOffset(map.pathLayer.cells, 0).map((row) => row.map((v) => (v ? 1 : 0))),
+    };
+  }
+  if (next.player?.spawnTile) {
+    next.player.spawnTile = [
+      next.player.spawnTile[0] + offsetX,
+      next.player.spawnTile[1] + offsetY,
+    ];
+  }
+  if (offsetX || offsetY) {
+    for (const model of next.models || []) {
+      if (!Array.isArray(model.position)) continue;
+      if (offsetX) model.position[0] += offsetX * ts;
+      if (offsetY) model.position[2] += offsetY * ts;
+    }
+  }
+  ensureTileLayers(next);
+  ensurePathLayer(next);
+  ensureTerrainVisual(next);
   return next;
 }
 
@@ -1211,6 +2433,20 @@ function emptyMapLocal(width, height) {
     },
     characters: [],
     models: [],
+    tilePackage: null,
+    tileLayers: {
+      version: 1,
+      activeLayer: 0,
+      layers: [{ id: 'base', name: 'Base tiles', visible: true, cells: createTileGrid(width, height, null) }],
+    },
+    pathLayer: { version: 1, activeSetId: '', cells: createTileGrid(width, height, 0) },
+    terrainVisual: {
+      floorHeightScale: TILE_SIZE,
+      floorRecolorEnabled: true,
+      floorColors: { 1: '#d84f5f' },
+      rampRecolorEnabled: true,
+      rampColor: '#f4d03f',
+    },
   };
 }
 
@@ -1229,15 +2465,33 @@ function readMetaFromDom(map, { resize = false } = {}) {
       return resizeMapLocal(map, nw, nh);
     }
   }
+  ensureTileLayers(map);
+  ensurePathLayer(map);
+  ensureTerrainVisual(map);
   return map;
 }
 
 function applyMapSize(editor, log, render) {
   if (!editor.map) return;
   const before = `${editor.map.grid.width}×${editor.map.grid.height}`;
+  beginMapHistory(editor);
   editor.map = readMetaFromDom(editor.map, { resize: true });
+  commitMapHistory(editor);
   editor.dirty = true;
   log(`Map resized ${before} → ${editor.map.grid.width}×${editor.map.grid.height}`, 'ok');
+  render();
+}
+
+function applyMapExpand(editor, log, render) {
+  if (!editor.map) return;
+  const direction = document.querySelector('#mapExpandDirection')?.value || 'south';
+  const amount = Number(document.querySelector('#mapExpandAmount')?.value);
+  const before = `${editor.map.grid.width}×${editor.map.grid.height}`;
+  beginMapHistory(editor);
+  editor.map = expandMapLocal(editor.map, direction, amount);
+  commitMapHistory(editor);
+  editor.dirty = true;
+  log(`Map expanded ${direction} ${before} → ${editor.map.grid.width}×${editor.map.grid.height}`, 'ok');
   render();
 }
 
@@ -1254,15 +2508,22 @@ function syncWorkspace3DView(editor) {
   if (!want3d) return;
   editor._view3d = mountMap3DView(mount, editor.map, editor.modelCatalog || [], {
     modelUrl: (id, meta) => modelAssetUrl(id, meta),
+    tilePackage: editor.tilePackage,
   });
 }
 
 function syncMapEditorUI(state, { esc, render }) {
   const editor = ensureMapEditorState(state);
   syncWorkspace3DView(editor);
+  ensurePlacedRtpksTileThumbnails(editor, () => {
+    refreshPlacedTileVisuals(editor);
+    refreshMapPreview(state);
+  });
   refreshMapPreview(state);
   refreshPropOverlays(editor);
   if (editor.sidebarTab === 'props' && !editor.modelViewportOpen) refreshModelThumbnails(editor);
+  refreshRtpksTileThumbnails(editor);
+  refreshSelectedAssetPreview(editor);
   document.querySelectorAll('.brush-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.brush === editor.brush);
   });
@@ -1305,12 +2566,6 @@ function initPreviewModalDelegates(state, { render }) {
   document.addEventListener('click', (event) => {
     if (event.target.closest('#mapPreviewClose')) {
       editor.previewOpen = false;
-      render();
-      return;
-    }
-    if (event.target.closest('#mapPreviewDock') || event.target.closest('#mapPreviewCanvasDock')) {
-      editor.previewOpen = true;
-      editor.previewCam = { ...PREVIEW_CAM_DEFAULT, refit: true };
       render();
       return;
     }
@@ -1434,6 +2689,118 @@ async function fetchJsonQuiet(path) {
   }
 }
 
+async function loadTilePackage(editor, fileName) {
+  if (!fileName) {
+    editor.tilePackage = null;
+    editor.tileBrushId = null;
+    editor._rtpksThumbFile = '';
+    editor._rtpksThumbUrls = {};
+    return null;
+  }
+  const res = await fetch(`/api/tile-packages/package?file=${encodeURIComponent(fileName)}`);
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload.ok) throw new Error(payload.error || `RTPKS load failed (${res.status})`);
+  if (editor._rtpksThumbFile !== payload.package.fileName) {
+    editor._rtpksThumbFile = payload.package.fileName;
+    editor._rtpksThumbUrls = {};
+  }
+  editor.tilePackage = payload.package;
+  const firstTab = editor.tilePackage.tabs?.[0]?.id || '';
+  if (!editor.tileTabId || !editor.tilePackage.tabs?.some((tab) => tab.id === editor.tileTabId)) {
+    editor.tileTabId = firstTab;
+  }
+  if (editor.tilePackage.smartSets?.length
+      && !editor.tilePackage.smartSets.some((set) => set.id === editor.activePathSetId)) {
+    editor.activePathSetId = editor.tilePackage.smartSets[0].id;
+  }
+  if (editor.tileBrushId == null && editor.tilePackage.tiles?.length) {
+    const firstTile = tileCatalogFiltered(editor)[0] || editor.tilePackage.tiles[0];
+    editor.tileBrushId = firstTile.resortTileId;
+  }
+  return editor.tilePackage;
+}
+
+function rememberProjectTilePackage(editor, pkg = editor.tilePackage) {
+  if (!pkg || !editor.project) return;
+  const file = pkg.fileName || pkg.file;
+  if (!file) return;
+  const id = pkg.packId || file;
+  const existing = editor.project.tilePackages.find((item) => item.file === file || item.id === id);
+  if (existing) {
+    existing.id = id;
+    existing.file = file;
+    existing.name = pkg.name || existing.name || id;
+  } else {
+    editor.project.tilePackages.push({ id, file, name: pkg.name || id });
+  }
+  editor.project.defaultTilePackageId = id;
+  editor.projectDirty = true;
+}
+
+function syncProjectFromEditor(editor) {
+  if (!editor.project) return;
+  if (editor.map && editor.currentFile) {
+    const mapId = editor.map.id || editor.currentFile.replace(/\.owmap$/i, '');
+    let entry = editor.project.maps.find((item) => item.file === editor.currentFile || item.id === mapId);
+    if (!entry) {
+      entry = {
+        id: mapId,
+        name: editor.map.name || mapId,
+        file: editor.currentFile.endsWith('.owmap') ? editor.currentFile : `${editor.currentFile}.owmap`,
+        gridX: editor.project.maps.length,
+        gridY: 0,
+      };
+      editor.project.maps.push(entry);
+    }
+    entry.id = mapId;
+    entry.name = editor.map.name || mapId;
+    entry.file = editor.currentFile.endsWith('.owmap') ? editor.currentFile : `${editor.currentFile}.owmap`;
+    editor.project.editor.activeMapId = mapId;
+  }
+  if (editor.tilePackage) rememberProjectTilePackage(editor, editor.tilePackage);
+  editor.project.editor.viewMode = editor.workspaceView;
+  editor.project.editor.zoom = editor.editorZoom || 1;
+  editor.project.editor.overlays = {
+    ...(editor.project.editor.overlays || {}),
+    values: editor.showCellValues,
+    neighbors: editor.showNeighbors,
+  };
+}
+
+async function saveProject(editor) {
+  if (!editor.project) return null;
+  syncProjectFromEditor(editor);
+  const res = await fetch('/api/map-projects/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project: editor.project }),
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload.ok) throw new Error(payload.error || `Project save failed (${res.status})`);
+  editor.project = payload.project;
+  editor.projectId = payload.project.id;
+  const validation = await fetchJsonQuiet(`/api/map-projects/validate?id=${encodeURIComponent(payload.project.id)}`);
+  editor.projectValidation = validation?.validation || null;
+  editor.projectDirty = false;
+  return payload.project;
+}
+
+async function loadMapProject(editor, id = editor.projectId || 'default') {
+  const res = await fetch(`/api/map-projects/project?id=${encodeURIComponent(id || 'default')}`);
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || !payload.ok) throw new Error(payload.error || `Project load failed (${res.status})`);
+  editor.project = payload.project;
+  editor.projectId = payload.project.id;
+  editor.activePathSetId = editor.activePathSetId || payload.project.pathSets?.[0]?.id || '';
+  editor.editorZoom = payload.project.editor?.zoom || editor.editorZoom || 1;
+  editor.workspaceView = payload.project.editor?.viewMode === '3d' ? '3d' : editor.workspaceView;
+  editor.showNeighbors = payload.project.editor?.overlays?.neighbors !== false;
+  const validation = await fetchJsonQuiet(`/api/map-projects/validate?id=${encodeURIComponent(payload.project.id)}`);
+  editor.projectValidation = validation?.validation || null;
+  editor.projectDirty = false;
+  return payload.project;
+}
+
 export async function loadMapEditorListing(state, api) {
   const editor = ensureMapEditorState(state);
   const mapsPayload = await api('/api/maps/list');
@@ -1441,11 +2808,25 @@ export async function loadMapEditorListing(state, api) {
   editor.resolvedPath = mapsPayload.base || editor.resolvedPath;
   editor.settings = mapsPayload.settings || editor.settings;
 
+  const projectList = await fetchJsonQuiet('/api/map-projects/list');
+  if (projectList?.ok) editor.projects = projectList.projects || [];
+  try {
+    await loadMapProject(editor, editor.projectId || 'default');
+  } catch {
+    editor.project = createDefaultProject(editor.files);
+    editor.projects = editor.projects?.length ? editor.projects : [{ id: 'default', name: 'Default Project', file: 'default.json', mapCount: editor.project.maps.length }];
+  }
+  if (!editor.project.maps?.length && editor.files?.length) {
+    editor.project = createDefaultProject(editor.files);
+    editor.projectDirty = true;
+  }
+
   const settingsPayload = await fetchJsonQuiet('/api/maps/settings');
   if (settingsPayload?.ok) {
     editor.settings = settingsPayload.settings || editor.settings;
     editor.resolvedPath = settingsPayload.resolvedPath || editor.resolvedPath;
     editor.modelsResolvedPath = settingsPayload.modelsResolvedPath || editor.modelsResolvedPath;
+    editor.tilePackagesResolvedPath = settingsPayload.tilePackagesResolvedPath || editor.tilePackagesResolvedPath;
   }
 
   const caps = await fetchJsonQuiet('/api/admin/capabilities');
@@ -1463,6 +2844,22 @@ export async function loadMapEditorListing(state, api) {
       editor.modelsApiHint = 'Restart the Operations Desk (stop npm run admin, then start it again) to enable GLB model import.';
     }
   }
+
+  const tilePackagesPayload = await fetchJsonQuiet('/api/tile-packages/list');
+  if (tilePackagesPayload?.ok) {
+    editor.tilePackages = tilePackagesPayload.packages || [];
+    editor.tilePackagesResolvedPath = tilePackagesPayload.base || editor.tilePackagesResolvedPath;
+    const linkedFile = editor.map?.tilePackage?.file;
+    if (linkedFile && (!editor.tilePackage || editor.tilePackage.fileName !== linkedFile)) {
+      await loadTilePackage(editor, linkedFile);
+    } else if (!linkedFile && !editor.tilePackage && editor.project?.defaultTilePackageId) {
+      const projectPkg = editor.project.tilePackages?.find((pkg) => pkg.id === editor.project.defaultTilePackageId)
+        || editor.project.tilePackages?.[0];
+      if (projectPkg?.file) {
+        try { await loadTilePackage(editor, projectPkg.file); } catch { /* keep unloaded */ }
+      }
+    }
+  }
 }
 
 let modelPreviewGen = 0;
@@ -1470,22 +2867,361 @@ let modelPreviewGen = 0;
 function modelCatalogHtml(editor, esc) {
   const filtered = catalogFiltered(editor);
   const cards = filtered.map((m) => {
-    const fp = m.footprintTiles || { w: 1, d: 1, h: 1 };
+    const fp = modelAuthoringFootprint(m);
     const active = editor.placeModelId === m.id && editor.propTool === 'place' ? 'active' : '';
     const previewActive = editor.selectedModelId === m.id && editor.modelViewportOpen ? 'previewing' : '';
     return `<div class="map-model-card-wrap" draggable="true" data-drag-model="${esc(m.id)}">
-      <button type="button" class="map-model-card ${active} ${previewActive}" data-pick-model="${esc(m.id)}" title="${esc(m.displayName || m.id)} — click to place, drag onto map">
-        <canvas class="model-thumb-canvas" data-model-thumb="${esc(m.id)}" width="120" height="72" aria-hidden="true"></canvas>
+      <div class="map-model-card ${active} ${previewActive}" data-pick-model="${esc(m.id)}" role="button" tabindex="0" title="${esc(m.displayName || m.id)}: click to place, drag onto map">
+        <div class="map-model-thumb" data-model-thumb="${esc(m.id)}" aria-hidden="true">
+          <img data-model-thumb-img="${esc(m.id)}" alt="" loading="lazy" hidden>
+          <span class="map-model-thumb-fallback">${fp.w}×${fp.d}</span>
+        </div>
+        <div class="map-model-card-actions">
+          <button type="button" class="map-model-preview-btn" data-preview-model="${esc(m.id)}" title="3D preview" aria-label="Open 3D preview">${iconHtml('eye')}</button>
+          <button type="button" class="map-model-delete-btn" data-delete-model="${esc(m.id)}" title="${editor.modelsDeleteAvailable === false ? 'Restart npm run admin to enable delete' : 'Delete model from disk'}" aria-label="Delete ${esc(m.displayName || m.id)}" ${editor.modelsDeleteAvailable === false ? 'disabled' : ''}>×</button>
+        </div>
         <span class="map-model-card-name">${esc(m.displayName || m.id)}</span>
-        <span class="map-model-card-meta">${fp.w}×${fp.d} · ${Math.round(m.defaultYawDeg || 0)}° · ×${Number(m.defaultScale || 1).toFixed(2)}</span>
-      </button>
-      <button type="button" class="map-model-preview-btn" data-preview-model="${esc(m.id)}" title="3D preview">👁</button>
-      <button type="button" class="map-model-delete-btn" data-delete-model="${esc(m.id)}" title="${editor.modelsDeleteAvailable === false ? 'Restart npm run admin to enable delete' : 'Delete model from disk'}" aria-label="Delete ${esc(m.displayName || m.id)}" ${editor.modelsDeleteAvailable === false ? 'disabled' : ''}>×</button>
+        <span class="map-model-card-meta">${fp.w}×${fp.d}</span>
+      </div>
     </div>`;
   }).join('');
   if (!editor.modelCatalog?.length) return '<p class="hint">No compiled models yet. Click <strong>Import GLB…</strong> above.</p>';
   if (!filtered.length) return '<p class="hint">No models match your search.</p>';
   return cards;
+}
+
+function tilePackagePickerHtml(editor, esc) {
+  const packages = editor.tilePackages || [];
+  const options = packages.map((pkg) => {
+    const label = pkg.error
+      ? `${pkg.fileName} (invalid)`
+      : `${pkg.name || pkg.packId || pkg.fileName} · ${pkg.activeTileCount || 0} tiles`;
+    return `<option value="${esc(pkg.fileName)}" ${editor.tilePackage?.fileName === pkg.fileName ? 'selected' : ''}>${esc(label)}</option>`;
+  }).join('');
+  return `<div class="map-tile-package-box">
+    <label>Linked RTPKS package
+      <select id="mapTilePackageSelect" ${packages.length ? '' : 'disabled'}>
+        <option value="">No RTPKS linked</option>
+        ${options}
+      </select>
+    </label>
+    <button type="button" class="btn small" id="mapImportRtpks">Add RTPKS to C++ project…</button>
+    <input type="file" id="mapImportRtpksInput" accept=".rtpks,.meta,application/zip" multiple hidden>
+    ${editor.tilePackage
+      ? `<p class="hint"><code>${esc(editor.tilePackage.gamePath || editor.map?.tilePackage?.path || editor.tilePackage.fileName)}</code></p>`
+      : '<p class="hint">Import or select an RTPKS package, then paint visual tiles onto the map.</p>'}
+  </div>`;
+}
+
+function tileCatalogHtml(editor, esc) {
+  const pkg = editor.tilePackage;
+  if (!pkg) return '<p class="hint">No RTPKS package selected.</p>';
+  if (pkg.error) return `<p class="map-api-warn">${esc(pkg.error)}</p>`;
+  const tabs = pkg.tabs || [];
+  const tabbar = tabs.length
+    ? `<div class="map-tile-tabs">${tabs.map((tab) => `<button type="button" class="map-tile-tab ${editor.tileTabId === tab.id ? 'active' : ''}" data-tile-tab="${esc(tab.id)}" title="${esc(tab.name)}">${esc(tab.name)}</button>`).join('')}</div>`
+    : '';
+  const filtered = tileCatalogFiltered(editor);
+  if (!filtered.length) return `${tabbar}<p class="hint">No tiles match this tab/search.</p>`;
+  const visible = filtered;
+  const controls = `<div class="map-tile-pagebar">
+    <span>${filtered.length} tiles</span>
+    <span class="map-tile-pagebar-hint">Scroll library</span>
+  </div>`;
+  const cards = visible.map((tile) => {
+    const active = Number(editor.tileBrushId) === Number(tile.resortTileId) && editor.brush === 'tile' ? 'active' : '';
+    const fp = tileFootprint(tile);
+    const size = tileSizeLabel(fp);
+    const previewSrc = tile.previewImage || cachedRtpksTileThumb(editor, tile.resortTileId);
+    const preview = previewSrc
+      ? `<img src="${esc(previewSrc)}" alt="" loading="lazy">`
+      : `<span class="map-tile-color" style="background:${tileHashColor(tile.resortTileId)}"></span>`;
+    return `<button type="button" class="map-tile-card ${active}" data-pick-tile="${tile.resortTileId}" data-rtpks-thumb="${tile.resortTileId}" title="${size ? `${size} tile` : 'Tile'}" style="${tileCardSpanStyle(fp)}">
+      <span class="map-tile-preview">${preview}</span>
+      ${size ? `<span class="map-tile-size">${esc(size)}</span>` : ''}
+    </button>`;
+  }).join('');
+  return `${tabbar}${controls}<div class="map-tile-stamp-grid">${cards}</div>`;
+}
+
+function tileLayerPanelHtml(editor, esc) {
+  if (!editor.map) return '';
+  ensureTileLayers(editor.map);
+  const layers = editor.map.tileLayers.layers || [];
+  const canDelete = layers.length > 1;
+  return `<div class="map-layer-panel" id="mapTileLayerPanel">
+    <div class="map-layer-panel-head">
+      <strong>Tile levels</strong>
+      <span>${layers.length}</span>
+    </div>
+    <div class="map-layer-stack" aria-label="Tile level selector">
+      ${layers.map((layer, index) => `<button type="button" class="map-layer-level ${editor.map.tileLayers.activeLayer === index ? 'active' : ''} ${layer.visible === false ? 'off' : ''}" data-active-tile-layer="${index}" title="Paint level ${index + 1}" aria-label="Paint level ${index + 1}">
+        <span></span>
+      </button>`).reverse().join('')}
+    </div>
+    <div class="map-layer-visibility" aria-label="Tile level visibility">
+      ${layers.map((layer, index) => `<button type="button" class="map-layer-eye ${layer.visible === false ? 'off' : ''}" data-toggle-tile-layer="${index}" title="${layer.visible === false ? 'Show' : 'Hide'} level ${index + 1}" aria-label="${layer.visible === false ? 'Show' : 'Hide'} level ${index + 1}">
+        ${iconHtml('eye')}
+      </button>`).join('')}
+    </div>
+    <button type="button" class="map-layer-delete" data-delete-tile-layer ${canDelete ? '' : 'disabled'} title="${canDelete ? 'Delete active decoration layer' : 'At least one decoration layer is required'}">Delete layer</button>
+  </div>`;
+}
+
+function mapAuthoringLayersHtml(editor, esc) {
+  if (!editor.map) return '<div class="map-authoring-layers"><p class="hint">Load a map to edit layers.</p></div>';
+  ensureTileLayers(editor.map);
+  const activeTileLayer = editor.map.tileLayers.activeLayer || 0;
+  const sysLayers = [
+    { id: 'height', label: 'Height', brush: 'height', active: editor.brush === 'height' },
+    { id: 'collision', label: 'Collision', brush: 'collision', active: editor.brush === 'collision' },
+    { id: 'special', label: 'Modifiers', brush: 'ramp', active: editor.brush === 'ramp' },
+    { id: 'path', label: 'Paths', brush: 'path', active: editor.brush === 'path' },
+    { id: 'spawn', label: 'Spawn', brush: 'spawn', active: editor.brush === 'spawn' },
+  ];
+  const layers = editor.map.tileLayers.layers || [];
+  const decoRows = layers.map((layer, index) => {
+    const top = index === layers.length - 1;
+    const base = index === 0;
+    const order = top ? 'TOP' : (base ? 'BASE' : `L${index + 1}`);
+    return `
+    <div class="map-authoring-row ${editor.brush === 'tile' && activeTileLayer === index ? 'active' : ''} ${layer.visible === false ? 'off' : ''}">
+      <button type="button" class="map-authoring-pick" data-active-tile-layer="${index}" title="Edit decoration layer ${index + 1}">
+        <span class="map-layer-swatch"></span>
+        <strong>Deco ${index + 1}</strong>
+        <em>${esc(order)}</em>
+      </button>
+      <button type="button" class="map-authoring-eye ${layer.visible === false ? 'off' : ''}" data-toggle-tile-layer="${index}" title="${layer.visible === false ? 'Show' : 'Hide'} decoration layer ${index + 1}" aria-label="${layer.visible === false ? 'Show' : 'Hide'} decoration layer ${index + 1}">
+        ${iconHtml('eye')}
+      </button>
+    </div>`;
+  }).join('');
+  const canAdd = layers.length < MAX_TILE_LAYERS;
+  const canDelete = layers.length > 1;
+  const propsActive = isPropLayerActive(editor);
+  return `<section class="map-authoring-layers" id="mapTileLayerPanel">
+    <header>
+      <strong>Layers</strong>
+      <span>${esc(propsActive ? 'Props' : editor.brush === 'tile' ? `Deco ${activeTileLayer + 1}` : BRUSHES.find((b) => b.id === editor.brush)?.label || 'Paint')}</span>
+    </header>
+    <div class="map-authoring-system">
+      ${sysLayers.map((layer) => `<button type="button" class="map-authoring-system-btn ${layer.active ? 'active' : ''}" data-map-layer-brush="${layer.brush}" title="Edit ${esc(layer.label)} layer">${esc(layer.label)}</button>`).join('')}
+      <button type="button" class="map-authoring-system-btn map-authoring-props ${propsActive ? 'active' : ''}" data-map-prop-layer title="Edit placed props">Props</button>
+    </div>
+    <div class="map-authoring-deco">
+      ${decoRows}
+    </div>
+    <div class="map-authoring-layer-actions">
+      <button type="button" class="map-authoring-add" data-add-tile-layer ${canAdd ? '' : 'disabled'} title="${canAdd ? 'Add decoration layer' : `Maximum ${MAX_TILE_LAYERS} decoration layers`}">Add ${layers.length}/${MAX_TILE_LAYERS}</button>
+      <button type="button" class="map-authoring-delete" data-delete-tile-layer ${canDelete ? '' : 'disabled'} title="${canDelete ? 'Delete active decoration layer' : 'At least one decoration layer is required'}">Delete</button>
+    </div>
+  </section>`;
+}
+
+function selectedAssetPreviewHtml(editor, esc, { showTileGlbDownload = false } = {}) {
+  let title = 'Selected preview';
+  let meta = 'Pick a tile or prop to preview it before placement.';
+  if (editor.sidebarTab === 'props' && editor.placeModelId) {
+    const model = catalogEntry(editor, editor.placeModelId);
+    const fp = modelAuthoringFootprint(model);
+    title = esc(model?.displayName || editor.placeModelId);
+    meta = `${fp.w}x${fp.d} footprint`;
+  } else if (editor.tileBrushId != null) {
+    const tile = tileEntry(editor, editor.tileBrushId);
+    const fp = tileFootprint(tile);
+    const size = tileSizeLabel(fp);
+    title = 'Selected tile';
+    meta = size ? `${size} footprint` : '1x1 tile';
+  }
+  const canDownloadTileGlb = showTileGlbDownload
+    && editor.tileBrushId != null
+    && editor.tilePackage?.fileName;
+  const downloadBtn = canDownloadTileGlb
+    ? `<button type="button" class="map-selected-preview-download" id="mapSelectedTileGlbDownload" title="Download tile GLB" aria-label="Download tile GLB">${iconHtml('download')}</button>`
+    : '';
+  return `<section class="map-selected-preview" id="mapSelectedPreview" aria-live="polite">
+    <header>
+      <strong>${title}</strong>
+      <span>${esc(meta)}</span>
+    </header>
+    <div class="map-selected-preview-viewport">
+      ${downloadBtn}
+      <div class="map-selected-preview-frame" id="mapSelectedPreviewFrame">
+        <p class="hint">No selection</p>
+      </div>
+    </div>
+  </section>`;
+}
+
+function projectPickerHtml(editor, esc) {
+  const projects = editor.projects?.length ? editor.projects : [{ id: editor.project?.id || 'default', name: editor.project?.name || 'Default Project', mapCount: editor.project?.maps?.length || 0 }];
+  const options = projects.map((project) => `<option value="${esc(project.id)}" ${project.id === editor.projectId ? 'selected' : ''}>${esc(project.name || project.id)} · ${project.mapCount || 0} maps</option>`).join('');
+  return `<label class="map-project-picker">Project
+    <select id="mapProjectSelect">${options}</select>
+  </label>`;
+}
+
+function mapSizePanelHtml(map, esc) {
+  if (!map) {
+    return '<p class="hint">Load a map to edit size.</p>';
+  }
+  const w = map.grid?.width || 16;
+  const h = map.grid?.height || 16;
+  return `<div class="map-size-panel">
+    <h4>Map size</h4>
+    <div class="map-size-fields">
+      <label>Width<input id="mapWidth" type="number" min="4" max="128" value="${w}"></label>
+      <label>Height<input id="mapHeight" type="number" min="4" max="128" value="${h}"></label>
+    </div>
+    <button type="button" class="btn small" id="mapApplySize">Apply size</button>
+    <h4>Increase size</h4>
+    <p class="hint">Add empty cells on one edge. Existing terrain stays in place.</p>
+    <label class="map-size-direction">Direction
+      <select id="mapExpandDirection">
+        <option value="north">North (rows on top)</option>
+        <option value="south" selected>South (rows on bottom)</option>
+        <option value="west">West (columns on left)</option>
+        <option value="east">East (columns on right)</option>
+      </select>
+    </label>
+    <label>Cells to add<input id="mapExpandAmount" type="number" min="1" max="64" value="1"></label>
+    <button type="button" class="btn small" id="mapExpandSize">Increase size</button>
+  </div>`;
+}
+
+function mapMatrixHtml(editor, esc) {
+  const maps = editor.project?.maps || [];
+  const activeId = editor.map?.id || editor.project?.editor?.activeMapId || '';
+  if (!maps.length) {
+    return `<div class="map-matrix-empty">
+      <p class="hint">Save this map to add it to the project matrix.</p>
+    </div>`;
+  }
+  const minX = Math.min(...maps.map((map) => map.gridX), 0);
+  const maxX = Math.max(...maps.map((map) => map.gridX), 0);
+  const minY = Math.min(...maps.map((map) => map.gridY), 0);
+  const maxY = Math.max(...maps.map((map) => map.gridY), 0);
+  const byCell = new Map(maps.map((map) => [`${map.gridX},${map.gridY}`, map]));
+  const rows = [];
+  for (let y = minY; y <= maxY; y += 1) {
+    const cells = [];
+    for (let x = minX; x <= maxX; x += 1) {
+      const map = byCell.get(`${x},${y}`);
+      if (!map) {
+        cells.push('<span class="map-matrix-cell empty"></span>');
+      } else {
+        const active = map.id === activeId || map.file === editor.currentFile ? 'active' : '';
+        cells.push(`<button type="button" class="map-matrix-cell ${active}" data-project-map="${esc(map.id)}" title="${esc(map.file)}">
+          <strong>${esc(map.name || map.id)}</strong>
+          <span>${esc(map.file)}</span>
+        </button>`);
+      }
+    }
+    rows.push(`<div class="map-matrix-row">${cells.join('')}</div>`);
+  }
+  return `<div class="map-matrix">${rows.join('')}</div>`;
+}
+
+function edgeValidationHtml(editor, esc) {
+  const warnings = editor.projectValidation?.warnings || validateMapEdges(editor);
+  if (!warnings.length) return '<p class="map-edge-ok">Adjacent map edges line up.</p>';
+  return `<ul class="map-edge-warnings">${warnings.map((warning) => `<li>${esc(warning)}</li>`).join('')}</ul>`;
+}
+
+function validateMapEdges(editor) {
+  const project = editor.project;
+  const active = editor.map;
+  if (!project || !active) return [];
+  const entry = project.maps.find((map) => map.id === active.id || map.file === editor.currentFile);
+  if (!entry) return [];
+  const warnings = [];
+  const neighborAt = (dx, dy) => project.maps.find((map) => map.gridX === entry.gridX + dx && map.gridY === entry.gridY + dy);
+  const dirs = [
+    ['north', 0, -1],
+    ['east', 1, 0],
+    ['south', 0, 1],
+    ['west', -1, 0],
+  ];
+  for (const [name, dx, dy] of dirs) {
+    const neighbor = neighborAt(dx, dy);
+    if (!neighbor) continue;
+    warnings.push(`Check ${name} edge against ${neighbor.file}; open the neighbor to compare exact heights before export.`);
+  }
+  return warnings;
+}
+
+function pathSetOptionsHtml(editor, esc) {
+  const sets = (editor.tilePackage?.smartSets || []).map((set) => ({ ...set, name: `${set.name || set.id} · RTPKS` }));
+  if (!sets.length) return '<option value="">No RTPKS smart set available</option>';
+  return sets.map((set) => `<option value="${esc(set.id)}" ${set.id === (editor.activePathSetId || editor.map?.pathLayer?.activeSetId) ? 'selected' : ''}>${esc(set.name || set.id)}</option>`).join('');
+}
+
+function smartSetPreviewHtml(editor, set, esc) {
+  const width = Math.max(1, Number(set?.width || 5));
+  const height = Math.max(1, Number(set?.height || 3));
+  const cells = [];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const tileId = Number(set?.grid?.[x]?.[y]);
+      const src = Number.isFinite(tileId) && tileId >= 0 ? tilePreviewSource(editor, tileId) : '';
+      cells.push(`<span class="map-smart-preview-cell">${src ? `<img src="${esc(src)}" alt="" loading="lazy">` : ''}</span>`);
+    }
+  }
+  return `<div class="map-smart-preview-grid" style="grid-template-columns:repeat(${width}, 22px)">${cells.join('')}</div>`;
+}
+
+function smartSetCardsHtml(editor, esc) {
+  const sets = editor.tilePackage?.smartSets || [];
+  if (!sets.length) return '';
+  const activeId = editor.activePathSetId || editor.map?.pathLayer?.activeSetId || sets[0].id;
+  return `<div class="map-smart-card-grid">${sets.map((set) => `<button type="button" class="map-smart-card ${set.id === activeId ? 'active' : ''}" data-smart-set-card="${esc(set.id)}" title="${esc(set.name || set.id)}">
+    ${smartSetPreviewHtml(editor, set, esc)}
+    <span>${esc(set.name || set.id)}</span>
+  </button>`).join('')}</div>`;
+}
+
+function pathSetEditorHtml(editor, esc) {
+  const set = activePathSet(editor);
+  return `<div class="map-path-panel">
+    <div class="map-path-actions">
+      <label>Path set
+        <select id="mapPathSetSelect">${pathSetOptionsHtml(editor, esc)}</select>
+      </label>
+    </div>
+    ${smartSetCardsHtml(editor, esc)}
+    ${set ? `<p class="hint">Using RTPKS smart tiles baked from PDSMS.</p>`
+      : '<p class="hint">Re-export this RTPKS from PDSMS with smart grids to use smart path drawing.</p>'}
+  </div>`;
+}
+
+function terrainVisualHtml(editor, esc) {
+  const visual = ensureTerrainVisual(editor.map);
+  if (!visual) return '';
+  return `<div class="map-visual-panel">
+    <h3>Terrain visuals</h3>
+    <label>Height per floor
+      <input id="mapFloorHeightScale" type="number" min="1" max="64" step="1" value="${esc(visual.floorHeightScale)}">
+    </label>
+    <label class="map-inline-check"><input id="mapFloorRecolorEnabled" type="checkbox" ${visual.floorRecolorEnabled ? 'checked' : ''}> Recolor floors</label>
+    <label>First floor color
+      <input id="mapFloorColor1" type="color" value="${esc(visual.floorColors?.[1] || '#d84f5f')}">
+    </label>
+    <label class="map-inline-check"><input id="mapRampRecolorEnabled" type="checkbox" ${visual.rampRecolorEnabled ? 'checked' : ''}> Recolor ramps</label>
+    <label>Ramp color
+      <input id="mapRampColor" type="color" value="${esc(visual.rampColor || '#f4d03f')}">
+    </label>
+    <label>3D light preset
+      <select id="mapLightPreset">
+        <option value="day" ${visual.lightPreset === 'day' ? 'selected' : ''}>Day</option>
+        <option value="sunset" ${visual.lightPreset === 'sunset' ? 'selected' : ''}>Sunset / sunrise</option>
+        <option value="night" ${visual.lightPreset === 'night' ? 'selected' : ''}>Night</option>
+      </select>
+    </label>
+    <div class="map-visual-row">
+      <label>Yaw° <input id="mapLightYaw" type="number" min="-180" max="180" step="1" value="${esc(visual.lightYawDeg)}"></label>
+      <label>Pitch° <input id="mapLightPitch" type="number" min="5" max="85" step="1" value="${esc(visual.lightPitchDeg)}"></label>
+    </div>
+  </div>`;
 }
 
 /** Models directory relative to the game project root (pokemon-resort), for owmap references. */
@@ -1505,8 +3241,8 @@ function placedPropsHtml(editor, esc) {
   const models = Array.isArray(editor.map.models) ? editor.map.models : [];
   const ts = editor.map.grid?.tileSize || TILE_SIZE;
   const status = editor.propTool === 'place' && editor.placeModelId
-    ? `<p class="map-place-active">Placing <strong>${esc(catalogEntry(editor, editor.placeModelId)?.displayName || editor.placeModelId)}</strong> — click or drag onto the grid. Use <strong>◎</strong> in the toolbar to select/move.</p>`
-    : '<p class="hint">Click a prop to arm placement, or drag it onto the map. Use toolbar <strong>◎</strong> to select and drag placed props.</p>';
+    ? `<p class="map-place-active">Placing <strong>${esc(catalogEntry(editor, editor.placeModelId)?.displayName || editor.placeModelId)}</strong>: click or drag onto the grid. Use the select tool in the toolbar to move it.</p>`
+    : '<p class="hint">Click a prop to arm placement, or drag it onto the map. Use the select tool in the toolbar to select and drag placed props.</p>';
   const rows = models.map((m, i) => {
     const tx = Math.floor((m.position?.[0] ?? 0) / ts);
     const tz = Math.floor((m.position?.[2] ?? 0) / ts);
@@ -1605,7 +3341,7 @@ function compileWizardHtml(editor, esc) {
   let body = '';
   if (step === 1) {
     body = `<div class="map-compile-drop" id="mapCompileWizardDrop">
-      <p><strong>Step 1 — Upload model .zip</strong></p>
+      <p><strong>Step 1: Upload model .zip</strong></p>
       <p class="hint">Upload a <code>.glb</code>, or a <code>.zip</code> with a GLB or <code>.obj</code>+<code>.mtl</code>+textures (OBJ is converted to GLB; PNG alpha preserved).</p>
       <div class="map-compile-drop-zone">
         <span>Drop .glb or .zip here</span>
@@ -1616,7 +3352,7 @@ function compileWizardHtml(editor, esc) {
   } else if (step === 2 && check) {
     if (check.format === 'glb') {
       body = `<div class="map-compile-review">
-        <p><strong>Step 2 — GLB archive</strong></p>
+        <p><strong>Step 2: GLB archive</strong></p>
         <p class="hint">Stored as-is. Set id, display name, and default placement rotation/scale.</p>
         ${compileMetaFieldsHtml(editor, esc, check)}
         <ul class="map-compile-checklist">
@@ -1633,11 +3369,11 @@ function compileWizardHtml(editor, esc) {
     const matRows = (mtl?.materials || check.materials || []).map((row) => {
       const cls = row.ok ? 'ok' : (row.mapKd ? 'bad' : 'warn');
       const status = row.ok ? `✓ ${esc(row.resolved)}` : (row.mapKd ? `✗ missing (${esc(row.mapKd)})` : '○ no map_Kd');
-      return `<li class="${cls}"><strong>${esc(row.name)}</strong> — ${status}</li>`;
-    }).join('') || '<li class="warn">No materials in MTL — compile will use a gray fallback texture.</li>';
+      return `<li class="${cls}"><strong>${esc(row.name)}</strong>: ${status}</li>`;
+    }).join('') || '<li class="warn">No materials in MTL: compile will use a gray fallback texture.</li>';
     const canFix = mtl?.materials?.some((r) => r.mapKd && !r.ok);
     body = `<div class="map-compile-review">
-      <p><strong>Step 2 — Verify materials &amp; textures</strong></p>
+      <p><strong>Step 2: Verify materials &amp; textures</strong></p>
       <p class="hint">Each <code>map_Kd</code> must resolve inside the zip. Server converts OBJ→GLB; PNG alpha channels are kept (no black cutouts).</p>
       ${compileMetaFieldsHtml(editor, esc, check)}
       <ul class="map-compile-checklist">
@@ -1656,13 +3392,13 @@ function compileWizardHtml(editor, esc) {
     }
   } else if (step === 3) {
     body = `<div class="map-compile-progress">
-      <p><strong>Step 3 — Importing…</strong></p>
+      <p><strong>Step 3: Importing…</strong></p>
       <p class="hint">Saving GLB (or converting OBJ→GLB with alpha) and writing <code>model.json</code>.</p>
     </div>`;
   } else if (step === 4) {
     const done = editor.compileResult || {};
     body = `<div class="map-compile-done">
-      <p><strong>Step 4 — Saved</strong></p>
+      <p><strong>Step 4: Saved</strong></p>
       <p class="map-compile-success">✓ <code>${esc(done.manifest?.glbFile || `${done.modelId || ''}.glb`)}</code> (${done.bytes || 0} bytes)</p>
       <p class="hint">Format: <strong>${esc(done.sourceFormat === 'obj' ? 'OBJ→GLB' : 'GLB')}</strong> · ${done.manifest?.triangleCount || '?'} tris · footprint ${esc(String(done.manifest?.footprintTiles?.w || '?'))}×${esc(String(done.manifest?.footprintTiles?.d || '?'))}×${esc(String(done.manifest?.footprintTiles?.h || '?'))} · hash <code>${esc((done.manifest?.modelHash || '').slice(0, 8))}</code></p>
       <p class="hint">${esc(done.resolvedDirectory || '')}</p>
@@ -1717,7 +3453,7 @@ async function inspectModelUpload(file) {
 async function importModelUpload(file, meta = {}) {
   const modelId = sanitizeModelId(meta.modelId);
   if (!isValidModelId(modelId)) {
-    throw new Error('Model id is required — use letters, numbers, underscore, or hyphen (e.g. pokemon_center).');
+    throw new Error('Model id is required: use letters, numbers, underscore, or hyphen (e.g. pokemon_center).');
   }
   const fd = new FormData();
   if (/\.glb$/i.test(file.name)) fd.append('glb', file, file.name);
@@ -1732,94 +3468,246 @@ async function importModelUpload(file, meta = {}) {
   return payload;
 }
 
-function drawFootprintThumb(canvas, model) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const w = canvas.width;
-  const h = canvas.height;
-  const fp = model.footprintTiles || { w: 1, d: 1, h: 1 };
-  ctx.fillStyle = '#0b2a3a';
-  ctx.fillRect(0, 0, w, h);
-  const cx = w * 0.5;
-  const cy = h * 0.62;
-  const tw = Math.min(36, w * 0.22 * fp.w);
-  const td = Math.min(28, w * 0.16 * fp.d);
-  const th = Math.min(22, h * 0.14 * fp.h);
-  ctx.fillStyle = 'rgba(126,184,216,.55)';
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - th);
-  ctx.lineTo(cx + tw, cy - td * 0.35);
-  ctx.lineTo(cx + tw, cy + td * 0.65);
-  ctx.lineTo(cx, cy + th);
-  ctx.lineTo(cx - tw, cy + td * 0.65);
-  ctx.lineTo(cx - tw, cy - td * 0.35);
-  ctx.closePath();
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(251,191,36,.7)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,.85)';
-  ctx.font = 'bold 10px system-ui,sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${fp.w}×${fp.d}×${fp.h}`, cx, h - 8);
+const modelThumbCache = new Map();
+const modelThumbPending = new Set();
+
+function setModelThumbElement(el, dataUrl) {
+  const img = el?.querySelector?.('[data-model-thumb-img]');
+  if (!img || !dataUrl) return;
+  img.src = dataUrl;
+  img.hidden = false;
+  el.classList.add('has-image');
 }
 
-const modelThumbCache = new Map();
-
-function paintThumbImage(canvas, dataUrl, model) {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-  const img = new Image();
-  img.onload = () => {
-    const w = canvas.width;
-    const h = canvas.height;
-    ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#0b2a3a';
-    ctx.fillRect(0, 0, w, h);
-    const scale = Math.min(w / img.width, (h - 12) / img.height);
-    const dw = img.width * scale;
-    const dh = img.height * scale;
-    ctx.drawImage(img, (w - dw) / 2, (h - 12 - dh) / 2, dw, dh);
-    const fp = model.footprintTiles || { w: 1, d: 1, h: 1 };
-    ctx.fillStyle = 'rgba(0,0,0,.5)';
-    ctx.fillRect(0, h - 13, w, 13);
-    ctx.fillStyle = 'rgba(255,255,255,.92)';
-    ctx.font = 'bold 9px system-ui,sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${fp.w}×${fp.d} · ${fp.w * fp.d} tiles`, w * 0.5, h - 3);
-  };
-  img.src = dataUrl;
+function requestModelThumbnail(model, options = {}) {
+  if (!model?.id) return Promise.resolve('');
+  const key = [
+    model.id,
+    model.modelHash || '',
+    options.width || 180,
+    options.height || 132,
+    options.yaw ?? 0,
+    options.pitch ?? 18,
+    options.zoomFactor ?? 0.86,
+  ].join('|');
+  const cached = modelThumbCache.get(key);
+  if (typeof cached === 'string') return Promise.resolve(cached);
+  if (cached && typeof cached.then === 'function') return cached;
+  const promise = renderGlbThumbnail(modelAssetUrl(model.id, model), {
+    width: options.width || 180,
+    height: options.height || 132,
+    yaw: options.yaw ?? 0,
+    pitch: options.pitch ?? 18,
+    zoomFactor: options.zoomFactor ?? 0.86,
+  })
+    .then(async (dataUrl) => {
+      if (!(await dataUrlHasVisiblePixels(dataUrl))) {
+        modelThumbCache.delete(key);
+        return '';
+      }
+      modelThumbCache.set(key, dataUrl);
+      return dataUrl;
+    })
+    .catch((error) => {
+      console.warn(`Model thumbnail failed for ${model.id}:`, error);
+      modelThumbCache.delete(key);
+      return '';
+    });
+  modelThumbCache.set(key, promise);
+  return promise;
 }
 
 // Render each catalog card as a real front-face snapshot of the model (cached per
 // id+hash), falling back to the footprint diagram while the GLB renders. This is the
 // "preview of the model" used to lay out maps, plus its tile footprint/area.
 function refreshModelThumbnails(editor) {
-  document.querySelectorAll('[data-model-thumb]').forEach((canvas) => {
-    const id = canvas.dataset.modelThumb;
+  document.querySelectorAll('[data-model-thumb]').forEach((thumb) => {
+    const id = thumb.dataset.modelThumb;
     const model = (editor.modelCatalog || []).find((m) => m.id === id);
     if (!model) return;
-    const key = `${id}|${model.modelHash || ''}`;
-    const cached = modelThumbCache.get(key);
-    if (cached) {
-      paintThumbImage(canvas, cached, model);
-      return;
-    }
-    drawFootprintThumb(canvas, model);
-    renderGlbThumbnail(modelAssetUrl(id, model), {
-      width: canvas.width,
-      height: canvas.height,
-      yaw: 0,
-      pitch: 15,
-    })
+    const pendingKey = `${id}|${model.modelHash || ''}`;
+    if (modelThumbPending.has(pendingKey)) return;
+    modelThumbPending.add(pendingKey);
+    requestModelThumbnail(model, { width: 180, height: 132, pitch: 18, zoomFactor: 0.82 })
       .then((dataUrl) => {
-        modelThumbCache.set(key, dataUrl);
-        if (canvas.isConnected && canvas.dataset.modelThumb === id) {
-          paintThumbImage(canvas, dataUrl, model);
+        if (dataUrl && thumb.isConnected && thumb.dataset.modelThumb === id) {
+          setModelThumbElement(thumb, dataUrl);
         }
       })
-      .catch(() => { /* keep footprint fallback */ });
+      .finally(() => modelThumbPending.delete(pendingKey));
   });
+}
+
+function refreshRtpksTileThumbnails(editor) {
+  if (!editor.tilePackage?.fileName) return;
+  if (editor._tileThumbObserver) {
+    editor._tileThumbObserver.disconnect();
+    editor._tileThumbObserver = null;
+  }
+  const root = document.querySelector('.map-tile-catalog');
+  const renderCard = (btn) => {
+    const tileId = Number(btn.dataset.rtpksThumb);
+    const target = btn.querySelector('.map-tile-preview');
+    if (!target || !tileEntry(editor, tileId)) return;
+    const cached = cachedRtpksTileThumb(editor, tileId);
+    if (cached) {
+      applyTilePreviewImage(target, cached);
+      return;
+    }
+    requestRtpksTileThumbnail(editor, tileId, {
+      onReady: (dataUrl) => {
+        if (!dataUrl || !btn.isConnected || Number(btn.dataset.rtpksThumb) !== tileId) return;
+        applyTilePreviewImage(target, dataUrl);
+        refreshPlacedTileVisuals(editor);
+      },
+    });
+  };
+
+  if ('IntersectionObserver' in window && root) {
+    editor._tileThumbObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const btn = entry.target;
+        editor._tileThumbObserver?.unobserve(btn);
+        renderCard(btn);
+      }
+    }, { root, rootMargin: '240px 0px' });
+  }
+
+  const thumbButtons = document.querySelectorAll('[data-rtpks-thumb]');
+  thumbButtons.forEach((btn) => {
+    const tileId = Number(btn.dataset.rtpksThumb);
+    const target = btn.querySelector('.map-tile-preview');
+    const cached = cachedRtpksTileThumb(editor, tileId);
+    if (cached) {
+      applyTilePreviewImage(target, cached);
+      return;
+    }
+    const cardRect = btn.getBoundingClientRect();
+    const rootRect = root?.getBoundingClientRect();
+    const visibleNow = rootRect
+      ? cardRect.bottom >= rootRect.top - 240 && cardRect.top <= rootRect.bottom + 240
+      : cardRect.bottom >= -240 && cardRect.top <= window.innerHeight + 240;
+    if (visibleNow) renderCard(btn);
+    else if (editor._tileThumbObserver) editor._tileThumbObserver.observe(btn);
+    else renderCard(btn);
+  });
+}
+
+function paintSelectedPreviewFrame(frame, dataUrl, label = '') {
+  frame.innerHTML = `<img src="${dataUrl}" alt="${label}" loading="lazy">`;
+}
+
+function disposeSelectedAssetPreview(editor, frame = null) {
+  editor._selectedAssetPreviewToken = (Number(editor._selectedAssetPreviewToken) || 0) + 1;
+  if (editor._selectedAssetPreview3d?.dispose) {
+    editor._selectedAssetPreview3d.dispose();
+  }
+  editor._selectedAssetPreview3d = null;
+  if (frame) frame.innerHTML = '';
+}
+
+function dataUrlHasVisiblePixels(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, img.naturalWidth || img.width);
+      canvas.height = Math.max(1, img.naturalHeight || img.height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(true); return; }
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] > 8) { resolve(true); return; }
+      }
+      resolve(false);
+    };
+    img.onerror = () => resolve(false);
+    img.src = dataUrl;
+  });
+}
+
+function refreshSelectedAssetPreview(editor) {
+  const frame = document.querySelector('#mapSelectedPreviewFrame');
+  if (!frame) return;
+  if (editor.sidebarTab === 'props' && editor.placeModelId) {
+    disposeSelectedAssetPreview(editor, frame);
+    const model = catalogEntry(editor, editor.placeModelId);
+    if (!model) {
+      frame.innerHTML = '<p class="hint">No prop selected</p>';
+      return;
+    }
+    frame.innerHTML = '<p class="hint">Rendering preview...</p>';
+    requestModelThumbnail(model, { width: 320, height: 220, yaw: 0, pitch: 18, zoomFactor: 0.9 })
+      .then((dataUrl) => {
+        if (frame.isConnected && dataUrl) paintSelectedPreviewFrame(frame, dataUrl, model.displayName || model.id);
+        else if (frame.isConnected) frame.innerHTML = '<p class="hint">Preview unavailable</p>';
+      })
+      .catch(() => {
+        if (frame.isConnected) frame.innerHTML = '<p class="hint">Preview unavailable</p>';
+      });
+    return;
+  }
+  if (editor.tileBrushId != null && editor.tilePackage?.fileName) {
+    const tileId = Number(editor.tileBrushId);
+    const tile = tileEntry(editor, tileId);
+    const fileName = editor.tilePackage.fileName;
+    if (!tile) {
+      disposeSelectedAssetPreview(editor, frame);
+      frame.innerHTML = '<p class="hint">No tile selected</p>';
+      return;
+    }
+    const key = `tile3d|${fileName}|${tileId}`;
+    if (editor._selectedAssetPreview3d?.key === key && editor._selectedAssetPreview3d.host === frame && frame.isConnected) {
+      return;
+    }
+    disposeSelectedAssetPreview(editor, frame);
+    frame.innerHTML = '<p class="hint">Loading 3D preview...</p>';
+    const expectedFrame = frame;
+    const expectedKey = key;
+    const token = (Number(editor._selectedAssetPreviewToken) || 0) + 1;
+    editor._selectedAssetPreviewToken = token;
+    editor._selectedAssetPreview3d = { key, host: frame, dispose: null, pending: true };
+    mountRtpksTilePreview(frame, fileName, editor.tilePackage, tileId, {
+      isCurrent: () => editor._selectedAssetPreviewToken === token
+        && Number(editor.tileBrushId) === tileId
+        && editor.tilePackage?.fileName === fileName,
+    })
+      .then((viewport) => {
+        if (!expectedFrame.isConnected || editor._selectedAssetPreviewToken !== token) {
+          viewport.dispose?.();
+          return;
+        }
+        if (editor.tileBrushId == null || Number(editor.tileBrushId) !== tileId || editor.tilePackage?.fileName !== fileName) {
+          viewport.dispose?.();
+          return;
+        }
+        editor._selectedAssetPreview3d = { key: expectedKey, host: expectedFrame, dispose: viewport.dispose };
+      })
+      .catch(() => {
+        if (!expectedFrame.isConnected || editor._selectedAssetPreviewToken !== token) return;
+        editor._selectedAssetPreview3d = null;
+        const cached = cachedRtpksTileThumb(editor, tileId);
+        if (cached) {
+          paintSelectedPreviewFrame(expectedFrame, cached, 'Selected tile');
+          return;
+        }
+        const texture = tileTextureUrl(editor, tile);
+        if (texture) paintSelectedPreviewFrame(expectedFrame, texture, 'Selected tile');
+        else expectedFrame.innerHTML = '<p class="hint">Preview unavailable</p>';
+      });
+    requestRtpksTileThumbnail(editor, tileId, {
+      size: RTPKS_TILE_THUMB_SIZE,
+      onReady: (dataUrl) => {
+        if (!dataUrl) return;
+        refreshPlacedTileVisuals(editor);
+      },
+    });
+    return;
+  }
+  disposeSelectedAssetPreview(editor, frame);
+  frame.innerHTML = '<p class="hint">No selection</p>';
 }
 
 function ensureModelModalHost() {
@@ -1894,10 +3782,10 @@ async function mountGlbPreview(editor, { modelId, manifest, host, status, debugE
         const p = await probe.json();
         msg = p.error || msg;
       } catch {
-        msg = 'Invalid model id — check the catalog id matches the folder on disk.';
+        msg = 'Invalid model id: check the catalog id matches the folder on disk.';
       }
     } else if (probe.status === 404) {
-      msg = 'GLB file missing on disk — try re-importing the model.';
+      msg = 'GLB file missing on disk: try re-importing the model.';
     }
     throw new Error(msg);
   }
@@ -1999,7 +3887,7 @@ async function saveModelOrientation(state, { render, log, api }) {
     if (!res.ok || !payload.ok) {
       const stale = res.status === 404 && payload.ok === undefined;
       throw new Error(stale
-        ? 'Reorient API not loaded — stop the desk and run npm run admin again, then reload.'
+        ? 'Reorient API not loaded: stop the desk and run npm run admin again, then reload.'
         : (payload.error || 'Reorient failed'));
     }
     // The GLB on disk changed: drop cached scenes/thumbnails, refresh the catalog (new
@@ -2057,7 +3945,7 @@ async function deleteOverworldModel(state, modelId, { render, log, api }) {
     if (!res.ok || !payload.ok) {
       const stale = res.status === 404 && payload.error === 'Not found' && payload.ok === undefined;
       throw new Error(stale
-        ? 'Delete API not loaded — stop the desk and run npm run admin again, then reload.'
+        ? 'Delete API not loaded: stop the desk and run npm run admin again, then reload.'
         : (payload.error || 'Delete failed'));
     }
     clearModelCache();
@@ -2175,6 +4063,7 @@ function initModelModalDelegates(state, { render, log, api }) {
     const pickBtn = event.target.closest('[data-pick-model]');
     if (pickBtn && event.target.closest('#mapModelCatalog')) {
       event.preventDefault();
+      if (event.target.closest('[data-preview-model],[data-delete-model]')) return;
       if (!editor.map) {
         log?.('Load or create a map before placing props.', 'error');
         return;
@@ -2203,7 +4092,9 @@ function initModelModalDelegates(state, { render, log, api }) {
       event.preventDefault();
       const idx = Number(removeBtn.dataset.removePlacement);
       if (idx >= 0 && idx < editor.map.models.length) {
+        beginMapHistory(editor);
         editor.map.models.splice(idx, 1);
+        commitMapHistory(editor);
         editor.dirty = true;
         refreshMapPreview(state);
         render();
@@ -2221,9 +4112,169 @@ function initModelModalDelegates(state, { render, log, api }) {
   });
 }
 
+async function loadMapFileIntoEditor(state, deps, fileName) {
+  const { api, log, render } = deps;
+  const editor = ensureMapEditorState(state);
+  const payload = await api(`/api/maps/file?file=${encodeURIComponent(fileName)}`);
+  editor.map = payload.map;
+  editor.map.grid.tileSize = TILE_SIZE;
+  ensureTileLayers(editor.map);
+  ensurePathLayer(editor.map);
+  ensureTerrainVisual(editor.map);
+  editor.currentFile = payload.fileName.endsWith('.owmap') ? payload.fileName : `${payload.map.id || 'map'}.owmap`;
+  const projectEntry = editor.project?.maps?.find((map) => map.file === editor.currentFile || map.id === editor.map.id);
+  if (projectEntry) editor.project.editor.activeMapId = projectEntry.id;
+  editor.activePathSetId = editor.map.pathLayer?.activeSetId || editor.activePathSetId || editor.project?.pathSets?.[0]?.id || '';
+  if (editor.map.tilePackage?.file) {
+    try {
+      await loadTilePackage(editor, editor.map.tilePackage.file);
+      rememberProjectTilePackage(editor);
+    } catch (e) {
+      log(e.message || 'Could not load linked RTPKS package.', 'warn');
+    }
+  }
+  editor.dirty = false;
+  clearMapHistory(editor);
+  log(`Loaded ${fileName}`, 'ok');
+  render();
+}
+
 export function bindMapEditor(state, deps) {
   const { api, log, esc, render } = deps;
   const editor = ensureMapEditorState(state);
+
+  if (!editor._workstationDelegatesReady) {
+    editor._workstationDelegatesReady = true;
+    document.addEventListener('keydown', (event) => {
+      if (!document.querySelector('.map-editor-page')) return;
+      const target = event.target;
+      const isTyping = target?.matches?.('input, textarea, select, [contenteditable="true"]');
+      if (isTyping) return;
+      const key = event.key.toLowerCase();
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || key !== 'z' && key !== 'y') return;
+      const ed = ensureMapEditorState(state);
+      const wantsRedo = key === 'y' || (key === 'z' && event.shiftKey);
+      const changed = wantsRedo ? redoMapEdit(ed) : undoMapEdit(ed);
+      if (!changed) return;
+      event.preventDefault();
+      refreshMapPreview(state);
+      render();
+    });
+    document.addEventListener('click', (event) => {
+      const activeLayerBtn = event.target.closest('[data-active-tile-layer]');
+      if (activeLayerBtn && activeLayerBtn.closest('.map-editor-page')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const ed = ensureMapEditorState(state);
+        if (!ed.map) return;
+        ensureTileLayers(ed.map);
+        ed.map.tileLayers.activeLayer = Number(activeLayerBtn.dataset.activeTileLayer) || 0;
+        ed.brush = 'tile';
+        ed.sidebarTab = 'tiles';
+        ed.propTool = null;
+        ed.placeModelId = null;
+        ed.dirty = true;
+        render();
+        return;
+      }
+      const toggleLayerBtn = event.target.closest('[data-toggle-tile-layer]');
+      if (toggleLayerBtn && toggleLayerBtn.closest('.map-editor-page')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const ed = ensureMapEditorState(state);
+        if (!ed.map) return;
+        const index = Number(toggleLayerBtn.dataset.toggleTileLayer) || 0;
+        beginMapHistory(ed);
+        const layer = tileLayerAt(ed.map, index);
+        layer.visible = layer.visible === false;
+        commitMapHistory(ed);
+        ed.dirty = true;
+        refreshMapPreview(state);
+        render();
+        return;
+      }
+      const addLayerBtn = event.target.closest('[data-add-tile-layer]');
+      if (addLayerBtn && addLayerBtn.closest('.map-editor-page')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const ed = ensureMapEditorState(state);
+        if (!ed.map) return;
+        ensureTileLayers(ed.map);
+        const layers = ed.map.tileLayers.layers;
+        if (layers.length >= MAX_TILE_LAYERS) return;
+        beginMapHistory(ed);
+        const width = ed.map.grid?.width || 16;
+        const height = ed.map.grid?.height || 16;
+        layers.push({
+          id: `deco_${layers.length + 1}`,
+          name: `Deco ${layers.length + 1}`,
+          visible: true,
+          cells: createTileGrid(width, height, null),
+        });
+        ed.map.tileLayers.activeLayer = layers.length - 1;
+        ed.brush = 'tile';
+        ed.sidebarTab = 'tiles';
+        ed.propTool = null;
+        ed.placeModelId = null;
+        commitMapHistory(ed);
+        ed.dirty = true;
+        render();
+        return;
+      }
+      const deleteLayerBtn = event.target.closest('[data-delete-tile-layer]');
+      if (deleteLayerBtn && deleteLayerBtn.closest('.map-editor-page')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const ed = ensureMapEditorState(state);
+        beginMapHistory(ed);
+        if (deleteActiveTileLayer(ed)) {
+          commitMapHistory(ed);
+          refreshMapPreview(state);
+          render();
+        } else {
+          cancelMapHistory(ed);
+        }
+        return;
+      }
+      const propLayerBtn = event.target.closest('[data-map-prop-layer]');
+      if (propLayerBtn && propLayerBtn.closest('.map-editor-page')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const ed = ensureMapEditorState(state);
+        if (!ed.map) return;
+        ed.propTool = ed.placeModelId ? 'place' : 'select';
+        ed.sidebarTab = 'props';
+        ed._ghostTile = null;
+        render();
+        return;
+      }
+      const tileTabBtn = event.target.closest('[data-tile-tab]');
+      if (tileTabBtn && tileTabBtn.closest('.map-editor-page')) {
+        event.preventDefault();
+        event.stopPropagation();
+        const ed = ensureMapEditorState(state);
+        ed.tileTabId = tileTabBtn.dataset.tileTab || '';
+        const firstTile = tileCatalogFiltered(ed)[0];
+        if (firstTile) ed.tileBrushId = firstTile.resortTileId;
+        ed.brush = 'tile';
+        ed.sidebarTab = 'tiles';
+        render();
+        return;
+      }
+      const tilePageBtn = event.target.closest('[data-tile-page]');
+      if (tilePageBtn && tilePageBtn.closest('.map-editor-page')) {
+        event.preventDefault();
+        const ed = ensureMapEditorState(state);
+        const filtered = tileCatalogFiltered(ed);
+        const maxPage = Math.max(0, Math.ceil(filtered.length / 160) - 1);
+        ed.tilePage = tilePageBtn.dataset.tilePage === 'next'
+          ? Math.min(maxPage, (Number(ed.tilePage) || 0) + 1)
+          : Math.max(0, (Number(ed.tilePage) || 0) - 1);
+        render();
+      }
+    }, true);
+  }
 
   const paintGrid = document.querySelector('#mapPaintGrid');
   const cellFromEvent = (event) => {
@@ -2232,17 +4283,253 @@ export function bindMapEditor(state, deps) {
     return cell.dataset.cell.split(',').map(Number);
   };
 
+  const projectSelect = document.querySelector('#mapProjectSelect');
+  if (projectSelect) {
+    projectSelect.onchange = async () => {
+      try {
+        await loadMapProject(editor, projectSelect.value || 'default');
+        editor.projectId = editor.project.id;
+        const active = editor.project.maps.find((map) => map.id === editor.project.editor?.activeMapId)
+          || editor.project.maps[0];
+        if (active?.file) await loadMapFileIntoEditor(state, deps, active.file);
+        log(`Loaded project ${editor.project.name || editor.project.id}`, 'ok');
+        render();
+      } catch (e) {
+        log(e.message || 'Could not load project.', 'error');
+      }
+    };
+  }
+
+  const saveProjectBtn = document.querySelector('#mapSaveProject');
+  if (saveProjectBtn) {
+    saveProjectBtn.onclick = async () => {
+      try {
+        await saveProject(editor);
+        const listing = await fetchJsonQuiet('/api/map-projects/list');
+        if (listing?.ok) editor.projects = listing.projects || editor.projects;
+        log(`Saved project ${editor.project.name || editor.project.id}`, 'ok');
+        render();
+      } catch (e) {
+        log(e.message || 'Could not save project.', 'error');
+      }
+    };
+  }
+
+  const undoBtn = document.querySelector('#mapUndo');
+  if (undoBtn) {
+    undoBtn.onclick = () => {
+      if (!undoMapEdit(editor)) return;
+      refreshMapPreview(state);
+      render();
+    };
+  }
+
+  const redoBtn = document.querySelector('#mapRedo');
+  if (redoBtn) {
+    redoBtn.onclick = () => {
+      if (!redoMapEdit(editor)) return;
+      refreshMapPreview(state);
+      render();
+    };
+  }
+
+  document.querySelectorAll('[data-project-map]').forEach((btn) => {
+    btn.onclick = async () => {
+      const entry = editor.project?.maps?.find((map) => map.id === btn.dataset.projectMap);
+      if (!entry?.file) return;
+      try {
+        await loadMapFileIntoEditor(state, deps, entry.file);
+      } catch (e) { /* api logs */ }
+    };
+  });
+
+  document.querySelectorAll('[data-create-adjacent]').forEach((btn) => {
+    btn.onclick = async () => {
+      if (!editor.map) return;
+      try {
+        syncProjectFromEditor(editor);
+        const payload = await fetch('/api/map-projects/create-adjacent', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: editor.project?.id || 'default',
+            activeMapId: editor.map.id,
+            direction: btn.dataset.createAdjacent,
+          }),
+        }).then((res) => res.json().then((body) => ({ status: res.status, body })));
+        if (payload.status >= 400 || !payload.body.ok) throw new Error(payload.body.error || 'Could not create adjacent map.');
+        editor.project = payload.body.project;
+        editor.projectId = editor.project.id;
+        const validation = await fetchJsonQuiet(`/api/map-projects/validate?id=${encodeURIComponent(editor.project.id)}`);
+        editor.projectValidation = validation?.validation || null;
+        const entry = payload.body.map;
+        editor.map = emptyMapLocal(editor.map.grid?.width || 16, editor.map.grid?.height || 16);
+        editor.map.id = entry.id;
+        editor.map.name = entry.name;
+        if (editor.tilePackage) {
+          editor.map.tilePackage = {
+            file: editor.tilePackage.fileName,
+            packId: editor.tilePackage.packId,
+            name: editor.tilePackage.name,
+            path: editor.tilePackage.gamePath,
+          };
+        }
+        ensureTerrainVisual(editor.map);
+        ensurePathLayer(editor.map);
+        editor.currentFile = entry.file;
+        editor.dirty = true;
+        clearMapHistory(editor);
+        editor.projectDirty = false;
+        log(payload.body.existing ? `Opened existing ${entry.file}` : `Created ${entry.file} in project`, 'ok');
+        render();
+      } catch (e) {
+        log(e.message || 'Could not create adjacent map.', 'error');
+      }
+    };
+  });
+
+  const pathSetSelect = document.querySelector('#mapPathSetSelect');
+  if (pathSetSelect) {
+    pathSetSelect.onchange = () => {
+      editor.activePathSetId = pathSetSelect.value;
+      if (editor.map) {
+        beginMapHistory(editor);
+        ensurePathLayer(editor.map).activeSetId = editor.activePathSetId;
+        resolvePathTiles(editor);
+        commitMapHistory(editor);
+        editor.dirty = true;
+      }
+      editor.projectDirty = true;
+      render();
+    };
+  }
+
+  document.querySelectorAll('[data-smart-set-card]').forEach((btn) => {
+    btn.onclick = () => {
+      editor.activePathSetId = btn.dataset.smartSetCard || '';
+      if (editor.map) {
+        beginMapHistory(editor);
+        ensurePathLayer(editor.map).activeSetId = editor.activePathSetId;
+        resolvePathTiles(editor);
+        commitMapHistory(editor);
+        editor.dirty = true;
+      }
+      refreshMapPreview(state);
+      render();
+    };
+  });
+
+  const pathSetNew = document.querySelector('#mapPathSetNew');
+  if (pathSetNew) {
+    pathSetNew.onclick = () => {
+      if (!editor.project) editor.project = createDefaultProject(editor.files);
+      const id = `path_${(editor.project.pathSets?.length || 0) + 1}`;
+      if (!Array.isArray(editor.project.pathSets)) editor.project.pathSets = [];
+      editor.project.pathSets.push({
+        id,
+        name: `Path ${(editor.project.pathSets?.length || 0) + 1}`,
+        packageId: editor.tilePackage?.packId || editor.tilePackage?.fileName || editor.project.defaultTilePackageId || '',
+        tiles: {},
+      });
+      editor.activePathSetId = id;
+      if (editor.map) ensurePathLayer(editor.map).activeSetId = id;
+      editor.projectDirty = true;
+      editor.sidebarTab = 'paths';
+      render();
+    };
+  }
+
+  const pathSetName = document.querySelector('#mapPathSetName');
+  if (pathSetName) {
+    pathSetName.oninput = () => {
+      const set = activePathSet(editor);
+      if (!set) return;
+      set.name = pathSetName.value.trim() || set.id;
+      editor.projectDirty = true;
+    };
+  }
+
+  document.querySelectorAll('.map-path-tile-input').forEach((input) => {
+    input.onchange = () => {
+      const set = activePathSet(editor);
+      if (!set) return;
+      if (!set.tiles) set.tiles = {};
+      const key = input.dataset.pathKey;
+      const value = input.value === '' ? null : Number(input.value);
+      if (value == null || !Number.isFinite(value) || value < 0) delete set.tiles[key];
+      else set.tiles[key] = Math.round(value);
+      if (editor.map) {
+        beginMapHistory(editor);
+        resolvePathTiles(editor);
+        commitMapHistory(editor);
+        editor.dirty = true;
+      }
+      editor.projectDirty = true;
+      refreshMapPreview(state);
+      render();
+    };
+  });
+
+  const bindVisual = (selector, apply) => {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    el.onchange = () => {
+      if (!editor.map) return;
+      beginMapHistory(editor);
+      const visual = ensureTerrainVisual(editor.map);
+      apply(el, visual);
+      commitMapHistory(editor);
+      editor.dirty = true;
+      refreshMapPreview(state);
+      render();
+    };
+  };
+  bindVisual('#mapFloorHeightScale', (el, visual) => { visual.floorHeightScale = Math.max(1, Math.min(64, Number(el.value) || TILE_SIZE)); });
+  bindVisual('#mapFloorRecolorEnabled', (el, visual) => { visual.floorRecolorEnabled = el.checked; });
+  bindVisual('#mapFloorColor1', (el, visual) => { visual.floorColors[1] = el.value || '#d84f5f'; });
+  bindVisual('#mapRampRecolorEnabled', (el, visual) => { visual.rampRecolorEnabled = el.checked; });
+  bindVisual('#mapRampColor', (el, visual) => { visual.rampColor = el.value || '#f4d03f'; });
+  bindVisual('#mapLightPreset', (el, visual) => {
+    visual.lightPreset = el.value || 'day';
+    const presets = {
+      day: { yaw: 38, pitch: 58 },
+      sunset: { yaw: -42, pitch: 26 },
+      night: { yaw: 25, pitch: 48 },
+    };
+    const preset = presets[visual.lightPreset] || presets.day;
+    visual.lightYawDeg = preset.yaw;
+    visual.lightPitchDeg = preset.pitch;
+  });
+  bindVisual('#mapLightYaw', (el, visual) => { visual.lightYawDeg = Math.max(-180, Math.min(180, Number(el.value) || 0)); });
+  bindVisual('#mapLightPitch', (el, visual) => { visual.lightPitchDeg = Math.max(5, Math.min(85, Number(el.value) || 45)); });
+
   const stampPaint = (x, y, { light = false } = {}) => {
     if (!editor.map) return;
-    const useLight = light && editor.tool !== 'fill';
+    const useLight = editor.brush !== 'path' && editor.tool !== 'fill' &&
+      (light || editor.tool === 'paint' || editor.tool === 'erase' ||
+        editor.tool === 'raise' || editor.tool === 'lower');
     if (editor.tool === 'fill') {
-      const layer = brushLayer(editor.brush);
-      if (layer) {
+      if (editor.brush === 'tile') {
+        floodFillTile(editor.map, x, y, tileCellValue(editor.map, x, y), editor.tileBrushId ?? null);
+      } else if (editor.brush === 'path') {
+        floodFillPath(editor, x, y, pathCellValue(editor.map, x, y), 1);
+      } else {
+        const layer = brushLayer(editor.brush);
+        if (!layer) return;
         const target = cellValue(editor.map, layer, x, y);
         floodFill(editor.map, layer, x, y, target, activeBrushValue(editor));
       }
     } else {
       applyBrush(editor.map, editor, x, y);
+      if (editor.brush === 'path') {
+        const changed = [];
+        const size = editor.brushSize;
+        const half = Math.floor(size / 2);
+        for (let dy = -half; dy <= half; dy += 1) {
+          for (let dx = -half; dx <= half; dx += 1) changed.push([x + dx, y + dy]);
+        }
+        resolvePathTiles(editor, changed);
+      }
     }
     editor.dirty = true;
     if (useLight) {
@@ -2268,9 +4555,12 @@ export function bindMapEditor(state, deps) {
     const cells = previewCellsForDrag(editor);
     if (cells.length) {
       applyToolToCells(editor.map, editor, cells);
+      commitMapHistory(editor);
       editor.dirty = true;
       refreshMapPreview(state);
       render();
+    } else {
+      cancelMapHistory(editor);
     }
     editor.dragStart = null;
     editor.dragEnd = null;
@@ -2279,15 +4569,67 @@ export function bindMapEditor(state, deps) {
   };
 
   if (paintGrid) {
+    const removeAtPointer = (x, y) => {
+      if (!editor.map) return false;
+      beginMapHistory(editor);
+      if (editor.propTool === 'place' || editor.propTool === 'select') {
+        const hit = findPlacementAt(editor, x, y);
+        if (hit == null || !editor.map.models) {
+          cancelMapHistory(editor);
+          return false;
+        }
+        editor.map.models.splice(hit, 1);
+        editor.selectedPlacementIndex = null;
+        commitMapHistory(editor);
+        editor.dirty = true;
+        refreshMapPreview(state);
+        render();
+        return true;
+      }
+      if (editor.brush === 'tile') {
+        clearTileAt(editor, editor.map, x, y);
+        commitMapHistory(editor);
+        editor.dirty = true;
+        refreshMapPreview(state);
+        render();
+        return true;
+      }
+      if (editor.brush === 'path') {
+        setPathCell(editor.map, x, y, 0);
+        setTileCell(editor.map, x, y, null, tileLayerIndexById(editor.map, 'path'));
+        resolvePathTiles(editor, [[x, y]]);
+        commitMapHistory(editor);
+        editor.dirty = true;
+        refreshMapPreview(state);
+        render();
+        return true;
+      }
+      cancelMapHistory(editor);
+      return false;
+    };
+    paintGrid.oncontextmenu = (event) => {
+      event.preventDefault();
+      const pos = cellFromEvent(event);
+      if (!pos) return;
+      removeAtPointer(pos[0], pos[1]);
+    };
     paintGrid.onmousedown = (event) => {
       event.preventDefault();
       const pos = cellFromEvent(event);
       if (!pos) return;
       const [x, y] = pos;
+      if (event.button === 2) {
+        removeAtPointer(x, y);
+        return;
+      }
       if (editor.propTool === 'place' && editor.placeModelId) {
+        beginMapHistory(editor);
         if (placeModelOnTile(state, { log }, x, y)) {
+          commitMapHistory(editor);
           refreshMapPreview(state);
           render();
+        } else {
+          cancelMapHistory(editor);
         }
         return;
       }
@@ -2295,6 +4637,7 @@ export function bindMapEditor(state, deps) {
         const hit = findPlacementAt(editor, x, y);
         if (hit != null) {
           editor.selectedPlacementIndex = hit;
+          beginMapHistory(editor);
           editor._placementDrag = { index: hit, moved: false };
           return;
         }
@@ -2303,12 +4646,15 @@ export function bindMapEditor(state, deps) {
         return;
       }
       if (editor.tool === 'area' || editor.tool === 'line') {
+        beginMapHistory(editor);
         editor.dragStart = [x, y];
         editor.dragEnd = [x, y];
         editor.painting = true;
         updateDragPreview(editor);
         return;
       }
+      beginMapHistory(editor);
+      editor._paintingHistoryActive = true;
       editor.painting = true;
       stampPaint(x, y);
     };
@@ -2332,6 +4678,13 @@ export function bindMapEditor(state, deps) {
         }
         return;
       }
+      if (isTilePlacementMode(editor)) {
+        const prev = editor._ghostTile;
+        if (!prev || prev[0] !== x || prev[1] !== y) {
+          editor._ghostTile = [x, y];
+          refreshPropOverlays(editor);
+        }
+      }
       if ((editor.tool === 'area' || editor.tool === 'line') && editor.dragStart) {
         editor.dragEnd = [x, y];
         updateDragPreview(editor);
@@ -2344,8 +4697,11 @@ export function bindMapEditor(state, deps) {
     window.addEventListener('mouseup', () => {
       if (editor._placementDrag) {
         if (editor._placementDrag.moved) {
+          commitMapHistory(editor);
           editor.dirty = true;
           render();
+        } else {
+          cancelMapHistory(editor);
         }
         editor._placementDrag = null;
         return;
@@ -2354,11 +4710,15 @@ export function bindMapEditor(state, deps) {
         finishDrag();
         return;
       }
-      if (editor.painting) render();
+      if (editor.painting) {
+        commitMapHistory(editor);
+        editor._paintingHistoryActive = false;
+        render();
+      }
       editor.painting = false;
     }, { once: false });
     paintGrid.onmouseleave = () => {
-      if (editor.propTool === 'place' && editor._ghostTile) {
+      if ((editor.propTool === 'place' || isTilePlacementMode(editor)) && editor._ghostTile) {
         editor._ghostTile = null;
         refreshPropOverlays(editor);
       }
@@ -2384,9 +4744,13 @@ export function bindMapEditor(state, deps) {
       const [x, y] = cell.dataset.cell.split(',').map(Number);
       editor.placeModelId = modelId;
       editor.propTool = 'place';
+      beginMapHistory(editor);
       if (placeModelOnTile(state, { log }, x, y)) {
+        commitMapHistory(editor);
         refreshMapPreview(state);
         render();
+      } else {
+        cancelMapHistory(editor);
       }
     });
     document.addEventListener('dragstart', (e) => {
@@ -2427,7 +4791,9 @@ export function bindMapEditor(state, deps) {
       const mdl = selectedPlacement(editor);
       if (!mdl) return;
       const delta = Number(btn.dataset.placementRotate) || 90;
+      beginMapHistory(editor);
       mdl.yawDeg = ((Math.round((mdl.yawDeg || 0) / 90) * 90) + delta + 360) % 360;
+      commitMapHistory(editor);
       editor.dirty = true;
       refreshMapPreview(state);
       render();
@@ -2436,6 +4802,19 @@ export function bindMapEditor(state, deps) {
 
   const placementScale = document.querySelector('#mapPlacementScale');
   if (placementScale) {
+    const beginScaleHistory = () => {
+      if (selectedPlacement(editor)) beginMapHistory(editor);
+    };
+    const commitScaleHistory = () => {
+      if (commitMapHistory(editor)) {
+        editor.dirty = true;
+        render();
+      }
+    };
+    placementScale.onpointerdown = beginScaleHistory;
+    placementScale.onfocus = beginScaleHistory;
+    placementScale.onpointerup = commitScaleHistory;
+    placementScale.onchange = commitScaleHistory;
     placementScale.oninput = () => {
       const mdl = selectedPlacement(editor);
       if (!mdl) return;
@@ -2452,8 +4831,10 @@ export function bindMapEditor(state, deps) {
     placementDelete.onclick = () => {
       const idx = editor.selectedPlacementIndex;
       if (idx == null || !editor.map?.models) return;
+      beginMapHistory(editor);
       editor.map.models.splice(idx, 1);
       editor.selectedPlacementIndex = null;
+      commitMapHistory(editor);
       editor.dirty = true;
       refreshMapPreview(state);
       render();
@@ -2465,6 +4846,246 @@ export function bindMapEditor(state, deps) {
     modelSearch.oninput = () => {
       editor.modelSearch = modelSearch.value;
       render();
+    };
+  }
+
+  const tileSearch = document.querySelector('#mapTileSearch');
+  if (tileSearch) {
+    tileSearch.oninput = () => {
+      editor.tileSearch = tileSearch.value;
+      editor.tilePage = 0;
+      render();
+    };
+  }
+
+  const tileLayerSelect = document.querySelector('#mapTileLayerSelect');
+  if (tileLayerSelect) {
+    tileLayerSelect.onchange = () => {
+      if (!editor.map) return;
+      ensureTileLayers(editor.map);
+      editor.map.tileLayers.activeLayer = Number(tileLayerSelect.value) || 0;
+      editor.brush = 'tile';
+      editor.sidebarTab = 'tiles';
+      editor.propTool = null;
+      editor.placeModelId = null;
+      editor.dirty = true;
+      render();
+    };
+  }
+
+  const tileLayerPanel = document.querySelector('#mapTileLayerPanel');
+  if (tileLayerPanel) {
+    tileLayerPanel.onclick = (event) => {
+      const activeLayerBtn = event.target.closest('[data-active-tile-layer]');
+      if (activeLayerBtn) {
+        event.preventDefault();
+        if (!editor.map) return;
+        ensureTileLayers(editor.map);
+        editor.map.tileLayers.activeLayer = Number(activeLayerBtn.dataset.activeTileLayer) || 0;
+        editor.brush = 'tile';
+        editor.sidebarTab = 'tiles';
+        editor.propTool = null;
+        editor.placeModelId = null;
+        editor.dirty = true;
+        render();
+        return;
+      }
+      const toggleLayerBtn = event.target.closest('[data-toggle-tile-layer]');
+      if (toggleLayerBtn) {
+        event.preventDefault();
+        if (!editor.map) return;
+        beginMapHistory(editor);
+        const layer = tileLayerAt(editor.map, Number(toggleLayerBtn.dataset.toggleTileLayer) || 0);
+        layer.visible = layer.visible === false;
+        commitMapHistory(editor);
+        editor.dirty = true;
+        refreshMapPreview(state);
+        render();
+        return;
+      }
+      const addLayerBtn = event.target.closest('[data-add-tile-layer]');
+      if (addLayerBtn) {
+        event.preventDefault();
+        if (!editor.map) return;
+        ensureTileLayers(editor.map);
+        const layers = editor.map.tileLayers.layers;
+        if (layers.length >= MAX_TILE_LAYERS) return;
+        beginMapHistory(editor);
+        const width = editor.map.grid?.width || 16;
+        const height = editor.map.grid?.height || 16;
+        layers.push({
+          id: `deco_${layers.length + 1}`,
+          name: `Deco ${layers.length + 1}`,
+          visible: true,
+          cells: createTileGrid(width, height, null),
+        });
+        editor.map.tileLayers.activeLayer = layers.length - 1;
+        editor.brush = 'tile';
+        editor.sidebarTab = 'tiles';
+        editor.propTool = null;
+        editor.placeModelId = null;
+        commitMapHistory(editor);
+        editor.dirty = true;
+        render();
+        return;
+      }
+      const deleteLayerBtn = event.target.closest('[data-delete-tile-layer]');
+      if (deleteLayerBtn) {
+        event.preventDefault();
+        beginMapHistory(editor);
+        if (deleteActiveTileLayer(editor)) {
+          commitMapHistory(editor);
+          refreshMapPreview(state);
+          render();
+        } else {
+          cancelMapHistory(editor);
+        }
+      }
+    };
+  }
+
+  const tilePackageSelect = document.querySelector('#mapTilePackageSelect');
+  if (tilePackageSelect) {
+    tilePackageSelect.onchange = async () => {
+      const fileName = tilePackageSelect.value;
+      try {
+        await loadTilePackage(editor, fileName);
+        if (editor.map) {
+          beginMapHistory(editor);
+          editor.map.tilePackage = editor.tilePackage ? {
+            file: editor.tilePackage.fileName,
+            packId: editor.tilePackage.packId,
+            name: editor.tilePackage.name,
+            path: editor.tilePackage.gamePath,
+          } : null;
+          ensureTileLayers(editor.map);
+          commitMapHistory(editor);
+          editor.dirty = true;
+        }
+        if (editor.tilePackage) rememberProjectTilePackage(editor);
+        editor.brush = 'tile';
+        editor.sidebarTab = 'tiles';
+        log(fileName ? `Linked RTPKS ${fileName}` : 'Unlinked RTPKS package', 'ok');
+        render();
+      } catch (e) {
+        log(e.message || 'Could not load RTPKS package.', 'error');
+      }
+    };
+  }
+
+  const tileGlbDownload = document.querySelector('#mapSelectedTileGlbDownload');
+  if (tileGlbDownload) {
+    tileGlbDownload.onclick = async () => {
+      if (editor.tileBrushId == null || !editor.tilePackage?.fileName) return;
+      const btn = tileGlbDownload;
+      const prevTitle = btn.title;
+      btn.disabled = true;
+      btn.title = 'Preparing GLB…';
+      try {
+        const fileName = await downloadRtpksTileGlb(
+          editor.tilePackage.fileName,
+          editor.tilePackage,
+          Number(editor.tileBrushId),
+        );
+        log(`Downloaded ${fileName}`, 'ok');
+      } catch (error) {
+        log(error?.message || 'Could not export tile GLB.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.title = prevTitle;
+      }
+    };
+  }
+
+  document.querySelectorAll('[data-pick-tile]').forEach((btn) => {
+    btn.onclick = () => {
+      editor.tileBrushId = Number(btn.dataset.pickTile);
+      editor.brush = 'tile';
+      editor.tool = editor.tool === 'raise' || editor.tool === 'lower' ? 'paint' : editor.tool;
+      editor.propTool = null;
+      editor.placeModelId = null;
+      if (editor.map && editor.tilePackage) {
+        editor.map.tilePackage = {
+          file: editor.tilePackage.fileName,
+          packId: editor.tilePackage.packId,
+          name: editor.tilePackage.name,
+          path: editor.tilePackage.gamePath,
+        };
+        ensureTileLayers(editor.map);
+      }
+      document.querySelectorAll('[data-pick-tile]').forEach((tileBtn) => {
+        tileBtn.classList.toggle('active', Number(tileBtn.dataset.pickTile) === editor.tileBrushId);
+      });
+      document.querySelectorAll('.brush-btn').forEach((brushBtn) => {
+        brushBtn.classList.toggle('active', brushBtn.dataset.brush === editor.brush);
+      });
+      document.querySelectorAll('.map-tool').forEach((toolBtn) => {
+        toolBtn.classList.toggle('active', toolBtn.dataset.tool === editor.tool);
+      });
+      const strip = document.querySelector('.map-tile-active-strip');
+      if (strip) {
+        const fp = tileFootprint(tileEntry(editor, editor.tileBrushId));
+        const size = tileSizeLabel(fp);
+        strip.textContent = `Painting selected tile${size ? ` · ${size}` : ''}`;
+      }
+      refreshSelectedAssetPreview(editor);
+      refreshPropOverlays(editor);
+    };
+  });
+
+  const rtpksInput = document.querySelector('#mapImportRtpksInput');
+  const rtpksBtn = document.querySelector('#mapImportRtpks');
+  if (rtpksBtn && rtpksInput) {
+    rtpksBtn.onclick = () => rtpksInput.click();
+    rtpksInput.onchange = async () => {
+      const files = Array.from(rtpksInput.files || []);
+      rtpksInput.value = '';
+      if (!files.length) return;
+      const file = files.find((item) => /\.rtpks$/i.test(item.name));
+      const meta = files.find((item) => /\.rtpks\.meta$/i.test(item.name));
+      if (!file) {
+        log('Choose an .rtpks file and its .rtpks.meta sidecar.', 'error');
+        return;
+      }
+      if (!meta) {
+        log('Choose the matching .rtpks.meta sidecar too.', 'error');
+        return;
+      }
+      const fd = new FormData();
+      fd.append('rtpks', file, file.name);
+      fd.append('rtpksMeta', meta, meta.name);
+      try {
+        const res = await fetch('/api/tile-packages/import', { method: 'POST', body: fd });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || !payload.ok) throw new Error(payload.error || `Import failed (${res.status})`);
+        editor.tilePackages = payload.packages || editor.tilePackages;
+        if (editor._rtpksThumbFile !== payload.package?.fileName) {
+          editor._rtpksThumbFile = payload.package?.fileName || '';
+          editor._rtpksThumbUrls = {};
+        }
+        editor.tilePackage = payload.package;
+        editor.tileTabId = payload.package?.tabs?.[0]?.id || '';
+        editor.tileBrushId = tileCatalogFiltered(editor)[0]?.resortTileId ?? payload.package?.tiles?.[0]?.resortTileId ?? null;
+        rememberProjectTilePackage(editor, payload.package);
+        if (editor.map) {
+          beginMapHistory(editor);
+          editor.map.tilePackage = {
+            file: payload.package.fileName,
+            packId: payload.package.packId,
+            name: payload.package.name,
+            path: payload.package.gamePath,
+          };
+          ensureTileLayers(editor.map);
+          commitMapHistory(editor);
+          editor.dirty = true;
+        }
+        editor.brush = 'tile';
+        editor.sidebarTab = 'tiles';
+        log(`Added RTPKS to C++ project: ${payload.gamePath}`, 'ok');
+        render();
+      } catch (e) {
+        log(e.message || 'RTPKS import failed', 'error');
+      }
     };
   }
 
@@ -2494,6 +5115,7 @@ export function bindMapEditor(state, deps) {
       const next = btn.dataset.workspaceView === '3d' ? '3d' : '2d';
       if (editor.workspaceView === next) return;
       editor.workspaceView = next;
+      if (editor.project?.editor) editor.project.editor.viewMode = next;
       render();
     };
   });
@@ -2501,6 +5123,8 @@ export function bindMapEditor(state, deps) {
   document.querySelectorAll('.brush-btn').forEach((btn) => {
     btn.onclick = () => {
       editor.brush = btn.dataset.brush;
+      if (editor.brush === 'tile') editor.sidebarTab = 'tiles';
+      if (editor.brush === 'path') editor.sidebarTab = 'paths';
       if (editor.brush === 'ramp' && !editor.values.ramp) editor.values.ramp = 1;
       if (editor.brush !== 'height' && (editor.tool === 'raise' || editor.tool === 'lower')) editor.tool = 'paint';
       render();
@@ -2544,6 +5168,16 @@ export function bindMapEditor(state, deps) {
     mapHeight.onkeydown = onSizeInput;
   }
 
+  const mapExpandSize = document.querySelector('#mapExpandSize');
+  if (mapExpandSize) mapExpandSize.onclick = () => applyMapExpand(editor, log, render);
+
+  const mapExpandAmount = document.querySelector('#mapExpandAmount');
+  if (mapExpandAmount) {
+    mapExpandAmount.onkeydown = (event) => {
+      if (event.key === 'Enter') applyMapExpand(editor, log, render);
+    };
+  }
+
   document.querySelectorAll('.map-tool').forEach((btn) => {
     btn.onclick = () => {
       editor.tool = btn.dataset.tool;
@@ -2573,13 +5207,7 @@ export function bindMapEditor(state, deps) {
   document.querySelectorAll('[data-map-file]').forEach((btn) => {
     btn.onclick = async () => {
       try {
-        const payload = await api(`/api/maps/file?file=${encodeURIComponent(btn.dataset.mapFile)}`);
-        editor.map = payload.map;
-        editor.map.grid.tileSize = TILE_SIZE;
-        editor.currentFile = payload.fileName.endsWith('.owmap') ? payload.fileName : `${payload.map.id || 'map'}.owmap`;
-        editor.dirty = false;
-        log(`Loaded ${btn.dataset.mapFile}`, 'ok');
-        render();
+        await loadMapFileIntoEditor(state, deps, btn.dataset.mapFile);
       } catch (e) { /* logged in api */ }
     };
   });
@@ -2589,14 +5217,15 @@ export function bindMapEditor(state, deps) {
     applyDir.onclick = async () => {
       const mapsDirectory = document.querySelector('#mapDirInput')?.value?.trim();
       const modelsDirectory = document.querySelector('#mapModelsDirInput')?.value?.trim();
+      const tilePackagesDirectory = document.querySelector('#mapTilePackagesDirInput')?.value?.trim();
       try {
         await api('/api/maps/settings', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mapsDirectory, modelsDirectory }),
+          body: JSON.stringify({ mapsDirectory, modelsDirectory, tilePackagesDirectory }),
         });
         await loadMapEditorListing(state, api);
-        log('Maps and models folders updated.', 'ok');
+        log('Maps, models, and RTPKS folders updated.', 'ok');
         render();
       } catch (e) { /* api */ }
     };
@@ -2660,6 +5289,7 @@ export function bindMapEditor(state, deps) {
       if (payload.warnings?.length) msg += ` (${payload.warnings.length} warning(s))`;
       log(msg, 'ok');
       clearModelCache();
+      modelThumbCache.clear();
       await loadMapEditorListing(state, api);
       editor.sidebarTab = 'props';
     } catch (e) {
@@ -2677,11 +5307,54 @@ export function bindMapEditor(state, deps) {
     };
   });
 
+  document.querySelectorAll('[data-map-layer-brush]').forEach((btn) => {
+    btn.onclick = () => {
+      editor.brush = btn.dataset.mapLayerBrush;
+      if (editor.brush === 'tile') editor.sidebarTab = 'tiles';
+      if (editor.brush === 'path') editor.sidebarTab = 'paths';
+      if (editor.brush === 'ramp') editor.values.ramp = editor.values.ramp || 1;
+      if (editor.brush !== 'height' && (editor.tool === 'raise' || editor.tool === 'lower')) editor.tool = 'paint';
+      editor.propTool = null;
+      editor.placeModelId = null;
+      render();
+    };
+  });
+
+  document.querySelectorAll('[data-map-prop-layer]').forEach((btn) => {
+    btn.onclick = () => {
+      if (!editor.map) return;
+      editor.propTool = editor.placeModelId ? 'place' : 'select';
+      editor.sidebarTab = 'props';
+      editor._ghostTile = null;
+      render();
+    };
+  });
+
+  document.querySelectorAll('[data-left-tab]').forEach((btn) => {
+    btn.onclick = () => {
+      editor.leftTab = btn.dataset.leftTab;
+      render();
+    };
+  });
+
   const openWizardBtn = document.querySelector('#mapOpenCompileWizard');
   if (openWizardBtn) openWizardBtn.onclick = openCompileWizard;
 
-  const compileToolbarBtn = document.querySelector('#mapCompileModel');
-  if (compileToolbarBtn) compileToolbarBtn.onclick = openCompileWizard;
+  const exitWorkbench = document.querySelector('#mapExitWorkbench');
+  if (exitWorkbench) {
+    exitWorkbench.onclick = () => {
+      if (deps.navigateToTab) {
+        deps.navigateToTab(state.deskReturnTab || 'Dashboard');
+        return;
+      }
+      const dashboardTab = document.querySelector('#tabs [data-tab="Dashboard"]');
+      if (dashboardTab) dashboardTab.click();
+      else {
+        state.tab = 'Dashboard';
+        render();
+      }
+    };
+  }
 
   const wizardClose = document.querySelector('#mapCompileWizardClose');
   const wizardBackdrop = document.querySelector('#mapCompileBackdrop');
@@ -2782,8 +5455,17 @@ export function bindMapEditor(state, deps) {
   if (mapNew) {
     mapNew.onclick = () => {
       editor.map = emptyMapLocal(16, 16);
+      if (editor.tilePackage) {
+        editor.map.tilePackage = {
+          file: editor.tilePackage.fileName,
+          packId: editor.tilePackage.packId,
+          name: editor.tilePackage.name,
+          path: editor.tilePackage.gamePath,
+        };
+      }
       editor.currentFile = 'new_map.owmap';
       editor.dirty = true;
+      clearMapHistory(editor);
       log('New 16×16 map ready.', 'ok');
       render();
     };
@@ -2793,7 +5475,9 @@ export function bindMapEditor(state, deps) {
   if (mapSave) {
     mapSave.onclick = async () => {
       if (!editor.map) return;
+      beginMapHistory(editor);
       editor.map = readMetaFromDom(editor.map, { resize: true });
+      commitMapHistory(editor);
       const fileName = document.querySelector('#mapFileName')?.value?.trim() || editor.currentFile || 'map.owmap';
       try {
         const result = await api('/api/maps/save', {
@@ -2803,6 +5487,13 @@ export function bindMapEditor(state, deps) {
         });
         editor.currentFile = fileName.endsWith('.owmap') ? fileName : `${fileName}.owmap`;
         editor.dirty = false;
+        syncProjectFromEditor(editor);
+        try {
+          await saveProject(editor);
+        } catch (projectError) {
+          editor.projectDirty = true;
+          log(projectError.message || 'Map saved, but project save failed.', 'warn');
+        }
         await loadMapEditorListing(state, api);
         const baked = result.bakedRamps || 0;
         const cleared = result.clearedAutoRamps || 0;
@@ -2837,8 +5528,10 @@ export function bindMapEditor(state, deps) {
           });
           editor.map = payload.map;
           editor.map.grid.tileSize = TILE_SIZE;
+          ensureTileLayers(editor.map);
           editor.currentFile = payload.fileName;
           editor.dirty = false;
+          clearMapHistory(editor);
           await loadMapEditorListing(state, api);
           const baked = payload.bakedRamps || 0;
           const cleared = payload.clearedAutoRamps || 0;
@@ -2893,5 +5586,36 @@ export function bindMapEditor(state, deps) {
 }
 
 export async function initMapEditorTab(state, api) {
-  await loadMapEditorListing(state, api);
+  const editor = ensureMapEditorState(state);
+  if (editor.initialized) return;
+  if (editor.initializing) return editor.initializing;
+  editor.initializing = (async () => {
+    await loadMapEditorListing(state, api);
+    const activeEditor = ensureMapEditorState(state);
+    if (!activeEditor.map) {
+      const active = activeEditor.project?.maps?.find((map) => map.id === activeEditor.project.editor?.activeMapId)
+        || activeEditor.project?.maps?.[0];
+      if (active?.file) {
+        const payload = await api(`/api/maps/file?file=${encodeURIComponent(active.file)}`);
+        activeEditor.map = payload.map;
+        activeEditor.map.grid.tileSize = TILE_SIZE;
+        ensureTileLayers(activeEditor.map);
+        ensurePathLayer(activeEditor.map);
+        ensureTerrainVisual(activeEditor.map);
+        activeEditor.currentFile = payload.fileName.endsWith('.owmap') ? payload.fileName : `${payload.map.id || 'map'}.owmap`;
+        if (activeEditor.map.tilePackage?.file) {
+          try { await loadTilePackage(activeEditor, activeEditor.map.tilePackage.file); } catch { /* keep listing available */ }
+        }
+        activeEditor.dirty = false;
+        clearMapHistory(activeEditor);
+      }
+    }
+    activeEditor.initialized = true;
+    activeEditor.initializing = null;
+  })().catch((error) => {
+    const activeEditor = ensureMapEditorState(state);
+    activeEditor.initializing = null;
+    throw error;
+  });
+  return editor.initializing;
 }

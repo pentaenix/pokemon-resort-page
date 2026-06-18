@@ -4,7 +4,7 @@ Use **real browser captures, diagrams, and programmatic graphics** for Resort Do
 
 The **How to write documentation** article (`#/docs?article=writing-docs`) demonstrates these techniques. Agents should read [`docs/AGENTS.md`](./AGENTS.md) first.
 
-## Primary workflow — run the app, capture with Playwright
+## Primary workflow: run the app, capture with Playwright
 
 ```bash
 cd pokemon-resort-page

@@ -1,0 +1,18 @@
+{
+  "tools": [
+    {
+      "id": "maps",
+      "title": "Map Studio",
+      "description": "Paint overworld tiles, place props, and export .owmap files for Pokémon Resort.",
+      "image": "/media/game_engine/maps.png",
+      "workbench": "map"
+    },
+    {
+      "id": "characters",
+      "title": "Character Editor",
+      "description": "Author .charbin packages — sprites, walk cycles, animations, and character metadata.",
+      "image": "/media/game_engine/characters.png",
+      "workbench": "character"
+    }
+  ]
+}

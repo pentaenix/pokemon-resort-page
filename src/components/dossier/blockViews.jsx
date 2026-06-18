@@ -54,29 +54,49 @@ export const dossierBlockViews = {
 
   compare({ block, onOpenGallery }) {
     const fixed = block.variant === 'fixed';
+    const arrow = block.variant === 'arrow';
     const cols = Math.max(2, block.items.length);
-    const galleryItems = block.items.map((entry) => ({ path: entry.path, caption: entry.caption || entry.label }));
+    const galleryItems = block.items.map((entry) => ({
+      path: entry.path,
+      caption: entry.caption || entry.label,
+      fit: entry.fit,
+      pixelScale: entry.pixelScale,
+    }));
+    const renderItem = (item, index) => (
+      <button
+        key={`${item.path}-${index}`}
+        type="button"
+        className="dossier-compare-item"
+        onClick={() => onOpenGallery(galleryItems, index)}
+      >
+        <span className="dossier-compare-frame">
+          <DossierImage
+            path={item.path}
+            alt={item.label || item.caption || ''}
+            fit={item.fit}
+            pixelScale={item.pixelScale}
+          />
+        </span>
+        {item.label && <span className="dossier-compare-label">{item.label}</span>}
+      </button>
+    );
     return (
-      <figure className={`dossier-block dossier-block-compare dossier-block--media${fixed ? ' dossier-block-compare--fixed' : ''}`}>
+      <figure className={`dossier-block dossier-block-compare dossier-block--media${fixed ? ' dossier-block-compare--fixed' : ''}${arrow ? ' dossier-block-compare--arrow' : ''}`}>
         {block.caption && <figcaption className="dossier-block-label">{block.caption}</figcaption>}
-        <div
-          className={`dossier-compare-grid${fixed ? ' dossier-compare-grid--fixed' : ''}`}
-          style={{ '--compare-cols': cols }}
-        >
-          {block.items.map((item, index) => (
-            <button
-              key={`${item.path}-${index}`}
-              type="button"
-              className="dossier-compare-item"
-              onClick={() => onOpenGallery(galleryItems, index)}
-            >
-              <span className="dossier-compare-frame">
-                <DossierImage path={item.path} alt={item.label || item.caption || ''} />
-              </span>
-              {item.label && <span className="dossier-compare-label">{item.label}</span>}
-            </button>
-          ))}
-        </div>
+        {arrow && block.items.length === 2 ? (
+          <div className="dossier-compare-arrow-row">
+            {renderItem(block.items[0], 0)}
+            <span className="dossier-compare-arrow" aria-hidden="true">→</span>
+            {renderItem(block.items[1], 1)}
+          </div>
+        ) : (
+          <div
+            className={`dossier-compare-grid${fixed ? ' dossier-compare-grid--fixed' : ''}`}
+            style={{ '--compare-cols': cols }}
+          >
+            {block.items.map((item, index) => renderItem(item, index))}
+          </div>
+        )}
       </figure>
     );
   },
@@ -131,16 +151,22 @@ export const dossierBlockViews = {
 
   figure({ block, onOpenGallery }) {
     const layoutClass = block.layout === 'side' ? ' dossier-block-figure--side' : '';
+    const emphasisClass = block.emphasis === 'low' ? ' dossier-block-figure--low' : '';
     return (
-      <figure className={`dossier-block dossier-block-figure dossier-block--media${layoutClass}`}>
+      <figure className={`dossier-block dossier-block-figure dossier-block--media${layoutClass}${emphasisClass}`}>
         <div className="dossier-figure-body">
           {block.body && <p className="dossier-figure-text"><InlineMarkdown>{block.body}</InlineMarkdown></p>}
           <button
             type="button"
             className="dossier-media-open dossier-figure-media"
-            onClick={() => onOpenGallery([{ path: block.path, caption: block.caption || block.body }], 0)}
+            onClick={() => onOpenGallery([{ path: block.path, caption: block.caption || block.body, fit: block.fit, pixelScale: block.pixelScale }], 0)}
           >
-            <DossierImage path={block.path} alt={block.caption || block.body || ''} />
+            <DossierImage
+              path={block.path}
+              alt={block.caption || block.body || ''}
+              fit={block.fit}
+              pixelScale={block.pixelScale}
+            />
           </button>
         </div>
         {block.caption && <figcaption>{block.caption}</figcaption>}

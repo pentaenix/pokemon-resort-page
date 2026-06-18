@@ -1,7 +1,7 @@
-# Overworld GLB pipeline — agent handoff notes (NOT public)
+# Overworld GLB pipeline: agent handoff notes (NOT public)
 
 > Internal engineering notes for coding agents. **Do not** publish this to the Docs hub
-> (`#/docs`) — public articles must not contain agent/LLM wording (see `docs/AGENTS.md`).
+> (`#/docs`): public articles must not contain agent/LLM wording (see `docs/AGENTS.md`).
 > Public-facing version of this material: `#/docs?article=overworld-glb-models`
 > (`public/docs/articles/gameplay/overworld-glb-models.json`).
 > In-repo C++ spec: `pokemon-resort/docs/gameplay/overworld_glb_models.md`.
@@ -21,12 +21,12 @@ against an external reference GLB (ImageToStl). Two fixes were the whole ballgam
 
 The reference GLB the user supplied (made by an online tool) had the **correct atlas
 mapping** but flattened the banner to OPAQUE → black. Our output now matches its mapping
-**and** keeps the banner transparent — i.e. ours is strictly better.
+**and** keeps the banner transparent: i.e. ours is strictly better.
 
 **Later passes added:** (a) in-game **UV-grid clipping** so SDL's UV clamp is a no-op and
 *all* props (incl. multi-tile-UV faces) sample perfectly; (b) **unified scene depth sort** so
 characters no longer always draw on top of buildings; (c) a **GLB orientation re-bake**
-(rotate a wrongly-oriented import — e.g. a truck imported front-down — in 90° steps in the
+(rotate a wrongly-oriented import: e.g. a truck imported front-down: in 90° steps in the
 viewer, baked into the GLB so every consumer agrees); (d) the 2D paint grid now highlights each
 prop's **full rotated footprint** with a **roof-snapshot overlay** and a **placement ghost** that
 follows the cursor; (e) a **view-only 3D workspace** (`map-3d-view.js`) that renders the terrain
@@ -41,7 +41,7 @@ building hides the character at the doorway instead of letting them draw over th
   to `/api/overworld-models/reorient`, which calls `reorientGlbBuffer` to rotate every
   position+normal, **re-center on X/Z** and **re-seat to y=0** (so re-oriented props stay
   centered on their footprint anchor and sit on the ground), then re-ingests to refresh the
-  manifest (new footprint/AABB/hash). Baking — rather than carrying a per-instance rotation —
+  manifest (new footprint/AABB/hash). Baking: rather than carrying a per-instance rotation,
   keeps a single source of truth: preview, placement, and the C++ game all read the same
   corrected geometry, and the C++ side needs no orientation field. The live preview uses the
   same matrix order as the bake so what you see is what you save.
@@ -74,7 +74,7 @@ Conversion (repo `pokemon-resort-page`):
 | `tools/admin/lib/obj-compile.mjs` | Parse OBJ/MTL, interleave verts, **V flip** | `~208-216` (`uv[0], 1 - uv[1]`) |
 | `tools/admin/lib/texture-alpha.mjs` | **Decode PNG alpha**, measure transparency | `decodePngAlpha` `~23`, `pngHasMeaningfulTransparency` `~112`, `textureHasAlpha` `~139` |
 | `tools/admin/lib/write-glb.mjs` | Emit GLB; alpha policy | cutout decision `~136-146` |
-| `tools/admin/lib/mesh-to-glb.mjs` / `obj-to-glb.mjs` / `model-ingest.mjs` | Glue: zip → mesh → GLB → manifest | — |
+| `tools/admin/lib/mesh-to-glb.mjs` / `obj-to-glb.mjs` / `model-ingest.mjs` | Glue: zip → mesh → GLB → manifest |: |
 | `tools/admin/lib/reorient-glb.mjs` | **Bake** X/Y/Z rotation into a GLB (rotate verts+normals, recenter X/Z, re-seat to y=0) | `reorientGlbBuffer` |
 | `tools/admin/server.mjs` | `POST /api/overworld-models/reorient {id,rotX,rotY,rotZ}` → re-bake + re-ingest manifest; list now returns `modelHash`/`aabb` | reorient route, `listOverworldModels` |
 | `tools/admin/public/model-glb-viewer.js` | three.js preview, studio lighting; `setModelOrientation` (live bake preview), `renderGlbThumbnail` (cards + 2D roof) | `bindGlbWebGLViewport`, `renderGlbThumbnail` |
@@ -87,11 +87,11 @@ Runtime (repo `pokemon-resort`):
 | File | Role | Key lines |
 |------|------|-----------|
 | `src/gameplay/world3d/data/GlbModelLoader.cpp` | Parse GLB, bake transforms, per-material triangles | `alphaMode→alpha_blend` `~292-295` |
-| `include/gameplay/world3d/data/GlbModelLoader.hpp` | `GlbVertex/GlbMaterial/GlbTriangle/GlbMesh` | — |
+| `include/gameplay/world3d/data/GlbModelLoader.hpp` | `GlbVertex/GlbMaterial/GlbTriangle/GlbMesh` |: |
 | `src/gameplay/world3d/rendering/GlbModelRenderer.cpp` | Upload textures, transform, project, **UV-grid clip**, **two-pass (opaque→cutout) sort**, draw; `anchorDepth` for scene sort | `clipAxis`/`emitPiece`, `DrawTri.cutout`, `anchorDepth` |
 | `src/gameplay/world3d/data/SceneMetadataParser.cpp` | Read `models[]` (`glb` then fallback `mesh`); load `config/gameplay/world3d/render.json` → `model_behind_bias_tiles` | render.json block |
-| `config/gameplay/world3d/render.json` | `occlusion.modelBehindBiasTiles` (how far forward a building occludes the character) | — |
-| `include/gameplay/world3d/Overworld3DConfig.hpp` | `ModelPlacementConfig {id, glb_path, x,y,z, yaw_deg, scale}`; `SceneConfig.model_behind_bias_tiles` | — |
+| `config/gameplay/world3d/render.json` | `occlusion.modelBehindBiasTiles` (how far forward a building occludes the character) |: |
+| `include/gameplay/world3d/Overworld3DConfig.hpp` | `ModelPlacementConfig {id, glb_path, x,y,z, yaw_deg, scale}`; `SceneConfig.model_behind_bias_tiles` |: |
 | `src/ui/Overworld3DTestScreen.cpp` | Loads `GlbMesh` per placement, unified depth sort with per-model behind-bias, renders each frame | model_depth_bias |
 
 ## How the alpha decision is made (do not regress this)
@@ -122,14 +122,14 @@ by the orange roof (opaque texels, kept) and the banner (transparent texels, cut
    channel" → torn roof. Then I overcorrected to **force everything OPAQUE** → black
    banner. Neither was right. The actual bug for the *black roof* was the **missing V
    flip**; once flipped, MASK is safe because the roof samples opaque texels. Lesson:
-   separate the **UV-orientation** problem from the **alpha** problem — they present
+   separate the **UV-orientation** problem from the **alpha** problem: they present
    similarly (wrong-looking textures) but are independent.
 3. **Decoder off-by-stride bug.** My first `decodePngAlpha` forgot to advance the row
    pointer by `stride` after each scanline, so it re-read the filter region and flagged
    *every* texture as transparent. If transparency detection looks wrong, sanity-check the
    decoder against a raw alpha histogram first (clusters should be at 0 and 255 for DS).
 4. **The reference GLB has 3× the triangles** (549 vs our 183) and used `BLEND` for the
-   shadow. Don't treat the reference as ground truth for *everything* — only its **atlas
+   shadow. Don't treat the reference as ground truth for *everything*: only its **atlas
    mapping** (sampled colors on big faces) and the fact that it got the banner wrong.
 5. **Server doesn't hot-reload.** Editing `tools/admin/lib/*.mjs` requires restarting
    `npm run admin`. The on-disk GLB previews fine without a restart, but UI re-conversions
@@ -145,32 +145,32 @@ Use a throwaway Node script (the ones I used lived in `/tmp`, not committed):
   `textureHasAlpha` result.
 - Decode each texture's alpha and print a histogram (% at a==0, a<128, a==255). DS = ~1-bit.
 - For both the reference GLB and ours, iterate **all** meshes/primitives (per-primitive
-  accessors — do not assume one shared accessor), find the biggest faces by area, and
+  accessors: do not assume one shared accessor), find the biggest faces by area, and
   sample the base-color texel at the face's centroid UV. **Equal colors on the big faces
   ⇒ atlas/V orientation is correct.**
 
 If you need this again, re-create the comparison script; it is intentionally not part of
 the committed pipeline.
 
-## C++ side — what to check if an in-game model looks wrong
+## C++ side: what to check if an in-game model looks wrong
 
 The C++ renderer is `SDL_RenderGeometry`-based (CPU projection, no GPU shader, **no depth
 buffer**, **no real alpha test**). Implications and where to act:
 
-0. **SDL_RenderGeometry CLAMPS texcoords to [0,1] — it does NOT honour REPEAT wrap.**
+0. **SDL_RenderGeometry CLAMPS texcoords to [0,1]: it does NOT honour REPEAT wrap.**
    This was the "black stain instead of the model" bug. DS UVs routinely run outside
    [0,1] (e.g. the Pokémon Center roof at `v≈1.15` that must wrap to `0.15`), and some faces
    on other props (`Docked_Sailboat`, `aqua_mn4`) **span more than one tile in UV**. three.js
    honours the GLB sampler's REPEAT wrap so the browser preview is correct, but SDL clamps to
    the texture edge → wrong texels (black blobs, smeared seams).
-   **Current fix — UV-grid clipping (`GlbModelRenderer.cpp`, `clipAxis`/`emitPiece`).** We
+   **Current fix: UV-grid clipping (`GlbModelRenderer.cpp`, `clipAxis`/`emitPiece`).** We
    emulate REPEAT exactly: each triangle is clipped against the integer UV grid (Sutherland-
    Hodgman per cell it overlaps), and every resulting piece is re-based into `[0,1)` by
    subtracting its cell's integer offset. Each piece then lives inside a single texture tile so
    the SDL clamp is a **no-op**. Verified offline: after subdivision, 0 emitted coords fall
    outside `[0,1)` for all four shipped models (pc/truck unchanged at 183/134 tris; sailboat
    137→152, aqua 613→684). UV→screen is affine within a triangle, so clipping interpolates
-   `sx/sy/depth/u/v` linearly — consistent with SDL's affine texturing.
+   `sx/sy/depth/u/v` linearly: consistent with SDL's affine texturing.
    - The single-cell fast path (the vast majority of tris) just re-bases by `floor` and skips
      clipping. **Do not** revert to the old "subtract `floor(min U/V)` of the whole triangle"
      trick: it can't fix span>1 faces and it shifts slightly-negative UVs to the wrong edge.
@@ -182,7 +182,7 @@ buffer**, **no real alpha test**). Implications and where to act:
    both `MASK` and `BLEND` → `SDL_BLENDMODE_BLEND` (`GlbModelLoader.cpp ~292`) and rely on
    DS textures being ~1-bit alpha so the blended edge is effectively a hard cutout. **If a
    future model has soft/partial alpha**, expect haloing/edge fringing. Options, in order:
-   - Pre-threshold the alpha to 0/255 at load (cleanest cutout) — add to
+   - Pre-threshold the alpha to 0/255 at load (cleanest cutout): add to
      `GlbModelRenderer` texture upload, gate on `alpha_blend && material_is_mask`.
    - Or carry a real `alpha_mode` enum (OPAQUE/MASK/BLEND) + `alpha_cutoff` from the loader
      instead of the single `alpha_blend` bool, and discard per-pixel during a software
@@ -196,11 +196,11 @@ buffer**, **no real alpha test**). Implications and where to act:
      behind it could tie/flip on centroid depth and let the wall paint over it. Forcing cutout last
      guarantees the banner composites over the body. Don't go back to a single centroid-only sort
      of all tris together. Intersecting/large transparent quads within the cutout group can still
-     sort wrong; fix is finer-grained sorting or splitting the mesh — not the converter.
+     sort wrong; fix is finer-grained sorting or splitting the mesh: not the converter.
    - *Between objects (the "character always on top of the building" bug)*:
      `Overworld3DTestScreen::render` no longer draws all models first and characters last.
-     It builds a unified list of dynamic occluders — each placed model + the player + the
-     follower — keyed by the **camera depth of its world ground anchor**
+     It builds a unified list of dynamic occluders: each placed model + the player + the
+     follower: keyed by the **camera depth of its world ground anchor**
      (`GlbModelRenderer::anchorDepth` uses the placement origin; characters use
      `worldToScreen(position)`), `stable_sort`s far→near, and draws in that order. So a prop
      the player is standing **behind** now correctly occludes the sprite. Tiebreak order is
@@ -213,7 +213,7 @@ buffer**, **no real alpha test**). Implications and where to act:
      a building would otherwise only occlude the player once they pass its center, so at the door the
      character drew over the roof. Bias makes the building occlude ~N tiles sooner. Larger = sooner /
      further forward. Tune here, not in the sort code.
-3. **Texture filtering.** We force `SDL_ScaleModeNearest` (`~40`). Keep it — DS pixel art
+3. **Texture filtering.** We force `SDL_ScaleModeNearest` (`~40`). Keep it: DS pixel art
    must not bilinear-blur, and blurring also softens MASK edges into halos.
 4. **Self-contained GLB only.** The loader **rejects external buffers/URIs**. If a model
    loads in the browser but not in-game, confirm it's a single-BIN-chunk GLB (our converter

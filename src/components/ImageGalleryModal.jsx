@@ -55,7 +55,11 @@ export function ImageGalleryModal({ title, images, startIndex = 0, onClose, elev
           </>
         )}
         <figure className="image-gallery-figure">
-          <img src={assetUrl(current.path)} alt={current.caption || title || 'Evidence image'} />
+          <img
+            src={assetUrl(current.path)}
+            alt={current.caption || title || 'Evidence image'}
+            className={current.fit === 'pixel' ? 'image-gallery-image--pixel' : ''}
+          />
           <figcaption>
             <div className="image-gallery-caption-row">
               <strong>{title}</strong>

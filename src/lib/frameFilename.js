@@ -31,7 +31,7 @@ function extractTimestamp(stem) {
       stem: stem.slice(0, apostropheMatch.index),
     };
   }
-  // 12-10 / 6-18 (dash — common VS export format)
+  // 12-10 / 6-18 (dash: common VS export format)
   const dashMatch = stem.match(/-(\d{1,2})-(\d{1,2})$/);
   if (dashMatch) {
     return {

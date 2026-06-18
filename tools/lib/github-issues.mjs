@@ -110,6 +110,6 @@ export async function getGitHubStatus() {
     error: cfg.error,
     hint: cfg.configured && cfg.repo
       ? 'Fetch open issues and add them to the Operations page with one click.'
-      : 'Local admin only — token never ships with the public site.',
+      : 'Local admin only: token never ships with the public site.',
   };
 }

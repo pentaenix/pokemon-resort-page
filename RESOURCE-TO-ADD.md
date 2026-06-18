@@ -91,14 +91,14 @@ After adding files, run the local Operations Desk and check **Dashboard → Need
 
 ### Fetch via Operations Desk (Libretro Thumbnails)
 
-Box art is downloaded from the public [Libretro Thumbnails](https://thumbnails.libretro.com/) CDN (`Named_Boxarts` — same artwork many RetroArch setups use). **No API keys.** The public site only serves files you saved under `public/media/`.
+Box art is downloaded from the public [Libretro Thumbnails](https://thumbnails.libretro.com/) CDN (`Named_Boxarts`: same artwork many RetroArch setups use). **No API keys.** The public site only serves files you saved under `public/media/`.
 
 1. `npm run admin` → **Game Library** tab.
 2. Select a game → **Find covers** (or **Auto-pick recommended**).
 3. Click **Use this cover** on the preview you want.
 4. Or CLI: `npm run fetch:boxart` (optional game ids, `--force` to re-download).
 
-**Coverage:** Game Boy through Nintendo 3DS Pokémon titles are on Libretro. **Switch** games (Sword/Shield, Scarlet/Violet, Legends, etc.) are not in this CDN yet — add those box images manually.
+**Coverage:** Game Boy through Nintendo 3DS Pokémon titles are on Libretro. **Switch** games (Sword/Shield, Scarlet/Violet, Legends, etc.) are not in this CDN yet: add those box images manually.
 
 Review downloaded art before publishing; you are responsible for what you host on GitHub.
 
@@ -127,7 +127,7 @@ Search and the focused game library pick up new games automatically once they ar
 5. Update `REGION_GENERATIONS` in `src/pages/Ontology.jsx` if the new region should map to multiple generations (e.g. remakes later).
 6. Re-run validate-data; spot-check the ontology graph (node count and spokes grow with each generation).
 
-The graph layout (`circlePositions`) already reads `generations.length`, so a tenth node appears once `gen10` exists in data—no layout code change required.
+The graph layout (`circlePositions`) already reads `generations.length`, so a tenth node appears once `gen10` exists in data:no layout code change required.
 
 ## 2. Homepage media
 

@@ -1,7 +1,9 @@
-import http from 'node:http';
-import { readFile, writeFile, readdir, rm } from 'node:fs/promises';
+import http, { request as httpRequest } from 'node:http';
+import { readFile, writeFile, readdir, rm, mkdir, copyFile } from 'node:fs/promises';
 import { existsSync, createReadStream } from 'node:fs';
 import { join, extname, resolve, relative, basename, dirname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { unzipSync } from 'fflate';
 import { encodeOwmap, decodeOwmap, mapFromJson } from './lib/owmap-format.mjs';
 import { bakeTerrainSpecials } from './public/ramp-specials.js';
 import {
@@ -15,8 +17,10 @@ import { isValidModelId } from './lib/model-id.mjs';
 import { readRawBody, parseMultipart, groupFolderUpload } from './lib/multipart.mjs';
 import { saveUploadedAsset } from './lib/asset-upload.mjs';
 import { ingestGlbBuffer } from './lib/glb-ingest.mjs';
+import { replaceIslandModelGlb } from './lib/island-model.mjs';
+import { parseGlb } from './lib/glb-compile.mjs';
 import { reorientGlbBuffer } from './lib/reorient-glb.mjs';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import { loadProjectEnv } from '../lib/load-env.mjs';
 import { docArticleRelativePath } from '../docs/article-path.mjs';
 import { ideaArticleRelativePath } from '../ideas/article-path.mjs';
@@ -71,6 +75,11 @@ const mime = {
   '.owmap': 'application/octet-stream',
 };
 const mapSettingsPath = join(root, 'tools/admin/map-editor-settings.json');
+const mapProjectsRoot = join(root, 'tools/admin/data/map-projects');
+const characterEditorModuleRoot = join(root, 'tools/admin/modules/charactereditor');
+const characterEditorSettingsPath = join(root, 'tools/admin/character-editor-settings.json');
+const CHARACTER_EDITOR_HOST = '127.0.0.1';
+const CHARACTER_EDITOR_PORT = Number(process.env.CHARACTER_EDITOR_PORT || 8789);
 const repoRoot = resolve(root, '..');
 
 function isPathInside(child, parent) {
@@ -83,12 +92,14 @@ async function readMapSettings() {
     return {
       mapsDirectory: 'pokemon-resort/assets/overworld/maps',
       modelsDirectory: 'pokemon-resort/assets/overworld/models',
+      tilePackagesDirectory: 'pokemon-resort/assets/overworld/tilepacks',
     };
   }
   const parsed = JSON.parse(await readFile(mapSettingsPath, 'utf8'));
   return {
     mapsDirectory: parsed.mapsDirectory || 'pokemon-resort/assets/overworld/maps',
     modelsDirectory: parsed.modelsDirectory || 'pokemon-resort/assets/overworld/models',
+    tilePackagesDirectory: parsed.tilePackagesDirectory || 'pokemon-resort/assets/overworld/tilepacks',
   };
 }
 
@@ -97,9 +108,202 @@ async function writeMapSettings(settings) {
   const next = {
     mapsDirectory: String(settings.mapsDirectory || current.mapsDirectory).trim(),
     modelsDirectory: String(settings.modelsDirectory || current.modelsDirectory).trim(),
+    tilePackagesDirectory: String(settings.tilePackagesDirectory || current.tilePackagesDirectory).trim(),
   };
   await writeFile(mapSettingsPath, JSON.stringify(next, null, 2) + '\n');
   return next;
+}
+
+async function readCharacterEditorSettings() {
+  const rel = 'pokemon-resort/assets/characters';
+  if (!existsSync(characterEditorSettingsPath)) {
+    return { charactersDirectory: resolve(repoRoot, rel) };
+  }
+  const parsed = JSON.parse(await readFile(characterEditorSettingsPath, 'utf8'));
+  const configured = String(parsed.charactersDirectory || rel).trim();
+  return { charactersDirectory: resolve(repoRoot, configured) };
+}
+
+let characterEditorChild = null;
+let characterEditorStartPromise = null;
+
+function characterEditorPython() {
+  const venvPython = join(characterEditorModuleRoot, '.venv/bin/python');
+  if (existsSync(venvPython)) return venvPython;
+  return process.platform === 'win32' ? 'python' : 'python3';
+}
+
+function characterEditorAlive() {
+  return Boolean(characterEditorChild && characterEditorChild.exitCode === null && !characterEditorChild.killed);
+}
+
+function characterEditorHealth() {
+  return new Promise((resolve) => {
+    const req = httpRequest({
+      hostname: CHARACTER_EDITOR_HOST,
+      port: CHARACTER_EDITOR_PORT,
+      path: '/api/health',
+      method: 'GET',
+      timeout: 1500,
+    }, (upstream) => {
+      let body = '';
+      upstream.on('data', (chunk) => { body += chunk; });
+      upstream.on('end', () => {
+        try {
+          const data = JSON.parse(body);
+          resolve(upstream.statusCode === 200 && data?.ok !== false);
+        } catch {
+          resolve(false);
+        }
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+    req.end();
+  });
+}
+
+async function getCharacterEditorStatus() {
+  const settings = await readCharacterEditorSettings();
+  const alive = characterEditorAlive();
+  const healthy = alive ? await characterEditorHealth() : false;
+  return {
+    ok: true,
+    running: alive,
+    healthy,
+    port: CHARACTER_EDITOR_PORT,
+    charactersDirectory: settings.charactersDirectory,
+    pid: alive ? characterEditorChild.pid : null,
+  };
+}
+
+async function waitForCharacterEditorHealth(maxMs = 25000) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    if (await characterEditorHealth()) return true;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
+}
+
+async function startCharacterEditor() {
+  if (characterEditorStartPromise) return characterEditorStartPromise;
+  if (characterEditorAlive()) {
+    const healthy = await characterEditorHealth();
+    if (healthy) return getCharacterEditorStatus();
+  }
+
+  characterEditorStartPromise = (async () => {
+    const settings = await readCharacterEditorSettings();
+    const python = characterEditorPython();
+    const env = {
+      ...process.env,
+      SPMK_ROOT: characterEditorModuleRoot,
+      SPMK_CHARACTERS_DIR: settings.charactersDirectory,
+    };
+    const child = spawn(
+      python,
+      ['-m', 'spmk_app.server', '--host', CHARACTER_EDITOR_HOST, '--port', String(CHARACTER_EDITOR_PORT)],
+      { cwd: characterEditorModuleRoot, env, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+    characterEditorChild = child;
+    child.stdout?.on('data', (data) => process.stderr.write(`[character-editor] ${data}`));
+    child.stderr?.on('data', (data) => process.stderr.write(`[character-editor] ${data}`));
+    child.on('exit', () => {
+      if (characterEditorChild === child) characterEditorChild = null;
+      characterEditorStartPromise = null;
+    });
+
+    const healthy = await waitForCharacterEditorHealth();
+    if (!healthy) {
+      stopCharacterEditor();
+      throw new Error(
+        'Character editor failed to start. From tools/admin/modules/charactereditor run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt',
+      );
+    }
+    return getCharacterEditorStatus();
+  })();
+
+  try {
+    return await characterEditorStartPromise;
+  } finally {
+    if (characterEditorAlive()) characterEditorStartPromise = null;
+  }
+}
+
+function stopCharacterEditor() {
+  if (!characterEditorChild || characterEditorChild.killed) {
+    characterEditorChild = null;
+    characterEditorStartPromise = null;
+    return;
+  }
+  try {
+    characterEditorChild.kill('SIGTERM');
+  } catch {
+    /* ignore */
+  }
+  characterEditorChild = null;
+  characterEditorStartPromise = null;
+}
+
+function proxyCharacterEditorRequest(req, res, url, { stripPrefix = '' } = {}) {
+  const upstreamPath = stripPrefix
+    ? (url.pathname.slice(stripPrefix.length) || '/')
+    : url.pathname;
+  const options = {
+    hostname: CHARACTER_EDITOR_HOST,
+    port: CHARACTER_EDITOR_PORT,
+    path: `${upstreamPath}${url.search || ''}`,
+    method: req.method,
+    headers: { ...req.headers, host: `${CHARACTER_EDITOR_HOST}:${CHARACTER_EDITOR_PORT}` },
+  };
+  delete options.headers.connection;
+  const proxyReq = httpRequest(options, (proxyRes) => {
+    res.writeHead(proxyRes.statusCode || 502, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on('error', (error) => {
+    if (!res.headersSent) json(res, 502, { ok: false, error: `Character editor proxy failed: ${error.message}` });
+  });
+  req.pipe(proxyReq);
+}
+
+/** SPMK / character-editor API paths proxied when the subprocess is running (not admin desk routes). */
+function shouldProxyToCharacterEditor(pathname) {
+  if (pathname.startsWith('/asset/')) return true;
+  const prefixes = [
+    '/api/packages',
+    '/api/project',
+    '/api/character',
+    '/api/upload',
+    '/api/sheet-version',
+    '/api/sheet-family',
+    '/api/sheet',
+    '/api/templates',
+    '/api/template',
+    '/api/actions',
+    '/api/behaviors',
+    '/api/generate',
+    '/api/batch',
+    '/api/export',
+    '/api/training-pair',
+    '/api/train',
+    '/api/scale',
+    '/api/save-edited',
+    '/api/learned',
+    '/api/generated',
+  ];
+  return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
+async function proxyCharacterEditorIfNeeded(req, res, url) {
+  if (!shouldProxyToCharacterEditor(url.pathname)) return false;
+  if (!(await characterEditorHealth())) {
+    json(res, 503, { ok: false, error: 'Character editor is not running.' });
+    return true;
+  }
+  proxyCharacterEditorRequest(req, res, url);
+  return true;
 }
 
 function resolveModelsDirectory(settings, subPath = '') {
@@ -135,6 +339,10 @@ async function listOverworldModels(settings) {
       modelFile: manifest.glbFile || manifest.modelFile || glbFile,
       storageFormat: 'glb',
       footprintTiles: manifest.footprintTiles || { w: 1, d: 1, h: 1 },
+      renderFootprintTiles: manifest.renderFootprintTiles || manifest.footprintTiles || { w: 1, d: 1, h: 1 },
+      authoringFootprintTiles: manifest.authoringFootprintTiles || manifest.footprintTiles || { w: 1, d: 1, h: 1 },
+      collisionFootprintTiles: manifest.collisionFootprintTiles || manifest.authoringFootprintTiles || manifest.footprintTiles || { w: 1, d: 1, h: 1 },
+      previewOffsetTiles: manifest.previewOffsetTiles || { x: 0, y: 0 },
       compiledAt: manifest.compiledAt || null,
       triangleCount: manifest.triangleCount || 0,
       modelHash: manifest.modelHash || null,
@@ -151,7 +359,7 @@ async function writeIngestedModel(settings, ingestResult) {
   const { modelId, buffer, manifest } = ingestResult;
   const safeId = sanitizeModelId(modelId);
   if (!isValidModelId(safeId)) {
-    throw new Error('Invalid model id — use letters, numbers, underscore, or hyphen (e.g. pokemon_center).');
+    throw new Error('Invalid model id: use letters, numbers, underscore, or hyphen (e.g. pokemon_center).');
   }
   const { target } = resolveModelsDirectory(settings, safeId);
   const { mkdir } = await import('node:fs/promises');
@@ -183,6 +391,345 @@ function resolveMapsDirectory(settings, subPath = '') {
   const target = resolve(base, subPath || '');
   if (!isPathInside(target, repoRoot)) throw new Error('Maps path must stay inside the workspace.');
   return { base, target };
+}
+
+function resolveTilePackagesDirectory(settings, subPath = '') {
+  const baseRel = settings.tilePackagesDirectory || 'pokemon-resort/assets/overworld/tilepacks';
+  const base = resolve(repoRoot, baseRel);
+  const target = resolve(base, subPath || '');
+  if (!isPathInside(target, repoRoot)) throw new Error('Tile package path must stay inside the workspace.');
+  return { base, target };
+}
+
+function normalizeZipEntryName(name) {
+  return String(name || '').replace(/\\/g, '/').replace(/^\/+/, '');
+}
+
+function archiveText(entries, path) {
+  const data = entries[normalizeZipEntryName(path)];
+  if (!data) return null;
+  return Buffer.from(data).toString('utf8');
+}
+
+function archiveJson(entries, path) {
+  const text = archiveText(entries, path);
+  return text ? JSON.parse(text) : null;
+}
+
+function sanitizeTilePackageFileName(name) {
+  const file = basename(String(name || '').trim());
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*\.rtpks$/i.test(file)) {
+    throw new Error('RTPKS file name must end with .rtpks and use letters, numbers, dash, underscore, or dot.');
+  }
+  return file;
+}
+
+function sanitizeMapProjectId(raw) {
+  const id = String(raw || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+  if (!id || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/.test(id)) {
+    throw new Error('Project id must use letters, numbers, underscore, or hyphen.');
+  }
+  return id;
+}
+
+function normalizeProject(project, fallbackId = 'default') {
+  const id = sanitizeMapProjectId(project?.id || fallbackId);
+  const maps = Array.isArray(project?.maps) ? project.maps : [];
+  const tilePackages = Array.isArray(project?.tilePackages) ? project.tilePackages : [];
+  const pathSets = Array.isArray(project?.pathSets) ? project.pathSets : [];
+  return {
+    version: 1,
+    id,
+    name: String(project?.name || id).trim() || id,
+    maps: maps.map((map, index) => ({
+      id: String(map.id || map.file || `map_${index + 1}`).trim(),
+      name: String(map.name || map.id || map.file || `Map ${index + 1}`).trim(),
+      file: basename(String(map.file || `${map.id || `map_${index + 1}`}.owmap`)),
+      gridX: Number.isFinite(Number(map.gridX)) ? Number(map.gridX) : 0,
+      gridY: Number.isFinite(Number(map.gridY)) ? Number(map.gridY) : 0,
+    })),
+    tilePackages: tilePackages.map((pkg) => ({
+      id: String(pkg.id || pkg.file || pkg.fileName || '').trim(),
+      file: basename(String(pkg.file || pkg.fileName || '')),
+      name: String(pkg.name || pkg.id || pkg.file || '').trim(),
+    })).filter((pkg) => pkg.file),
+    defaultTilePackageId: String(project?.defaultTilePackageId || '').trim(),
+    pathSets: pathSets.map((set, index) => ({
+      id: String(set.id || `path_${index + 1}`).trim().replace(/[^a-zA-Z0-9_-]/g, '_') || `path_${index + 1}`,
+      name: String(set.name || set.id || `Path ${index + 1}`).trim(),
+      packageId: String(set.packageId || '').trim(),
+      tiles: typeof set.tiles === 'object' && set.tiles ? { ...set.tiles } : {},
+    })),
+    editor: {
+      activeMapId: String(project?.editor?.activeMapId || '').trim(),
+      viewMode: project?.editor?.viewMode === '3d' ? '3d' : '2d',
+      zoom: Number(project?.editor?.zoom) || 1,
+      overlays: typeof project?.editor?.overlays === 'object' && project.editor.overlays ? { ...project.editor.overlays } : {},
+    },
+    export: typeof project?.export === 'object' && project.export ? { ...project.export } : {},
+  };
+}
+
+async function listMapProjects() {
+  await mkdir(mapProjectsRoot, { recursive: true });
+  const names = await readdir(mapProjectsRoot);
+  const projects = [];
+  for (const name of names.filter((n) => /\.json$/i.test(n)).sort((a, b) => a.localeCompare(b))) {
+    try {
+      const project = normalizeProject(JSON.parse(await readFile(join(mapProjectsRoot, name), 'utf8')), name.replace(/\.json$/i, ''));
+      projects.push({ id: project.id, name: project.name, file: name, mapCount: project.maps.length });
+    } catch (error) {
+      projects.push({ id: name.replace(/\.json$/i, ''), name, file: name, mapCount: 0, error: error.message });
+    }
+  }
+  return projects;
+}
+
+async function readMapProject(id = 'default') {
+  const safeId = sanitizeMapProjectId(id || 'default');
+  const path = join(mapProjectsRoot, `${safeId}.json`);
+  if (!existsSync(path)) {
+    return normalizeProject({ id: safeId, name: safeId === 'default' ? 'Default Project' : safeId }, safeId);
+  }
+  return normalizeProject(JSON.parse(await readFile(path, 'utf8')), safeId);
+}
+
+async function writeMapProject(project) {
+  const normalized = normalizeProject(project, project?.id || 'default');
+  await mkdir(mapProjectsRoot, { recursive: true });
+  const path = join(mapProjectsRoot, `${normalized.id}.json`);
+  await writeFile(path, JSON.stringify(normalized, null, 2) + '\n');
+  return { project: normalized, path };
+}
+
+async function validateMapProjectEdges(settings, project) {
+  const warnings = [];
+  const loaded = new Map();
+  const load = async (entry) => {
+    if (loaded.has(entry.id)) return loaded.get(entry.id);
+    try {
+      const result = await readMapFile(settings, entry.file);
+      loaded.set(entry.id, result.map);
+      return result.map;
+    } catch {
+      loaded.set(entry.id, null);
+      warnings.push(`${entry.file} is listed in the project but does not exist yet.`);
+      return null;
+    }
+  };
+  const maps = project.maps || [];
+  const byCell = new Map(maps.map((entry) => [`${entry.gridX},${entry.gridY}`, entry]));
+  for (const entry of maps) {
+    const map = await load(entry);
+    if (!map) continue;
+    const east = byCell.get(`${entry.gridX + 1},${entry.gridY}`);
+    const south = byCell.get(`${entry.gridX},${entry.gridY + 1}`);
+    if (east) {
+      const other = await load(east);
+      if (other) {
+        if (map.grid.height !== other.grid.height) {
+          warnings.push(`${entry.file} east edge height (${map.grid.height}) does not match ${east.file} west edge height (${other.grid.height}).`);
+        }
+        const rows = Math.min(map.grid.height, other.grid.height);
+        for (let y = 0; y < rows; y += 1) {
+          const a = map.terrain?.height?.[y]?.[map.grid.width - 1] ?? 0;
+          const b = other.terrain?.height?.[y]?.[0] ?? 0;
+          if (a !== b) warnings.push(`${entry.file} east edge y=${y} height ${a} differs from ${east.file} west edge height ${b}.`);
+        }
+      }
+    }
+    if (south) {
+      const other = await load(south);
+      if (other) {
+        if (map.grid.width !== other.grid.width) {
+          warnings.push(`${entry.file} south edge width (${map.grid.width}) does not match ${south.file} north edge width (${other.grid.width}).`);
+        }
+        const cols = Math.min(map.grid.width, other.grid.width);
+        for (let x = 0; x < cols; x += 1) {
+          const a = map.terrain?.height?.[map.grid.height - 1]?.[x] ?? 0;
+          const b = other.terrain?.height?.[0]?.[x] ?? 0;
+          if (a !== b) warnings.push(`${entry.file} south edge x=${x} height ${a} differs from ${south.file} north edge height ${b}.`);
+        }
+      }
+    }
+  }
+  return { ok: warnings.length === 0, warnings };
+}
+
+function relativeGameAssetPath(settings, directoryKey, fileName) {
+  const rel = String(settings[directoryKey] || '').replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/^pokemon-resort\//, '')
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '');
+  return `${rel || 'assets/overworld/tilepacks'}/${fileName}`;
+}
+
+function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = null) {
+  const entries = unzipSync(new Uint8Array(buffer));
+  const manifest = archiveJson(entries, 'manifest.json');
+  if (!manifest || manifest.format !== 'pokemon_resort.rtpks') {
+    throw new Error('Not a supported RTPKS package.');
+  }
+  if (manifest.version !== 2) {
+    throw new Error('RTPKS v1 is no longer supported. Re-export this tileset from PDSMS to create RTPKS v2 and its .rtpks.meta sidecar.');
+  }
+  const tileIndexPath = manifest.tileIndex || 'index/tile_index.json';
+  const tileTabsPath = manifest.tileTabs || 'index/tile_tabs.json';
+  const tileIndex = archiveJson(entries, tileIndexPath);
+  const tileTabs = archiveJson(entries, tileTabsPath);
+  const runtime = archiveJson(entries, 'runtime/manifest.json');
+  if (!tileIndex?.entries?.length) throw new Error('RTPKS is missing index/tile_index.json entries.');
+  if (!tileTabs?.tabs?.length) throw new Error('RTPKS v2 is missing index/tile_tabs.json tabs.');
+  if (!runtime || runtime.format !== 'pokemon_resort.rpak') {
+    throw new Error('RTPKS is missing runtime/manifest.json. Re-save it with the updated PDSMS RTPKS writer.');
+  }
+  if (!metaBuffer) {
+    throw new Error('RTPKS v2 requires a sibling .rtpks.meta editor sidecar. Re-export this tileset from PDSMS and copy both files.');
+  }
+  const metaEntries = unzipSync(new Uint8Array(metaBuffer));
+  const metaManifest = archiveJson(metaEntries, 'manifest.json');
+  if (!metaManifest || metaManifest.format !== 'pokemon_resort.rtpks.meta') {
+    throw new Error('Invalid RTPKS editor sidecar. Expected pokemon_resort.rtpks.meta.');
+  }
+  const sourceHash = createHash('sha256').update(buffer).digest('hex');
+  if (metaManifest.sourceSha256 && metaManifest.sourceSha256 !== sourceHash) {
+    throw new Error('RTPKS editor sidecar does not match this .rtpks file. Re-export both files from PDSMS.');
+  }
+  const editorMeta = archiveJson(metaEntries, metaManifest.tileMetadata || 'editor/tile_metadata.json');
+  if (!editorMeta?.tiles?.length) {
+    throw new Error('RTPKS editor sidecar is missing editor/tile_metadata.json tiles.');
+  }
+  const metaTiles = new Map((editorMeta.tiles || []).map((tile) => [Number(tile.resortTileId), tile]));
+  const tabList = (tileTabs.tabs || []).map((tab) => ({
+    id: String(tab.id || 'default'),
+    name: String(tab.name || tab.id || 'Default'),
+    order: Number(tab.order || 0),
+    tileIds: (tab.tileIds || []).map(Number).filter(Number.isFinite),
+  })).sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+
+  const runtimeTiles = new Map((runtime.tiles || []).map((tile) => [Number(tile.resortTileId), tile]));
+  const runtimeMaterials = new Map((runtime.materials || []).map((mat) => [Number(mat.materialId), mat]));
+  const textureSet = new Set(Object.keys(entries)
+    .filter((name) => name.startsWith('runtime/textures/'))
+    .map((name) => name.slice('runtime/textures/'.length)));
+
+  const tiles = [];
+  const meshBounds = (mesh) => {
+    const out = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
+    const values = [];
+    if (Array.isArray(mesh?.triangles)) values.push(...mesh.triangles);
+    if (Array.isArray(mesh?.quads)) values.push(...mesh.quads);
+    if (!values.length) return out;
+    out.minX = out.minY = out.minZ = Number.POSITIVE_INFINITY;
+    out.maxX = out.maxY = out.maxZ = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < values.length; i += 3) {
+      const x = Number(values[i] || 0);
+      const y = Number(values[i + 1] || 0);
+      const z = Number(values[i + 2] || 0);
+      out.minX = Math.min(out.minX, x); out.maxX = Math.max(out.maxX, x);
+      out.minY = Math.min(out.minY, y); out.maxY = Math.max(out.maxY, y);
+      out.minZ = Math.min(out.minZ, z); out.maxZ = Math.max(out.maxZ, z);
+    }
+    return out;
+  };
+  for (const entry of tileIndex.entries || []) {
+    if (entry.status && entry.status !== 'active') continue;
+    const resortTileId = Number(entry.resortTileId);
+    const meshPath = `runtime/meshes/tile_${resortTileId}.json`;
+    const mesh = entries[meshPath] ? archiveJson(entries, meshPath) : null;
+    const runtimeTile = runtimeTiles.get(resortTileId) || {};
+    const metaTile = metaTiles.get(resortTileId) || {};
+    const width = Number(runtimeTile.width || mesh?.width || 1);
+    const height = Number(runtimeTile.height || mesh?.height || 1);
+    const materialId = Array.isArray(mesh?.textureIds) ? Number(mesh.textureIds[0]) : null;
+    const material = materialId != null ? runtimeMaterials.get(materialId) : null;
+    const textureName = material?.textureName && textureSet.has(material.textureName)
+      ? material.textureName
+      : (runtime.textures || []).find((tex) => textureSet.has(tex.name))?.name || null;
+    const bounds = meshBounds(mesh);
+    tiles.push({
+      localIndex: Number(entry.localIndex),
+      resortTileId,
+      key: entry.key || `tile_${String(resortTileId).padStart(4, '0')}`,
+      tabId: metaTile.tabId || tabList.find((tab) => tab.tileIds.includes(resortTileId))?.id || 'default',
+      width: Number(metaTile.width || width),
+      height: Number(metaTile.height || height),
+      footprint: { w: Number(metaTile.width || width), h: Number(metaTile.height || height), d: Number(metaTile.height || height) },
+      xOffset: Number(metaTile.xOffset ?? mesh?.xOffset ?? 0),
+      yOffset: Number(metaTile.yOffset ?? mesh?.yOffset ?? 0),
+      tileable: {
+        x: Boolean(metaTile.xTileable),
+        y: Boolean(metaTile.yTileable),
+        u: Boolean(metaTile.uTileable),
+        v: Boolean(metaTile.vTileable),
+      },
+      globalTexMapping: Boolean(metaTile.globalTexMapping),
+      globalTexScale: Number(metaTile.globalTexScale || 1),
+      preview: metaTile.preview || null,
+      previewImage: metaTile.preview?.image
+        ? `/api/tile-packages/preview?file=${encodeURIComponent(basename(fileName))}&tileId=${encodeURIComponent(resortTileId)}`
+        : '',
+      bounds,
+      materialCount: Number(runtimeTile.materialCount || mesh?.textureIds?.length || 0),
+      vertexCount: Number(runtimeTile.vertexCount || 0),
+      triangleCount: Number(runtimeTile.triangleCount || 0),
+      meshPath,
+      previewTexture: textureName,
+      materialId,
+    });
+  }
+  tiles.sort((a, b) => a.resortTileId - b.resortTileId);
+  const meshCount = Object.keys(entries).filter((name) => /^runtime\/meshes\/tile_\d+\.json$/.test(name)).length;
+  return {
+    fileName: basename(fileName),
+    packId: manifest.packId || runtime.packId || basename(fileName, '.rtpks'),
+    name: manifest.name || runtime.packId || basename(fileName, '.rtpks'),
+    activeTileCount: tiles.length,
+    meshCount,
+    materialCount: runtime.materials?.length || 0,
+    textureCount: runtime.textures?.length || 0,
+    tabs: tabList,
+    smartSets: editorMeta.smartSets || [],
+    materials: (runtime.materials || []).map((material) => ({
+      materialId: Number(material.materialId),
+      name: material.name || `material_${material.materialId}`,
+      textureName: material.textureName || '',
+      alpha: Number(material.alpha ?? 255),
+    })),
+    tiles,
+  };
+}
+
+async function inspectRtpksFile(filePath) {
+  const metaPath = `${filePath}.meta`;
+  const metaBuffer = existsSync(metaPath) ? await readFile(metaPath) : null;
+  return inspectRtpksBuffer(await readFile(filePath), basename(filePath), metaBuffer);
+}
+
+async function listTilePackages(settings) {
+  const { base } = resolveTilePackagesDirectory(settings);
+  if (!existsSync(base)) return { base, packages: [] };
+  const names = await readdir(base);
+  const packages = [];
+  for (const name of names.filter((n) => /\.rtpks$/i.test(n)).sort((a, b) => a.localeCompare(b))) {
+    try {
+      const inspected = await inspectRtpksFile(join(base, name));
+      packages.push({
+        ...inspected,
+        fileName: name,
+        gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', name),
+        tiles: inspected.tiles.slice(0, 96),
+      });
+    } catch (error) {
+      packages.push({ fileName: name, name, packId: name.replace(/\.rtpks$/i, ''), error: error.message, tiles: [] });
+    }
+  }
+  return { base, packages };
 }
 
 async function listMapFiles(settings) {
@@ -262,7 +809,7 @@ function run(command, args = []) {
 async function readJsonFile(file) {
   const path = join(dataRoot, file);
   if (!existsSync(path)) {
-    throw new Error(`ENOENT: no such file or directory, open '${path}' — expected public/data/${file}. Restart the Operations Desk (npm run admin) after pulling the research/pois split.`);
+    throw new Error(`ENOENT: no such file or directory, open '${path}': expected public/data/${file}. Restart the Operations Desk (npm run admin) after pulling the research/pois split.`);
   }
   return JSON.parse(await readFile(path, 'utf8'));
 }
@@ -337,7 +884,7 @@ async function listAssets() {
   return walk(publicRoot);
 }
 
-const DESK_API_VERSION = 3;
+const DESK_API_VERSION = 4;
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -346,9 +893,35 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         ok: true,
         version: DESK_API_VERSION,
-        features: ['maps', 'overworld-models', 'overworld-model-delete', 'overworld-model-zip', 'owmap-bake'],
+        features: ['maps', 'overworld-models', 'overworld-model-delete', 'overworld-model-zip', 'owmap-bake', 'rtpks-tile-packages', 'character-editor', 'atlas-island-model'],
       });
     }
+    if (url.pathname === '/api/game-engine/tools') {
+      const toolsPath = join(root, 'tools/admin/data/game-engine-tools.json');
+      if (!existsSync(toolsPath)) return json(res, 200, { tools: [] });
+      return json(res, 200, JSON.parse(await readFile(toolsPath, 'utf8')));
+    }
+    if (url.pathname === '/api/character-editor/status') {
+      return json(res, 200, await getCharacterEditorStatus());
+    }
+    if (url.pathname === '/api/character-editor/start' && req.method === 'POST') {
+      try {
+        return json(res, 200, await startCharacterEditor());
+      } catch (error) {
+        return json(res, 500, { ok: false, error: error.message, ...(await getCharacterEditorStatus()) });
+      }
+    }
+    if (url.pathname === '/api/character-editor/stop' && req.method === 'POST') {
+      stopCharacterEditor();
+      return json(res, 200, await getCharacterEditorStatus());
+    }
+    if (url.pathname === '/character-editor' || url.pathname.startsWith('/character-editor/')) {
+      if (!(await characterEditorHealth())) {
+        return json(res, 503, { ok: false, error: 'Character editor is not running.' });
+      }
+      return proxyCharacterEditorRequest(req, res, url, { stripPrefix: '/character-editor' });
+    }
+    if (await proxyCharacterEditorIfNeeded(req, res, url)) return;
     if (url.pathname === '/api/data') return json(res, 200, await readAllData());
     if (url.pathname === '/api/assets') return json(res, 200, { assets: await listAssets() });
     if (url.pathname === '/api/assets/upload' && req.method === 'POST') {
@@ -386,6 +959,37 @@ const server = http.createServer(async (req, res) => {
           subdir,
         );
         return json(res, 200, { ok: true, path, deduped, assets: await listAssets() });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/atlas/island-model/replace' && req.method === 'POST') {
+      try {
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+          return json(res, 400, { ok: false, error: 'Expected multipart upload' });
+        }
+        const raw = await readRawBody(req, 120_000_000);
+        const parts = parseMultipart(raw, contentType);
+        let filePart = null;
+        for (const part of parts) {
+          if ((part.name === 'file' || part.filename) && part.bytes.length) {
+            filePart = part;
+            break;
+          }
+        }
+        if (!filePart) {
+          return json(res, 400, { ok: false, error: 'No file in upload (field: file).' });
+        }
+        const bytes = filePart.bytes;
+        const isGlb = bytes.length >= 4
+          && bytes[0] === 0x67 && bytes[1] === 0x6c && bytes[2] === 0x54 && bytes[3] === 0x46;
+        if (!isGlb) {
+          return json(res, 400, { ok: false, error: 'File is not a valid GLB (glTF binary).' });
+        }
+        parseGlb(bytes);
+        const path = await replaceIslandModelGlb(publicRoot, bytes);
+        return json(res, 200, { ok: true, path, bytes: bytes.length });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }
@@ -530,13 +1134,281 @@ const server = http.createServer(async (req, res) => {
         const next = await writeMapSettings(payload);
         resolveMapsDirectory(next);
         resolveModelsDirectory(next);
+        resolveTilePackagesDirectory(next);
         const { base } = resolveMapsDirectory(next);
         const { base: modelsBase } = resolveModelsDirectory(next);
-        return json(res, 200, { ok: true, settings: next, resolvedPath: base, modelsResolvedPath: modelsBase });
+        const { base: tilePackagesBase } = resolveTilePackagesDirectory(next);
+        return json(res, 200, { ok: true, settings: next, resolvedPath: base, modelsResolvedPath: modelsBase, tilePackagesResolvedPath: tilePackagesBase });
       }
       const { base } = resolveMapsDirectory(settings);
       const { base: modelsBase } = resolveModelsDirectory(settings);
-      return json(res, 200, { ok: true, settings, resolvedPath: base, modelsResolvedPath: modelsBase });
+      const { base: tilePackagesBase } = resolveTilePackagesDirectory(settings);
+      return json(res, 200, { ok: true, settings, resolvedPath: base, modelsResolvedPath: modelsBase, tilePackagesResolvedPath: tilePackagesBase });
+    }
+    if (url.pathname === '/api/tile-packages/list') {
+      const settings = await readMapSettings();
+      const listing = await listTilePackages(settings);
+      return json(res, 200, { ok: true, ...listing, settings });
+    }
+    if (url.pathname === '/api/tile-packages/package') {
+      const settings = await readMapSettings();
+      try {
+        const fileName = sanitizeTilePackageFileName(url.searchParams.get('file'));
+        const { target } = resolveTilePackagesDirectory(settings, fileName);
+        if (!existsSync(target)) return json(res, 404, { ok: false, error: 'RTPKS package not found.' });
+        const inspected = await inspectRtpksFile(target);
+        return json(res, 200, {
+          ok: true,
+          package: {
+            ...inspected,
+            fileName,
+            gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', fileName),
+          },
+        });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/import' && req.method === 'POST') {
+      const settings = await readMapSettings();
+      try {
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+          return json(res, 400, { ok: false, error: 'Expected multipart upload' });
+        }
+        const raw = await readRawBody(req, 120_000_000);
+        const parts = parseMultipart(raw, contentType);
+        let filePart = null;
+        let metaPart = null;
+        for (const part of parts) {
+          if (!part.bytes.length) continue;
+          if (/\.rtpks\.meta$/i.test(part.filename || '') || part.name === 'rtpksMeta') {
+            metaPart = part;
+          } else if ((part.name === 'rtpks' || part.filename) && /\.rtpks$/i.test(part.filename || '')) {
+            filePart = part;
+          }
+        }
+        if (!filePart) return json(res, 400, { ok: false, error: 'No RTPKS file in upload (field: rtpks).' });
+        if (!metaPart) return json(res, 400, { ok: false, error: 'No RTPKS editor sidecar in upload (field: rtpksMeta, file: *.rtpks.meta).' });
+        const safe = sanitizeTilePackageFileName(filePart.filename || 'tile_package.rtpks');
+        const inspected = inspectRtpksBuffer(filePart.bytes, safe, metaPart.bytes);
+        const { base, target } = resolveTilePackagesDirectory(settings, safe);
+        await mkdir(base, { recursive: true });
+        await writeFile(target, filePart.bytes);
+        await writeFile(`${target}.meta`, metaPart.bytes);
+        const listing = await listTilePackages(settings);
+        return json(res, 200, {
+          ok: true,
+          fileName: safe,
+          savedPath: target,
+          gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', safe),
+          package: { ...inspected, fileName: safe, gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', safe) },
+          packages: listing.packages,
+        });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/copy' && req.method === 'POST') {
+      const settings = await readMapSettings();
+      try {
+        const payload = JSON.parse(await readBody(req));
+        const sourcePath = resolve(repoRoot, String(payload.sourcePath || ''));
+        if (!isPathInside(sourcePath, repoRoot) || !existsSync(sourcePath)) {
+          throw new Error('Source RTPKS must exist inside the workspace.');
+        }
+        const safe = sanitizeTilePackageFileName(payload.fileName || basename(sourcePath));
+        const inspected = await inspectRtpksFile(sourcePath);
+        const { base, target } = resolveTilePackagesDirectory(settings, safe);
+        await mkdir(base, { recursive: true });
+        await copyFile(sourcePath, target);
+        if (!existsSync(`${sourcePath}.meta`)) {
+          throw new Error('Source RTPKS is missing required .rtpks.meta sidecar.');
+        }
+        await copyFile(`${sourcePath}.meta`, `${target}.meta`);
+        const listing = await listTilePackages(settings);
+        return json(res, 200, {
+          ok: true,
+          fileName: safe,
+          savedPath: target,
+          gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', safe),
+          package: { ...inspected, fileName: safe, gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', safe) },
+          packages: listing.packages,
+        });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/texture') {
+      const settings = await readMapSettings();
+      try {
+        const fileName = sanitizeTilePackageFileName(url.searchParams.get('file'));
+        const textureName = normalizeZipEntryName(url.searchParams.get('texture') || '');
+        if (!textureName || textureName.includes('..')) throw new Error('Invalid texture name.');
+        const { target } = resolveTilePackagesDirectory(settings, fileName);
+        if (!existsSync(target)) return json(res, 404, { ok: false, error: 'RTPKS package not found.' });
+        const entries = unzipSync(new Uint8Array(await readFile(target)));
+        const entryPath = normalizeZipEntryName(`runtime/textures/${textureName}`);
+        const bytes = entries[entryPath];
+        if (!bytes) return json(res, 404, { ok: false, error: 'Texture not found in RTPKS package.' });
+        const ext = extname(textureName).toLowerCase();
+        res.writeHead(200, {
+          'Content-Type': mime[ext] || 'image/png',
+          'Cache-Control': 'private, max-age=60',
+        });
+        res.end(Buffer.from(bytes));
+        return;
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/preview') {
+      const settings = await readMapSettings();
+      try {
+        const fileName = sanitizeTilePackageFileName(url.searchParams.get('file'));
+        const tileIdRaw = url.searchParams.get('tileId');
+        const tileId = Number(tileIdRaw);
+        if (!Number.isInteger(tileId) || tileId < 0) throw new Error('tileId must be a non-negative integer.');
+        const { target } = resolveTilePackagesDirectory(settings, fileName);
+        const metaPath = `${target}.meta`;
+        if (!existsSync(metaPath)) return json(res, 404, { ok: false, error: 'RTPKS editor sidecar not found.' });
+        const entries = unzipSync(new Uint8Array(await readFile(metaPath)));
+        const manifest = archiveJson(entries, 'manifest.json');
+        const editorMeta = archiveJson(entries, manifest?.tileMetadata || 'editor/tile_metadata.json');
+        const tile = (editorMeta?.tiles || []).find((item) => Number(item.resortTileId) === tileId);
+        const previewPath = normalizeZipEntryName(tile?.preview?.image || `editor/previews/tile_${tileId}.png`);
+        const bytes = entries[previewPath];
+        if (!bytes) return json(res, 404, { ok: false, error: 'Preview not found in RTPKS editor sidecar.' });
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=3600' });
+        res.end(Buffer.from(bytes));
+        return;
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/mesh') {
+      const settings = await readMapSettings();
+      try {
+        const fileName = sanitizeTilePackageFileName(url.searchParams.get('file'));
+        const tileIdRaw = url.searchParams.get('tileId');
+        const tileId = Number(tileIdRaw);
+        if (!Number.isInteger(tileId) || tileId < 0) throw new Error('tileId must be a non-negative integer.');
+        const { target } = resolveTilePackagesDirectory(settings, fileName);
+        if (!existsSync(target)) return json(res, 404, { ok: false, error: 'RTPKS package not found.' });
+        const entries = unzipSync(new Uint8Array(await readFile(target)));
+        const entryPath = `runtime/meshes/tile_${tileId}.json`;
+        const bytes = entries[entryPath];
+        if (!bytes) return json(res, 404, { ok: false, error: 'Mesh not found in RTPKS package.' });
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, max-age=60' });
+        res.end(Buffer.from(bytes).toString('utf8'));
+        return;
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/map-projects/list') {
+      try {
+        return json(res, 200, { ok: true, projects: await listMapProjects() });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/map-projects/project') {
+      try {
+        const id = url.searchParams.get('id') || 'default';
+        const project = await readMapProject(id);
+        return json(res, 200, { ok: true, project });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/map-projects/validate') {
+      const settings = await readMapSettings();
+      try {
+        const id = url.searchParams.get('id') || 'default';
+        const project = await readMapProject(id);
+        const validation = await validateMapProjectEdges(settings, project);
+        return json(res, 200, { ok: true, projectId: project.id, validation });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/map-projects/create' && req.method === 'POST') {
+      try {
+        const payload = JSON.parse(await readBody(req));
+        const id = sanitizeMapProjectId(payload.id || payload.name || 'default');
+        const result = await writeMapProject({
+          id,
+          name: payload.name || id,
+          maps: [],
+          tilePackages: [],
+          pathSets: [],
+          editor: { activeMapId: '', viewMode: '2d', zoom: 1, overlays: {} },
+        });
+        return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/map-projects/save' && req.method === 'POST') {
+      try {
+        const payload = JSON.parse(await readBody(req));
+        const result = await writeMapProject(payload.project || payload);
+        return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/map-projects/delete' && (req.method === 'POST' || req.method === 'DELETE')) {
+      try {
+        let id = url.searchParams.get('id');
+        if (!id) {
+          const raw = await readBody(req);
+          id = raw?.trim() ? JSON.parse(raw).id : '';
+        }
+        const safeId = sanitizeMapProjectId(id);
+        await rm(join(mapProjectsRoot, `${safeId}.json`), { force: true });
+        return json(res, 200, { ok: true, id: safeId });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/map-projects/create-adjacent' && req.method === 'POST') {
+      try {
+        const payload = JSON.parse(await readBody(req));
+        const project = await readMapProject(payload.projectId || 'default');
+        const activeId = String(payload.activeMapId || project.editor.activeMapId || '').trim();
+        const direction = String(payload.direction || '').trim().toLowerCase();
+        const deltas = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] };
+        const delta = deltas[direction];
+        if (!delta) throw new Error('direction must be north, east, south, or west.');
+        const anchor = project.maps.find((map) => map.id === activeId)
+          || project.maps.find((map) => map.file === activeId)
+          || project.maps[0];
+        if (!anchor) throw new Error('Add or save the current map to the project before creating adjacent maps.');
+        const gridX = anchor.gridX + delta[0];
+        const gridY = anchor.gridY + delta[1];
+        const existing = project.maps.find((map) => map.gridX === gridX && map.gridY === gridY);
+        if (existing) {
+          project.editor.activeMapId = existing.id;
+          const saved = await writeMapProject(project);
+          return json(res, 200, { ok: true, project: saved.project, map: existing, existing: true });
+        }
+        const base = sanitizeMapProjectId(`${anchor.id || 'map'}_${direction}`);
+        let id = base;
+        let n = 2;
+        while (project.maps.some((map) => map.id === id || map.file === `${id}.owmap`)) {
+          id = `${base}_${n}`;
+          n += 1;
+        }
+        const map = { id, name: id.replace(/_/g, ' '), file: `${id}.owmap`, gridX, gridY };
+        project.maps.push(map);
+        project.editor.activeMapId = id;
+        const saved = await writeMapProject(project);
+        return json(res, 200, { ok: true, project: saved.project, map, existing: false });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
     }
     if (url.pathname === '/api/overworld-models/list') {
       const settings = await readMapSettings();
@@ -717,7 +1589,7 @@ const server = http.createServer(async (req, res) => {
         if (!isValidModelId(safeId)) {
           return json(res, 400, {
             ok: false,
-            error: 'Model id is required — use letters, numbers, underscore, or hyphen (e.g. pokemon_center).',
+            error: 'Model id is required: use letters, numbers, underscore, or hyphen (e.g. pokemon_center).',
           });
         }
         const meta = { displayName, defaultYawDeg, defaultScale };
@@ -865,10 +1737,79 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-/** Default desk port (8787 = Headroom proxy; 8788 = SPMK — see DEV-PORTS.md). Override: PORT=… npm run admin */
+/** Default desk port (8787 = Headroom proxy; 8788 = SPMK: see DEV-PORTS.md). Override: PORT=… npm run admin */
 const DEFAULT_ADMIN_PORT = 9477;
 const port = Number(process.env.PORT || DEFAULT_ADMIN_PORT);
+
+function sleepMs(ms) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) { /* wait for port release */ }
+}
+
+/** Stop any process already listening on the admin port so `npm run admin` can restart cleanly. */
+function freeListenPort(listenPort) {
+  const ownPid = process.pid;
+  if (process.platform === 'win32') {
+    try {
+      const out = execSync(`netstat -ano | findstr :${listenPort}`, { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] });
+      const pids = new Set();
+      for (const line of out.split('\n')) {
+        if (!line.includes('LISTENING')) continue;
+        const pid = line.trim().split(/\s+/).pop();
+        if (pid && pid !== '0') pids.add(pid);
+      }
+      for (const pid of pids) {
+        if (Number(pid) === ownPid) continue;
+        execSync(`taskkill /PID ${pid} /F`, { stdio: 'ignore' });
+        console.log(`Stopped previous listener (PID ${pid}) on port ${listenPort}.`);
+      }
+    } catch {
+      /* port free */
+    }
+    return;
+  }
+  try {
+    const out = execSync(`lsof -ti tcp:${listenPort} -sTCP:LISTEN`, {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+    }).trim();
+    if (!out) return;
+    let killed = false;
+    for (const raw of [...new Set(out.split(/\s+/).filter(Boolean))]) {
+      const pid = Number(raw);
+      if (!pid || pid === ownPid) continue;
+      try {
+        process.kill(pid, 'SIGTERM');
+        killed = true;
+        console.log(`Stopped previous admin listener (PID ${pid}) on port ${listenPort}.`);
+      } catch {
+        /* already gone */
+      }
+    }
+    if (killed) sleepMs(400);
+  } catch {
+    /* port free */
+  }
+}
+
+freeListenPort(port);
+
 server.listen(port, '127.0.0.1', () => {
   console.log(`Resort Operations Desk: http://127.0.0.1:${port}`);
   console.log('  Map editor APIs: /api/maps/*, /api/overworld-models/* (incl. delete)');
+  console.log(`  Character editor: /api/character-editor/* (subprocess on :${CHARACTER_EDITOR_PORT})`);
+});
+
+function shutdownCharacterEditor() {
+  stopCharacterEditor();
+}
+
+process.on('exit', shutdownCharacterEditor);
+process.on('SIGINT', () => {
+  shutdownCharacterEditor();
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  shutdownCharacterEditor();
+  process.exit(0);
 });

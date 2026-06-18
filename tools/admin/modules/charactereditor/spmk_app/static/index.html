@@ -1,0 +1,35 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Character Editor</title><link rel="stylesheet" href="static/styles.css?v=charbin42"/><link rel="stylesheet" href="static/ui-polish.css?v=charbin42"/></head><body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><div class="logo"></div><div><h1>SPMK</h1><p id="projectName">Sprite Pose Maker Kit</p></div></div>
+    <div class="cmd"><span class="pill"><span class="statusdot"></span><strong>Local</strong> workspace</span><span class="pill">Run: <strong>./spmk run</strong></span><span class="pill autosave">Autosave <strong id="saveState">ready</strong></span></div>
+  </header>
+  <aside class="sidebar">
+    <nav class="nav" id="nav"></nav>
+    <div class="section-title">Characters</div>
+    <div class="sidecard card"><h3>Characters</h3><p>.charbin files in <code>characters/</code>. Click a card to edit.</p>
+      <button type="button" class="btn good full" data-open-quick-anim style="margin-top:10px">Quick anim</button>
+      <p class="tiny" style="margin-top:6px">Batch sleep / custom anims on all Pokémon.</p></div>
+    <div class="sidecard card"><h3>Sprite workspace</h3><p>Old import/train flow — not .charbin.</p></div>
+  </aside>
+  <main class="main"><div class="toolbar"><h2 id="viewTitle">Characters</h2><div id="toolbarControls" class="row wrap"></div><div class="spacer"></div><button class="btn small" id="exportProject">Export backup</button></div><div id="view" class="view"></div></main>
+  <aside class="rightbar" id="rightbar"></aside>
+  <footer class="top" style="grid-row:3; height:30px; padding:0 14px; font-size:11px; color:var(--faint)"><span id="footerStatus">Ready.</span></footer>
+</div>
+<div id="toast" class="toast"></div>
+<script src="static/ui-modal.js?v=charbin42"></script>
+<script src="static/ui-select.js?v=charbin42"></script>
+<script src="static/ui-actions.js?v=charbin42"></script>
+<script src="static/ui-generate.js?v=charbin42"></script>
+<script src="static/ui-export.js?v=charbin42"></script>
+<script src="static/ui-pixel-editor.js?v=charbin42"></script>
+<script src="static/ui-quick-anim.js?v=charbin42"></script>
+<script src="static/ui-body-markers.js?v=charbin42"></script>
+<script src="static/ui-packages.js?v=charbin42"></script>
+<script src="static/app.js?v=charbin42"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof state !== 'undefined') state.view = 'packages';
+});
+</script>
+</body></html>

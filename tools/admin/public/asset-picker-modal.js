@@ -97,7 +97,7 @@ function renderGrid(assets, currentFolder, query, esc, adminAssetUrl) {
   }).join('');
 
   if (!folderTiles && !fileTiles) {
-    return '<p class="hint asset-picker-empty">No images here yet — upload one above.</p>';
+    return '<p class="hint asset-picker-empty">No images here yet: upload one above.</p>';
   }
   return `${folderTiles}${fileTiles}`;
 }
@@ -177,7 +177,7 @@ export function openAssetPickerModal(opts) {
       ? `${list.filter((p) => p.toLowerCase().includes(query.toLowerCase())).length} matches`
       : currentFolder
         ? `public/${currentFolder}/`
-        : 'public/ — all media';
+        : 'public/: all media';
     const uploadTarget = uploadSubdir ? `${uploadFolder}/${uploadSubdir}` : uploadFolder;
     pathHintEl.innerHTML = `Uploads go to <code>public/${esc(uploadTarget)}/</code>`;
   };

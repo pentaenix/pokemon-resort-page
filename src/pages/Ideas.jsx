@@ -12,6 +12,7 @@ import {
   loadIdeaArticle,
 } from '../lib/ideas.js';
 import { recordHasRichContent } from '../lib/richContent.js';
+import { DossierImage } from '../components/dossier/DossierImage.jsx';
 
 function IdeaCard({ idea, onOpen }) {
   const hero = ideaHeroUrl(idea);
@@ -161,8 +162,13 @@ function IdeaArticleView({ meta, body, onBack }) {
       )}
 
       {hero && (
-        <figure className={`docs-article-cover${meta.heroImage?.fit === 'contain' ? ' docs-article-cover--contain' : ''}`}>
-          <img src={hero} alt={meta.heroImage?.caption || meta.title} />
+        <figure className={`docs-article-cover${meta.heroImage?.fit === 'contain' ? ' docs-article-cover--contain' : ''}${meta.heroImage?.fit === 'pixel' ? ' docs-article-cover--pixel' : ''}`}>
+          <DossierImage
+            path={meta.heroImage?.path}
+            alt={meta.heroImage?.caption || meta.title}
+            fit={meta.heroImage?.fit}
+            pixelScale={meta.heroImage?.pixelScale}
+          />
           {meta.heroImage?.caption && <figcaption>{meta.heroImage.caption}</figcaption>}
         </figure>
       )}

@@ -75,6 +75,21 @@
       "title": "POI detective mode",
       "status": "spark",
       "summary": "Toggle between a clean resort view and one with frames, crops, and reconstruction notes."
+    },
+    {
+      "id": "idea-pokemon-accessories",
+      "slug": "idea-pokemon-accessories",
+      "title": "Pokémon accessories",
+      "status": "spark",
+      "summary": "One cosmetic slot per Pokémon (summary + overworld). Resort-earned accessories and ribbons; held items are the only cartridge cosmetics. Mirror at Glamping Tents.",
+      "tags": ["accessories", "customization", "contest", "glamping", "spark"],
+      "updatedAt": "2026-06-11",
+      "heroImage": {
+        "path": "media/ideas/pokemon-accessories/piloswine-summary.png",
+        "caption": "Piloswine summary layout with overworld inset (concept).",
+        "fit": "pixel",
+        "pixelScale": 4
+      }
     }
   ]
 }

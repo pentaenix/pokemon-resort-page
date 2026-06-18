@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a tiny example UI-loop GIF for documentation (no AI — programmatic frames)."""
+"""Build a tiny example UI-loop GIF for documentation (no AI: programmatic frames)."""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def draw_frame(index: int) -> Image.Image:
 
     draw.rounded_rectangle((24, 24, W - 24, H - 24), radius=18, fill="#ffffff", outline="#94cfd9", width=2)
     draw.text((40, 40), "Docs hub · example loop", fill="#075b78", font=title)
-    draw.text((40, 72), "Programmatic GIF — safe for LLM-authored docs", fill="#5a8a96", font=small)
+    draw.text((40, 72), "Programmatic GIF: safe for LLM-authored docs", fill="#5a8a96", font=small)
 
     pulse = abs((index % FRAMES) - FRAMES / 2) / (FRAMES / 2)
     bar_w = int(120 + 180 * (1 - pulse))

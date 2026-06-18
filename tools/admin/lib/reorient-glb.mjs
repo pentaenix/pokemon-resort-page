@@ -49,7 +49,7 @@ function isIdentityRotation(rx, ry, rz) {
  * placement, the C++ game) sees the corrected orientation without per-instance transforms.
  *
  * Positions and normals are rotated about the local origin, then the result is re-centered on
- * X/Z and re-seated so its lowest point sits on the y=0 ground plane — this keeps the placement
+ * X/Z and re-seated so its lowest point sits on the y=0 ground plane: this keeps the placement
  * anchor at the footprint center and stops re-oriented props from floating or sinking.
  *
  * @param {Buffer|Uint8Array} buffer source GLB bytes

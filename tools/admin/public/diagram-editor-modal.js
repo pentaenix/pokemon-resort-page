@@ -38,7 +38,7 @@ async function ensureMermaid() {
 
 export const DIAGRAM_TEMPLATES = {
   'pokemon-ai-state': {
-    label: 'Pokémon AI — state machine',
+    label: 'Pokémon AI: state machine',
     source: `stateDiagram-v2
     direction LR
     [*] --> Idle
@@ -145,7 +145,7 @@ export function openDiagramEditorModal(opts) {
   modalHost.className = 'diagram-editor-backdrop';
   modalHost.innerHTML = `<div class="diagram-editor-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}">
     <header class="diagram-editor-head">
-      <div><h2>${esc(title)}</h2><p class="hint">Mermaid text — class, state, sequence, and flowchart UML-style diagrams.</p></div>
+      <div><h2>${esc(title)}</h2><p class="hint">Mermaid text: class, state, sequence, and flowchart UML-style diagrams.</p></div>
       <button type="button" class="diagram-editor-close" data-diagram-close aria-label="Close">×</button>
     </header>
     <div class="diagram-editor-body">
@@ -159,10 +159,10 @@ export function openDiagramEditorModal(opts) {
         <details class="diagram-help">
           <summary>Syntax cheat sheet</summary>
           <ul>
-            <li><code>classDiagram</code> — UML classes &amp; relations</li>
-            <li><code>stateDiagram-v2</code> — state machines</li>
-            <li><code>sequenceDiagram</code> — message flows</li>
-            <li><code>flowchart TD</code> — decision trees</li>
+            <li><code>classDiagram</code>: UML classes &amp; relations</li>
+            <li><code>stateDiagram-v2</code>: state machines</li>
+            <li><code>sequenceDiagram</code>: message flows</li>
+            <li><code>flowchart TD</code>: decision trees</li>
           </ul>
         </details>
       </div>
@@ -227,7 +227,7 @@ export async function renderDiagramBlockPreview(blockEl) {
   const source = blockEl?.querySelector('[data-block-diagram-source]')?.value || '';
   if (!preview) return;
   if (!source.trim()) {
-    preview.innerHTML = '<p class="hint">No diagram yet — click Edit diagram.</p>';
+    preview.innerHTML = '<p class="hint">No diagram yet: click Edit diagram.</p>';
     return;
   }
   preview.innerHTML = '<p class="hint">Rendering…</p>';

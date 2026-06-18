@@ -59,7 +59,7 @@ See `#/docs?article=writing-docs` for a live example.
 
 ## Linked code block
 
-Paths are relative to an **app root** in the monorepo — not the workspace root.
+Paths are relative to an **app root** in the monorepo: not the workspace root.
 
 | `repo` value | App folder |
 |--------------|------------|
@@ -88,7 +88,7 @@ Rules:
 
 ## Tabbed section (write vs read)
 
-Use when a format has distinct authoring and loading paths — see `#/docs?article=owmap-format`.
+Use when a format has distinct authoring and loading paths: see `#/docs?article=owmap-format`.
 
 ```json
 {

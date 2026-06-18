@@ -9,20 +9,38 @@ import { assetUrl, atlasSectionHref, scrollToSection } from '../lib/data.js';
 import { normalizeAtlasPins, ATLAS_PIN_COLORS } from '../lib/atlasPins.js';
 import { resolveCarouselSlideDisplay } from '../lib/frameFilename.js';
 
-function fitIslandModel(model, targetSize = 5.5) {
+function fitIslandModel(model, targetSize = 6.2) {
   const box = new THREE.Box3().setFromObject(model);
-  const size = box.getSize(new THREE.Vector3());
   const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+  const maxDim = Math.max(...box.getSize(new THREE.Vector3()).toArray(), 0.001);
   const scale = targetSize / maxDim;
   model.scale.setScalar(scale);
   model.position.sub(center.multiplyScalar(scale));
-  box.setFromObject(model);
-  model.position.y -= box.min.y;
-  model.position.y += 0.19;
 }
 
-function IslandStage3D({ islandModelUrl }) {
+function frameCameraToGroup(camera, target, group, aspect, padding = 1.18) {
+  const box = new THREE.Box3().setFromObject(group);
+  if (box.isEmpty()) return;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, 0.001);
+  const fovRad = camera.fov * (Math.PI / 180);
+  const fitHeightDistance = (maxDim / 2) / Math.tan(fovRad / 2);
+  const fitWidthDistance = fitHeightDistance / Math.max(aspect, 0.001);
+  const distance = Math.max(fitHeightDistance, fitWidthDistance) * padding;
+
+  target.copy(center);
+  target.y += maxDim * 0.04;
+
+  camera.position.set(
+    center.x + distance * 0.1,
+    center.y + distance * 0.36,
+    center.z + distance * 0.9,
+  );
+  camera.lookAt(target);
+}
+
+function IslandStage3D({ islandModelUrl, displaySize = 6.2 }) {
   const mountRef = useRef(null);
   const [modelState, setModelState] = useState(islandModelUrl ? 'loading' : 'placeholder');
 
@@ -31,29 +49,29 @@ function IslandStage3D({ islandModelUrl }) {
     if (!mount) return;
     let disposed = false;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf4fcff);
-    const camera = new THREE.PerspectiveCamera(42, mount.clientWidth / Math.max(1, mount.clientHeight), 0.1, 100);
-    camera.position.set(0, 4.6, 5.8);
-    camera.lookAt(0, 0, 0);
+    const aspect = mount.clientWidth / Math.max(1, mount.clientHeight);
+    const camera = new THREE.PerspectiveCamera(38, aspect, 0.08, 120);
+    const cameraTarget = new THREE.Vector3();
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x9bd4ca, 2.4));
-    const sun = new THREE.DirectionalLight(0xffffff, 1.8);
-    sun.position.set(5, 8, 4);
-    scene.add(sun);
+    scene.add(new THREE.HemisphereLight(0xf8ffff, 0x7ec8d8, 1.35));
+    const key = new THREE.DirectionalLight(0xffffff, 1.45);
+    key.position.set(4.5, 7.5, 5.5);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xd8f4ff, 0.55);
+    fill.position.set(-5, 2.5, -3);
+    scene.add(fill);
 
     const rootGroup = new THREE.Group();
     scene.add(rootGroup);
     const placeholderGroup = new THREE.Group();
     rootGroup.add(placeholderGroup);
-
-    const water = new THREE.Mesh(new THREE.CircleGeometry(5.4, 96), new THREE.MeshStandardMaterial({ color: 0x83d7ea, roughness: .5, metalness: .08 }));
-    water.rotation.x = -Math.PI / 2;
-    water.position.y = -0.08;
-    rootGroup.add(water);
 
     const beach = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.28, .12, 96), new THREE.MeshStandardMaterial({ color: 0xf4d9a4, roughness: .92 }));
     beach.scale.set(1.22, 1, .87);
@@ -73,9 +91,10 @@ function IslandStage3D({ islandModelUrl }) {
         (gltf) => {
           if (disposed) return;
           loadedModel = gltf.scene;
-          fitIslandModel(loadedModel);
+          fitIslandModel(loadedModel, displaySize);
           rootGroup.add(loadedModel);
           placeholderGroup.visible = false;
+          frameCamera();
           setModelState('loaded');
         },
         undefined,
@@ -85,21 +104,39 @@ function IslandStage3D({ islandModelUrl }) {
       setModelState('placeholder');
     }
 
-    let rotation = -.25;
+    const PITCH_MIN = -.2;
+    const PITCH_MAX = .22;
+    let yaw = -.25;
+    let pitch = .06;
     let dragging = false;
     let lastX = 0;
-    rootGroup.rotation.y = rotation;
+    let lastY = 0;
+    rootGroup.rotation.order = 'YXZ';
+
+    function applyRotation() {
+      rootGroup.rotation.y = yaw;
+      rootGroup.rotation.x = pitch;
+    }
+    applyRotation();
+
+    function frameCamera() {
+      frameCameraToGroup(camera, cameraTarget, rootGroup, mount.clientWidth / Math.max(1, mount.clientHeight));
+    }
+    frameCamera();
 
     function handlePointerDown(event) {
       dragging = true;
       lastX = event.clientX;
+      lastY = event.clientY;
       renderer.domElement.setPointerCapture?.(event.pointerId);
     }
     function handlePointerMove(event) {
       if (!dragging) return;
-      rotation += (event.clientX - lastX) * .006;
+      yaw += (event.clientX - lastX) * .006;
+      pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch + (event.clientY - lastY) * .004));
       lastX = event.clientX;
-      rootGroup.rotation.y = rotation;
+      lastY = event.clientY;
+      applyRotation();
     }
     function handlePointerUp(event) {
       dragging = false;
@@ -117,6 +154,7 @@ function IslandStage3D({ islandModelUrl }) {
       camera.aspect = w / Math.max(1, h);
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
+      frameCamera();
     }
     window.addEventListener('resize', resize);
 
@@ -147,17 +185,17 @@ function IslandStage3D({ islandModelUrl }) {
       mount.removeChild(renderer.domElement);
       renderer.dispose();
     };
-  }, [islandModelUrl]);
+  }, [islandModelUrl, displaySize]);
 
   const modelHint = modelState === 'loading'
     ? 'Loading island mesh…'
     : modelState === 'loaded'
-      ? 'Drag to spin'
+      ? 'Drag to rotate · nudge up/down for a slight tilt'
       : 'Island model in progress';
 
   return (
-    <div className="island-stage-wrap island-stage-wrap--secondary">
-      <div className="island-stage island-stage--compact" ref={mountRef} />
+    <div className="island-stage-wrap island-stage-wrap--atlas">
+      <div className="island-stage island-stage--atlas" ref={mountRef} />
       <span className="island-stage-hint soft-label">{modelHint}</span>
     </div>
   );
@@ -247,24 +285,6 @@ function AtlasJumpLink({ sectionId, label }) {
   );
 }
 
-function ModelSections({ models }) {
-  const submodels = models?.submodels || [];
-  return (
-    <section className="resource-shell atlas-resource-block" id="atlas-models">
-      <div className="section-intro compact"><p className="eyebrow">Model shelf</p><h2>Island &amp; outbuildings</h2><p>Dock, lodge, paths, and other pieces as we model them. The cork board above is still the layout we trust.</p></div>
-      <article className="model-card main-model-card">
-        <div className="model-preview">{models?.mainModel?.preview ? <img src={assetUrl(models.mainModel.preview)} alt={`${models.mainModel.name} preview`} /> : <span>{models?.mainModel?.file}</span>}</div>
-        <div>
-          <span className="soft-label">{models?.mainModel?.status}</span>
-          <h3>{models?.mainModel?.name}</h3>
-          <p>{models?.mainModel?.summary}</p>
-        </div>
-      </article>
-      {submodels.length ? <div className="model-grid submodel-grid">{submodels.map((model) => <details key={model.id} className="submodel-detail"><summary><strong>{model.name}</strong><span>{model.status}</span></summary><p>{model.summary}</p></details>)}</div> : null}
-    </section>
-  );
-}
-
 export default function Atlas({ data, query }) {
   const atlas = useMemo(() => normalizeAtlasPins(data.atlasPins), [data.atlasPins]);
   const allPins = atlas.pins;
@@ -306,7 +326,6 @@ export default function Atlas({ data, query }) {
         <AtlasJumpLink sectionId="atlas-map" label="Cork board" />
         <AtlasJumpLink sectionId="atlas-carousel" label="Gallery" />
         <AtlasJumpLink sectionId="atlas-3d" label="Island model" />
-        <AtlasJumpLink sectionId="atlas-models" label="Outbuildings" />
       </section>
 
       <section className="atlas-pin-filter-card" aria-label="Pin color filters">
@@ -361,6 +380,7 @@ export default function Atlas({ data, query }) {
         </div>
         <PinDetailPanel
           pin={selected}
+          ideasManifest={data.ideas}
           showReference={atlas.map.showReference}
           onOpenReference={() => setGalleryOpen({
             title: atlas.map.showReference?.label || 'From the show',
@@ -408,16 +428,17 @@ export default function Atlas({ data, query }) {
 
       <section className="atlas-3d-section" id="atlas-3d">
         <div className="section-intro compact">
-          <p className="eyebrow">Island model</p>
-          <h2>Same island in 3D</h2>
-          <p>Early terrain mesh, still rough. Layout calls still come from the cork board.</p>
+          <p className="eyebrow">3D pass</p>
+          <h2>Island diorama</h2>
+          <p>Rough mesh built from the cork-board layout—handy for scale, not gospel. Drag to turn it; pull up or down a little if you want a different angle.</p>
         </div>
         <div className="atlas-card atlas-card--3d">
-          <IslandStage3D islandModelUrl={data.models?.mainModel?.file ? assetUrl(data.models.mainModel.file) : null} />
+          <IslandStage3D
+            islandModelUrl={data.models?.mainModel?.file ? assetUrl(data.models.mainModel.file) : null}
+            displaySize={Number(data.models?.mainModel?.displaySize) || 6.2}
+          />
         </div>
       </section>
-
-      <ModelSections models={data.models} />
 
       {!allPins.length && (
         <EmptyState title="No pins yet." actionHref="#/source" actionLabel="Open resource guide">

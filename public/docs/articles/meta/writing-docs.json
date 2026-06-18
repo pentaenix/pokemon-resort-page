@@ -1,6 +1,6 @@
 {
   "dossier": {
-    "overview": "Resort Docs articles are JSON files — not Markdown pages on the site. Each article has a card in public/data/docs.json and a body in public/docs/articles/{category}/{slug}.json, using the same rich blocks as Research and Features (text, figures, diagrams, code citations, tabs, and more).\n\nStore articles in category folders (meta/, formats/, gameplay/, design/) — never a flat pile in articles/. Longer reference material lives in the pokemon-resort-page repo: docs/AUTHORING.md, docs/TEMPLATE.md, and docs/MEDIA.md.",
+    "overview": "Resort Docs articles are JSON files: not Markdown pages on the site. Each article has a card in public/data/docs.json and a body in public/docs/articles/{category}/{slug}.json, using the same rich blocks as Research and Features (text, figures, diagrams, code citations, tabs, and more).\n\nStore articles in category folders (meta/, formats/, gameplay/, design/): never a flat pile in articles/. Longer reference material lives in the pokemon-resort-page repo: docs/AUTHORING.md, docs/TEMPLATE.md, and docs/MEDIA.md.",
     "sections": [
       {
         "id": "authoring-guide",
@@ -18,7 +18,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Authoring reference files in pokemon-resort-page/ (paths relative to that app root):\n\n• docs/AUTHORING.md — JSON layout, block types, validation, apps, freshness\n• docs/TEMPLATE.md — article skeleton, code blocks, write/read tabs\n• docs/MEDIA.md — capturing screenshots from the running site\n• public/docs/templates/article-template.json — JSON file to copy for a new article\n\nThe Docs hub supports search, category and app filters, sort order, and freshness badges. Run npm run docs:freshness (or npm run validate:data) to refresh staleness data.\n\nRun npm run validate:data before publishing changes."
+                    "body": "Authoring reference files in pokemon-resort-page/ (paths relative to that app root):\n\n• docs/AUTHORING.md: JSON layout, block types, validation, apps, freshness\n• docs/TEMPLATE.md: article skeleton, code blocks, write/read tabs\n• docs/MEDIA.md: capturing screenshots from the running site\n• public/docs/templates/article-template.json: JSON file to copy for a new article\n\nThe Docs hub supports search, category and app filters, sort order, and freshness badges. Run npm run docs:freshness (or npm run validate:data) to refresh staleness data.\n\nRun npm run validate:data before publishing changes."
                   },
                   {
                     "type": "html",
@@ -46,7 +46,7 @@
                     "path": "public/data/docs.json",
                     "lines": "articles[]",
                     "language": "json",
-                    "caption": "Card metadata — one entry per article",
+                    "caption": "Card metadata: one entry per article",
                     "body": "{\n  \"id\": \"your-slug\",\n  \"slug\": \"your-slug\",\n  \"title\": \"Article title\",\n  \"category\": \"formats\",\n  \"tags\": [\"tag1\"],\n  \"apps\": [\"pokemon-resort\", \"pokemon-resort-page\"],\n  \"summary\": \"One line for the docs hub card.\",\n  \"publishedAt\": \"2026-05-27\",\n  \"updatedAt\": \"2026-05-27\",\n  \"heroImage\": { \"path\": \"media/docs/docs-hub.webp\", \"caption\": \"…\" },\n  \"featured\": false,\n  \"author\": \"Resort Operations\"\n}"
                   },
                   {
@@ -66,7 +66,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Full table in docs/AUTHORING.md. Common blocks:\n\ntext — paragraph\nfigure / image / video — media with caption\ndiagram — Mermaid UML\ncode — linked source file (repo + path + body snippet)\ntabs — 2+ panels with nested blocks\nhtml — tables (sanitized)\nlinks — https URLs only\ncompare / carousel / gallery — multi-image layouts"
+                    "body": "Full table in docs/AUTHORING.md. Common blocks:\n\ntext: paragraph\nfigure / image / video: media with caption\ndiagram: Mermaid UML\ncode: linked source file (repo + path + body snippet)\ntabs: 2+ panels with nested blocks\nhtml: tables (sanitized)\nlinks: https URLs only\ncompare / carousel / gallery: multi-image layouts"
                   },
                   {
                     "type": "tabs",
@@ -84,10 +84,10 @@
                             "type": "code",
                             "repo": "pokemon-resort-page",
                             "path": "src/dossier/registry.js",
-                            "lines": "49-56",
+                            "lines": "69-76",
                             "language": "javascript",
                             "caption": "Minimal code block shape",
-                            "body": "registerDossierBlock({\n  type: 'text',\n  label: 'Text note',\n  normalize(block) {\n    const body = String(block.body || '').trim();\n    return body ? { type: 'text', body } : null;\n  },\n});"
+                            "body": "registerDossierBlock({\n  type: 'text',\n  label: 'Text note',\n  normalize(block) {\n    const body = String(block.body || block.text || '').trim();\n    return body ? { type: 'text', body } : null;\n  },\n});"
                           }
                         ]
                       },
@@ -97,7 +97,7 @@
                         "blocks": [
                           {
                             "type": "text",
-                            "body": "Nested tabs inside a section — same structure as the tab bar above. Each tab needs id, label, and blocks[]."
+                            "body": "Nested tabs inside a section: same structure as the tab bar above. Each tab needs id, label, and blocks[]."
                           },
                           {
                             "type": "code",
@@ -105,7 +105,7 @@
                             "path": "docs/TEMPLATE.md",
                             "lines": "53-80",
                             "language": "json",
-                            "caption": "Write / Read tab pattern — see docs/TEMPLATE.md",
+                            "caption": "Write / Read tab pattern: see docs/TEMPLATE.md",
                             "body": "{\n  \"type\": \"tabs\",\n  \"tabs\": [\n    {\n      \"id\": \"writing\",\n      \"label\": \"Writing\",\n      \"blocks\": [\n        { \"type\": \"text\", \"body\": \"How the format is authored…\" },\n        { \"type\": \"code\", \"repo\": \"pokemon-resort-page\", \"path\": \"…\", \"body\": \"…\" }\n      ]\n    },\n    {\n      \"id\": \"reading\",\n      \"label\": \"Reading\",\n      \"blocks\": [\n        { \"type\": \"text\", \"body\": \"How the runtime loads it…\" },\n        { \"type\": \"code\", \"repo\": \"pokemon-resort\", \"path\": \"…\", \"body\": \"…\" }\n      ]\n    }\n  ]\n}"
                           }
                         ]
@@ -120,13 +120,13 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Use captures from the running site — not mockups or placeholder art.\n\nFrom pokemon-resort-page/:\n\nnpm run dev          → 127.0.0.1:5174\nnpm run admin        → 127.0.0.1:9477\nnpm run docs:screenshots\n\nWrites public/media/docs/*.webp. Reference in JSON as media/docs/filename.webp.\n\nFull guide: docs/MEDIA.md"
+                    "body": "Use captures from the running site: not mockups or placeholder art.\n\nFrom pokemon-resort-page/:\n\nnpm run dev          → 127.0.0.1:5174\nnpm run admin        → 127.0.0.1:9477\nnpm run docs:screenshots\n\nWrites public/media/docs/*.webp. Reference in JSON as media/docs/filename.webp.\n\nFull guide: docs/MEDIA.md"
                   },
                   {
                     "type": "figure",
                     "path": "media/docs/docs-hub.webp",
                     "body": "Captured with npm run docs:screenshots while the Vite dev server was running.",
-                    "caption": "Docs hub — browser screenshot",
+                    "caption": "Docs hub: browser screenshot",
                     "layout": "stacked"
                   },
                   {
@@ -136,7 +136,7 @@
                     "lines": "scripts",
                     "language": "json",
                     "caption": "npm scripts for doc media",
-                    "body": "\"docs:screenshots\": \"node tools/docs/capture-screenshots.mjs --format webp\",\n\"docs:screenshots:headed\": \"node tools/docs/capture-screenshots.mjs --headed --format webp\",\n\"docs:example-gif\": \"python3 tools/docs/build-example-gif.py\""
+                    "body": "\"docs:freshness\": \"node tools/docs/compute-freshness.mjs\",\n\"docs:screenshots\": \"node tools/docs/capture-screenshots.mjs --format webp\",\n\"docs:screenshots:headed\": \"node tools/docs/capture-screenshots.mjs --headed --format webp\",\n\"docs:capture\": \"tools/docs/capture-screenshot.sh\",\n\"docs:optimize\": \"tools/docs/optimize-image.sh\",\n\"docs:example-gif\": \"python3 tools/docs/build-example-gif.py\""
                   }
                 ]
               },
@@ -146,7 +146,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Copy public/docs/templates/article-template.json to public/docs/articles/{category}/{slug}.json.\n\nCategory folders:\n• meta/ — authoring guides\n• formats/ — file format specs\n• gameplay/ — systems & architecture\n• design/ — visual / UX reference\n\nDefault sections in the template:\n• summary — intro\n• concepts — definitions + optional diagram\n• implementation — code blocks + write/read tabs\n• reference — HTML tables\n• media — screenshot placeholder\n• related — cross-app notes\n\nPreview on site: #/docs?article=article-template\nDetails: docs/TEMPLATE.md"
+                    "body": "Copy public/docs/templates/article-template.json to public/docs/articles/{category}/{slug}.json.\n\nCategory folders:\n• meta/: authoring guides\n• formats/: file format specs\n• gameplay/: systems & architecture\n• design/: visual / UX reference\n\nDefault sections in the template:\n• summary: intro\n• concepts: definitions + optional diagram\n• implementation: code blocks + write/read tabs\n• reference: HTML tables\n• media: screenshot placeholder\n• related: cross-app notes\n\nPreview on site: #/docs?article=article-template\nDetails: docs/TEMPLATE.md"
                   },
                   {
                     "type": "diagram",
@@ -167,7 +167,7 @@
         "blocks": [
           {
             "type": "html",
-            "html": "<table><thead><tr><th>Article slug</th><th>Demonstrates</th></tr></thead><tbody><tr><td><code>writing-docs</code></td><td>This guide — tabs, media, repo references</td></tr><tr><td><code>article-template</code></td><td>Starter skeleton with placeholders</td></tr><tr><td><code>owmap-format</code></td><td>Writing / Reading tabs + multi-repo code</td></tr><tr><td><code>charbin-schema</code></td><td>Format doc with tables and diagrams</td></tr></tbody></table>"
+            "html": "<table><thead><tr><th>Article slug</th><th>Demonstrates</th></tr></thead><tbody><tr><td><code>writing-docs</code></td><td>This guide: tabs, media, repo references</td></tr><tr><td><code>article-template</code></td><td>Starter skeleton with placeholders</td></tr><tr><td><code>owmap-format</code></td><td>Writing / Reading tabs + multi-repo code</td></tr><tr><td><code>charbin-schema</code></td><td>Format doc with tables and diagrams</td></tr></tbody></table>"
           },
           {
             "type": "compare",

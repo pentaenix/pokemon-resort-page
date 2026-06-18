@@ -1,0 +1,145 @@
+{
+  "dossier": {
+    "overview": "**Game Engine** is a top-level tab in the **Resort Operations Desk** (`npm run admin`, port **9477**). It launches editors that read and write **real game files** in the monorepo: overworld maps, character packages, and (later) audio, config, and playtest utilities.\n\nIt is **not** the **Library** tab (site metadata: box art, media, models index). It is **not** the **Workshop** tab (milestones, public docs authoring, ideas, bugs). Game Engine is where you ship assets the C++ game loads at runtime.",
+    "sections": [
+      {
+        "id": "operator-guide",
+        "title": "Operator guide",
+        "layout": "tabs-primary",
+        "summary": "Open the hub, pick a tool, slide back when done. Character Editor keeps its subprocess running until you end it.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "open-hub",
+                "label": "Open Game Engine",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "1. Start the desk: `cd pokemon-resort-page && npm run admin` → **http://127.0.0.1:9477**\n2. Click **Game Engine** in the top nav (or open **#/game-engine**).\n3. The hub lists every registered tool as a card: preview image, title, and short description.\n\nThe card list is driven by `tools/admin/data/game-engine-tools.json` and exposed at `GET /api/game-engine/tools`. Add a manifest entry to ship a new card; no desk code change needed when reusing the `map` or `character` workbench."
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/game-engine/hub.png",
+                    "body": "Game Engine hub with tool cards. Each card is one click away from the shared right-hand workbench.",
+                    "caption": "Game Engine hub (Operations Desk)",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Hub → tool → hub",
+                    "caption": "Desk content stays mounted under the sliding workbench",
+                    "source": "flowchart LR\n    NAV[\"Top nav: Game Engine\"] --> HUB[\"#/game-engine hub cards\"]\n    HUB -->|click card| WB[\"Workbench slides in\"]\n    WB -->|back / Escape| HUB\n    WB --> MAP[\"Map Studio in-browser\"]\n    WB --> CHAR[\"Character Editor iframe + subprocess\"]"
+                  }
+                ]
+              },
+              {
+                "id": "use-tool",
+                "label": "Use a tool",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "**Open:** click a card. The workbench panel slides in from the right. The hub remains underneath.\n\n**Deep link:** `#/game-engine/{tool-id}` (example: `#/game-engine/maps`, `#/game-engine/characters`). Legacy URLs `#/map-editor` and `#/character-editor` redirect to those slugs.\n\n**Return to hub:** use the workbench back control or press **Escape**. URL returns to `#/game-engine` and the card grid is visible again.\n\n**Map Studio** runs entirely in the desk (Node APIs on port 9477). Closing the workbench does not stop any subprocess.\n\n**Character Editor** starts a **Python subprocess** on port **8789** the first time you open it (or when you click **Start character editor**). Sliding back to the hub **does not** stop it. Click **End editor** in the workbench header to stop the subprocess and free the port."
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/game-engine/map-studio-workbench.png",
+                    "body": "Map Studio open in the workbench. Saves `.owmap` files under `pokemon-resort/assets/overworld/maps/`.",
+                    "caption": "Map Studio workbench",
+                    "layout": "stacked"
+                  },
+                  {
+                    "type": "figure",
+                    "path": "media/docs/game-engine/character-editor-workbench.png",
+                    "body": "Character Editor embedded in the workbench. Exports `.charbin` packages to `pokemon-resort/assets/characters/` (see `tools/admin/character-editor-settings.json`).",
+                    "caption": "Character Editor workbench",
+                    "layout": "stacked"
+                  }
+                ]
+              },
+              {
+                "id": "tool-catalog",
+                "label": "Available tools",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Card id</th><th>Title</th><th>Output</th><th>Format doc</th></tr></thead><tbody><tr><td><code>maps</code></td><td>Map Studio</td><td><code>pokemon-resort/assets/overworld/maps/*.owmap</code></td><td><a href=\"#/docs?article=owmap-format\">What is an .owmap file?</a></td></tr><tr><td><code>characters</code></td><td>Character Editor</td><td><code>pokemon-resort/assets/characters/{playable|npc|pokemon|objects}/*.charbin</code></td><td><a href=\"#/docs?article=charbin-schema\">What is a .charbin file?</a></td></tr></tbody></table><p>Manifest source: <code>pokemon-resort-page/tools/admin/data/game-engine-tools.json</code>. Card order matches the JSON array order.</p>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/data/game-engine-tools.json",
+                    "language": "json",
+                    "caption": "Current tool manifest (ids, titles, workbench type, card image)",
+                    "body": "{\n  \"tools\": [\n    {\n      \"id\": \"maps\",\n      \"title\": \"Map Studio\",\n      \"description\": \"Paint overworld tiles, place props, and export .owmap files for Pokémon Resort.\",\n      \"image\": \"/media/game_engine/maps.png\",\n      \"workbench\": \"map\"\n    },\n    {\n      \"id\": \"characters\",\n      \"title\": \"Character Editor\",\n      \"description\": \"Author .charbin packages — sprites, walk cycles, animations, and character metadata.\",\n      \"image\": \"/media/game_engine/characters.png\",\n      \"workbench\": \"character\"\n    }\n  ]\n}"
+                  },
+                  {
+                    "type": "text",
+                    "body": "**Map Studio** — paint RTPKS tile layers, terrain, collision, props, and spawn on overworld maps. Pair with **What is an .rtpks file?** when binding tile packs.\n\n**Character Editor** — replaced standalone SPMK for day-to-day `.charbin` work inside the desk. Packages land in the game assets tree; the C++ loader reads them without calling SPMK at runtime. Authoring schema and binary layout: **What is a .charbin file?**"
+                  },
+                  {
+                    "type": "links",
+                    "items": [
+                      { "label": "What is an .owmap file?", "href": "#/docs?article=owmap-format" },
+                      { "label": "What is a .charbin file?", "href": "#/docs?article=charbin-schema" },
+                      { "label": "What is an .rtpks file?", "href": "#/docs?article=rtpks-format" }
+                    ]
+                  }
+                ]
+              },
+              {
+                "id": "roadmap",
+                "label": "Roadmap",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Planned Game Engine cards (not committed; order and scope may change):"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Planned tool</th><th>Intent</th></tr></thead><tbody><tr><td>Audio browser</td><td>Per-game-section BGM/SFX preview and assignment</td></tr><tr><td>Visual config editor</td><td>Edit gameplay JSON (render, followers, simulation defaults) without hand-editing raw files</td></tr><tr><td>Save reset / playtest utilities</td><td>Fast iteration helpers for QA (reset slots, warp to map, spawn test party)</td></tr></tbody></table><p>Each new tool needs a manifest row, a preview image under <code>public/media/game_engine/</code>, and either an existing <code>workbench</code> type or a new editor module wired in <code>admin.js</code>.</p>"
+                  }
+                ]
+              },
+              {
+                "id": "tips",
+                "label": "Tips",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Problem</th><th>Try</th></tr></thead><tbody><tr><td>Tool card does nothing / blank workbench</td><td>Hard-refresh the desk tab. Restart <code>npm run admin</code> if the Node process is stuck.</td></tr><tr><td>Character Editor will not start</td><td>First-time Python setup (venv + requirements). See <code>DEV-PORTS.md</code> in the monorepo root, section <strong>Resort site + admin</strong>.</td></tr><tr><td>Port 8789 already in use</td><td>Another Character Editor or stale subprocess. End editor from the workbench, or stop the process (<code>lsof -nP -iTCP:8789</code>).</td></tr><tr><td>Card screenshot looks outdated</td><td>Replace PNG/WebP under <code>pokemon-resort-page/public/media/game_engine/</code> (16∶10, ~640×400). Update the <code>image</code> path in the manifest if you change the filename.</td></tr><tr><td>Need another Game Engine tool</td><td>Follow <code>pokemon-resort-page/tools/admin/docs/adding-game-engine-tools.md</code>.</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort-page",
+                    "path": "tools/admin/docs/adding-game-engine-tools.md",
+                    "lines": "1-12",
+                    "language": "markdown",
+                    "caption": "Checklist for registering a new tool card",
+                    "body": "# Adding a Game Engine tool\n\n1. Add a preview image under `pokemon-resort-page/public/media/game_engine/`.\n2. Register the tool in `pokemon-resort-page/tools/admin/data/game-engine-tools.json`.\n3. If the tool reuses an existing workbench, set `workbench` to `map` or `character`.\n4. If the tool needs a **new** editor, implement the workbench module and wire it in `admin.js`."
+                  },
+                  {
+                    "type": "text",
+                    "body": "**Character Editor first-time setup** (from monorepo root `DEV-PORTS.md`):\n\n```bash\ncd pokemon-resort-page/tools/admin/modules/charactereditor\npython3 -m venv .venv\n.venv/bin/pip install -r requirements.txt\n```\n\nThen open **Game Engine → Character Editor** and click **Start character editor** if it does not auto-start.\n\n**Ports:** desk **9477**, Character Editor subprocess **8789**. Standalone legacy SPMK remains on **8788** for comparison during migration."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "vs-other-tabs",
+        "title": "Game Engine vs other desk tabs",
+        "summary": "Quick boundaries so operators open the right place.",
+        "blocks": [
+          {
+            "type": "html",
+            "html": "<table><thead><tr><th>Tab</th><th>Edits</th><th>Examples</th></tr></thead><tbody><tr><td><strong>Game Engine</strong></td><td>Game runtime assets on disk</td><td><code>.owmap</code>, <code>.charbin</code></td></tr><tr><td><strong>Library</strong></td><td>Public site data (not loaded by C++ directly)</td><td>Box art paths, gallery, models index</td></tr><tr><td><strong>Workshop</strong></td><td>Planning and publishing metadata</td><td>Milestones, ideas, bugs, <code>docs.json</code> cards</td></tr><tr><td><strong>Island Atlas</strong></td><td>Pin dossiers and map-linked resort content</td><td><code>atlas-pins.json</code>, location media</td></tr></tbody></table>"
+          }
+        ]
+      }
+    ]
+  }
+}

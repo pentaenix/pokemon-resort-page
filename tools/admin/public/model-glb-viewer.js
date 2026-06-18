@@ -13,7 +13,7 @@ function glbCacheKey(url) {
 /**
  * Neutral image-based lighting so PBR materials read correctly (matches online glTF
  * viewers). Without an environment or lights, GLTFLoader's MeshStandardMaterial renders
- * pure black — which was the cause of the black preview.
+ * pure black: which was the cause of the black preview.
  * @param {THREE.Scene} scene
  * @param {THREE.WebGLRenderer} renderer
  * @returns {() => void} disposer
@@ -76,7 +76,7 @@ export function closeGlbViewport() {
   }
 }
 
-// One shared offscreen renderer for all thumbnails — browsers cap live WebGL contexts,
+// One shared offscreen renderer for all thumbnails: browsers cap live WebGL contexts,
 // so we must not spin up one per card.
 let thumbRenderer = null;
 function getThumbRenderer() {
@@ -144,6 +144,16 @@ export async function loadGlbScene(glbUrl) {
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(glbUrl);
   const root = gltf.scene;
+  root.traverse((obj) => {
+    if (!obj.isMesh || !obj.material) return;
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const mat of mats) {
+      const assoc = gltf.parser.associations.get(mat);
+      const matIndex = assoc?.materials;
+      const src = Number.isInteger(matIndex) ? gltf.parser.json.materials?.[matIndex] : null;
+      if (src?.extras) mat.userData.gltfExtensions = { extras: src.extras };
+    }
+  });
   tuneGltfMaterials(root);
   glbSceneCache.set(key, root);
   return root.clone(true);
@@ -151,6 +161,16 @@ export async function loadGlbScene(glbUrl) {
 
 export function clearGlbSceneCache() {
   glbSceneCache.clear();
+}
+
+/** Match public Atlas diorama scaling (max bounding dimension → targetSize units). */
+export function fitModelToTargetSize(model, targetSize = 6.2) {
+  const box = new THREE.Box3().setFromObject(model);
+  const center = box.getCenter(new THREE.Vector3());
+  const maxDim = Math.max(...box.getSize(new THREE.Vector3()).toArray(), 0.001);
+  const scale = targetSize / maxDim;
+  model.scale.setScalar(scale);
+  model.position.sub(center.multiplyScalar(scale));
 }
 
 /**
@@ -166,6 +186,7 @@ export async function bindGlbWebGLViewport(host, glbUrl, options = {}) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
   const model = await loadGlbScene(glbUrl);
+  if (options.targetSize) fitModelToTargetSize(model, options.targetSize);
   // pivot → orient → model. The camera orbits `pivot`; `orient` holds the prospective
   // "bake" rotation so we can preview exactly what the re-oriented GLB will look like
   // before committing it server-side (same R = Rz·Ry·Rx as reorient-glb.mjs).

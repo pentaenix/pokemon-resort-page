@@ -17,7 +17,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Compatible does not mean “every field from every generation survives verbatim in every save format.” It means the Pokémon that returns is recognizably the same individual, with legitimate updates applied and nothing important silently discarded.\n\nMinimum round-trip path (directional routes on the ontology graph):\n\n1. Import from origin generation (Game A) into Resort / OpenHome storage.\n2. Export to a target generation (Game B) — may be the same generation (self route) or a different one (cross-gen).\n3. Play in Game B: level up, learn moves, evolve, change held item, gain ribbons the target game can record, etc.\n4. Return to Resort — OpenHome syncWithGameData merges mutable gameplay changes into the canonical OHPKM.\n5. Export back to Game A.\n6. Verify: still valid in PKHeX/OpenHome checks; immutable identity intact; mutable fields reflect Game B play; only one visible copy exists at each step.\n\nFailure modes the project tracks publicly: wrong level after return, OT or PID drift, lost ribbons or moves that should have merged, duplicate slots (same Pokémon in Resort and a save), or dropped Pokémon (vanished from both)."
+                    "body": "Compatible does not mean “every field from every generation survives verbatim in every save format.” It means the Pokémon that returns is recognizably the same individual, with legitimate updates applied and nothing important silently discarded.\n\nMinimum round-trip path (directional routes on the ontology graph):\n\n1. Import from origin generation (Game A) into Resort / OpenHome storage.\n2. Export to a target generation (Game B): may be the same generation (self route) or a different one (cross-gen).\n3. Play in Game B: level up, learn moves, evolve, change held item, gain ribbons the target game can record, etc.\n4. Return to Resort: OpenHome syncWithGameData merges mutable gameplay changes into the canonical OHPKM.\n5. Export back to Game A.\n6. Verify: still valid in PKHeX/OpenHome checks; immutable identity intact; mutable fields reflect Game B play; only one visible copy exists at each step.\n\nFailure modes the project tracks publicly: wrong level after return, OT or PID drift, lost ribbons or moves that should have merged, duplicate slots (same Pokémon in Resort and a save), or dropped Pokémon (vanished from both)."
                   },
                   {
                     "type": "html",
@@ -26,7 +26,7 @@
                   {
                     "type": "figure",
                     "path": "media/docs/pokemon-resort/compatibility-round-trip-diagram.webp",
-                    "body": "Original compatibility planning map (public/assets/reference/compatibility-planning-map.png) — illustrates generation round-trip routing research.",
+                    "body": "Original compatibility planning map (public/assets/reference/compatibility-planning-map.png): illustrates generation round-trip routing research.",
                     "caption": "Round-trip planning reference",
                     "layout": "side"
                   },
@@ -44,12 +44,12 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "The Compatibility page (#/ontology) is the public test matrix. It is data-driven from public/data/compatibility.json and edited in Operations Desk → Compatibility.\n\nStructure:\n\n• generations[] — Gen I–IX nodes on the graph\n• games[] — individual titles linked to a generation (box art, platform, year)\n• routes[] — directional legs: from → to generation ids (81 routes: 9 self + 72 cross-gen)\n• statuses — green (working), blue (needs tests), yellow (edge cases), red (not working), gray (untested)\n\nRoute naming: gen3-gen5 means Gen III → Gen V → Gen III (through Resort). Self routes (gen2-gen2) test same-generation round trips. Cross routes test visiting another generation in the middle.\n\nEach route card carries summary, lastUpdated, coverage label, relatedBugs[], and a tests[] checklist. Status changes are evidence-based — flip to green only when the checklist passes.\n\nCurrent public stance (conservative): most routes gray (untested); gen2-gen2 and gen7-gen7 marked red (known self round-trip failures); gen1-gen1 marked green."
+                    "body": "The Compatibility page (#/ontology) is the public test matrix. It is data-driven from public/data/compatibility.json and edited in Operations Desk → Compatibility.\n\nStructure:\n\n• generations[]: Gen I–IX nodes on the graph\n• games[]: individual titles linked to a generation (box art, platform, year)\n• routes[]: directional legs: from → to generation ids (81 routes: 9 self + 72 cross-gen)\n• statuses: green (working), blue (needs tests), yellow (edge cases), red (not working), gray (untested)\n\nRoute naming: gen3-gen5 means Gen III → Gen V → Gen III (through Resort). Self routes (gen2-gen2) test same-generation round trips. Cross routes test visiting another generation in the middle.\n\nEach route card carries summary, lastUpdated, coverage label, relatedBugs[], and a tests[] checklist. Status changes are evidence-based: flip to green only when the checklist passes.\n\nCurrent public stance (conservative): most routes gray (untested); gen2-gen2 and gen7-gen7 marked red (known self round-trip failures); gen1-gen1 marked green."
                   },
                   {
                     "type": "figure",
                     "path": "media/docs/pokemon-resort/compatibility-ontology-graph.webp",
-                    "body": "Captured from #/ontology on the local Vite dev site — generation nodes, directional route arrows, and status colors (green / red / gray).",
+                    "body": "Captured from #/ontology on the local Vite dev site: generation nodes, directional route arrows, and status colors (green / red / gray).",
                     "caption": "Public compatibility graph",
                     "layout": "stacked"
                   },
@@ -74,8 +74,8 @@
                     "path": "public/data/compatibility.json",
                     "lines": "1-22",
                     "language": "json",
-                    "caption": "Route status definitions — what each color means on the graph",
-                    "body": "{\n  \"statuses\": {\n    \"green\": {\n      \"label\": \"Fully working\",\n      \"description\": \"The documented round trip currently passes the public checklist.\"\n    },\n    \"red\": {\n      \"label\": \"Not working\",\n      \"description\": \"The route currently fails the documented round-trip requirement.\"\n    },\n    \"gray\": {\n      \"label\": \"Untested\",\n      \"description\": \"No public route result has been recorded yet.\"\n    }\n  }"
+                    "caption": "Route status definitions: what each color means on the graph",
+                    "body": "{\n  \"statuses\": {\n    \"green\": {\n      \"label\": \"Fully working\",\n      \"description\": \"Round trip passes our checklist.\"\n    },\n    \"red\": {\n      \"label\": \"Not working\",\n      \"description\": \"Round trip fails.\"\n    },\n    \"gray\": {\n      \"label\": \"Untested\",\n      \"description\": \"Not tested yet.\"\n    }\n  }"
                   }
                 ]
               },
@@ -85,7 +85,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "The ontology records test results; pokemon-resort/ implements movement.\n\nTwo identifiers, one Pokémon:\n\n• pkrid — Resort local record id. Box placement, memories, accessories, travel history, resort friendship, UI cache.\n• openhomeId — OpenHome canonical payload id. OHPKM bytes in mons_v2/<openhomeId>.ohpkm; generation conversion; syncWithGameData on return.\n\nPlacement state (replacing legacy mirror sessions for OpenHome flows):\n\n• RESORT_BOX — visible in Resort storage\n• IN_GAME_SAVE — projected into a game slot\n• HOME_BANK — in OpenHome bank storage\n\nMovement path (target architecture):\n\n• Transfer System screen — in-memory UI moves while open; disk writes only on Save+Exit\n• OpenHome resort bridge — pull-to-home, push-to-game, sync-save (tools/OpenHome/dist/resort-bridge/resortBridge.mjs)\n• OpenHomeMovementOrchestrator / OpenHomeTransferCore — native Resort wiring\n• PKHeX bridge — legacy read/projection; not the writer for OpenHome-backed slots\n\nOn save open or return, OpenHome loadIfTracked + syncWithGameData merges Game B mutable data into OHPKM before the next export."
+                    "body": "The ontology records test results; pokemon-resort/ implements movement.\n\nTwo identifiers, one Pokémon:\n\n• pkrid: Resort local record id. Box placement, memories, accessories, travel history, resort friendship, UI cache.\n• openhomeId: OpenHome canonical payload id. OHPKM bytes in mons_v2/<openhomeId>.ohpkm; generation conversion; syncWithGameData on return.\n\nPlacement state (replacing legacy mirror sessions for OpenHome flows):\n\n• RESORT_BOX: visible in Resort storage\n• IN_GAME_SAVE: projected into a game slot\n• HOME_BANK: in OpenHome bank storage\n\nMovement path (target architecture):\n\n• Transfer System screen: in-memory UI moves while open; disk writes only on Save+Exit\n• OpenHome resort bridge: pull-to-home, push-to-game, sync-save (tools/OpenHome/dist/resort-bridge/resortBridge.mjs)\n• OpenHomeMovementOrchestrator / OpenHomeTransferCore: native Resort wiring\n• PKHeX bridge: legacy read/projection; not the writer for OpenHome-backed slots\n\nOn save open or return, OpenHome loadIfTracked + syncWithGameData merges Game B mutable data into OHPKM before the next export."
                   },
                   {
                     "type": "code",
@@ -93,13 +93,13 @@
                     "path": "docs/openhome-persistent-identity-integration.md",
                     "lines": "68-75",
                     "language": "markdown",
-                    "caption": "Identity boundary — pkrid vs openhomeId",
+                    "caption": "Identity boundary: pkrid vs openhomeId",
                     "body": "## Product Identity Boundary\n\n- `pkrid` is the local Resort record id. Resort-owned features such as box placement, memories, accessories, travel history, jobs, resort friendship, and UI/cache data should key off `pkrid`.\n- `openhomeId` is the canonical Pokemon payload/movement id. It identifies the OHPKM bytes that OpenHome uses for generation conversion, save writes, and `syncWithGameData` updates when a tracked Pokemon levels up, evolves, learns moves, gains ribbons, or otherwise changes in a game."
                   },
                   {
                     "type": "compare",
                     "variant": "fluid",
-                    "caption": "Transfer System — Emerald save loaded (game_transfer_emerald.webp, game_transfer_emerald_2.webp)",
+                    "caption": "Transfer System: Emerald save loaded (game_transfer_emerald.webp, game_transfer_emerald_2.webp)",
                     "items": [
                       {
                         "path": "media/docs/pokemon-resort/transfer-system-screens.webp",
@@ -121,7 +121,7 @@
                   {
                     "type": "compare",
                     "variant": "fluid",
-                    "caption": "Resort entry flow — title screen variants (title_screen.webp, title_screen_2.webp)",
+                    "caption": "Resort entry flow: title screen variants (title_screen.webp, title_screen_2.webp)",
                     "items": [
                       {
                         "path": "media/docs/pokemon-resort/title-screen.webp",
@@ -141,7 +141,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Compatibility requires conservation laws, not just correct bytes in the happy path.\n\nUI conservation guard (always on): every tool action must preserve the multiset of Pokémon identities across game panel slots, Resort panel slots, and held-move buffers. Duplicate or delete in memory → action aborts with error feedback.\n\nSave+Exit staging: OpenHome writes go to a staged save path first. Real .sav is replaced only after verification passes. Fail closed — if uncertain, abort and leave the player's save untouched.\n\nPull-to-home rule: destination Home slot must be guaranteed empty (never rely on swap/displacement). After pull, re-import staged save and verify every source slot is empty — prevents duplicate visible copies.\n\nPush-to-game rule: record IN_GAME_SAVE placement only on success; target slot overwrite rules must be explicit.\n\nOpenHome-backed slots during PKHeX projection must emit preserve_box_slot so legacy write-back does not overwrite tracked Pokémon.\n\nOnly one player-visible instance at a time: if the Pokémon is in a game, it is not in a Resort box; if in Resort, not in a game."
+                    "body": "Compatibility requires conservation laws, not just correct bytes in the happy path.\n\nUI conservation guard (always on): every tool action must preserve the multiset of Pokémon identities across game panel slots, Resort panel slots, and held-move buffers. Duplicate or delete in memory → action aborts with error feedback.\n\nSave+Exit staging: OpenHome writes go to a staged save path first. Real .sav is replaced only after verification passes. Fail closed: if uncertain, abort and leave the player's save untouched.\n\nPull-to-home rule: destination Home slot must be guaranteed empty (never rely on swap/displacement). After pull, re-import staged save and verify every source slot is empty: prevents duplicate visible copies.\n\nPush-to-game rule: record IN_GAME_SAVE placement only on success; target slot overwrite rules must be explicit.\n\nOpenHome-backed slots during PKHeX projection must emit preserve_box_slot so legacy write-back does not overwrite tracked Pokémon.\n\nOnly one player-visible instance at a time: if the Pokémon is in a game, it is not in a Resort box; if in Resort, not in a game."
                   },
                   {
                     "type": "code",
@@ -171,7 +171,7 @@
           },
           {
             "type": "html",
-            "html": "<table><thead><tr><th>Artifact</th><th>Repo</th><th>Role in compatibility</th></tr></thead><tbody><tr><td><code>public/data/compatibility.json</code></td><td>pokemon-resort-page</td><td>Public route matrix, statuses, checklists, related bugs</td></tr><tr><td><code>src/pages/Ontology.jsx</code></td><td>pokemon-resort-page</td><td>Graph UI, focus mode, route detail panel</td></tr><tr><td><code>tools/admin → Compatibility</code></td><td>pokemon-resort-page</td><td>Edit route status and metadata</td></tr><tr><td><code>public/data/features.json</code> feature-ontology</td><td>pokemon-resort-page</td><td>Feature tracker linked to ontology bugs/routes</td></tr><tr><td><code>docs/openhome-resort-bridge.md</code></td><td>pokemon-resort</td><td>Bridge commands: pull-to-home, push-to-game, sync-save</td></tr><tr><td><code>docs/openhome-persistent-identity-integration.md</code></td><td>pokemon-resort</td><td>OHPKM, openhomeId, syncWithGameData contract</td></tr><tr><td><code>docs/transfer_system/SAVE_EXIT_SAFETY.md</code></td><td>pokemon-resort</td><td>No dup / no drop invariants</td></tr><tr><td><code>docs/openhome-first-mirror-retirement.md</code></td><td>pokemon-resort</td><td>Migration from mirror-first to OpenHome-first</td></tr><tr><td><code>tools/pkhex_bridge/</code></td><td>pokemon-resort</td><td>Legacy import/projection; EntityConverter for cross-gen bytes</td></tr><tr><td><code>MIRROR_PROJECTION_ARCHITECTURE.md</code></td><td>pokemon-resort</td><td>Legacy design history — do not implement new work from it</td></tr></tbody></table>"
+            "html": "<table><thead><tr><th>Artifact</th><th>Repo</th><th>Role in compatibility</th></tr></thead><tbody><tr><td><code>public/data/compatibility.json</code></td><td>pokemon-resort-page</td><td>Public route matrix, statuses, checklists, related bugs</td></tr><tr><td><code>src/pages/Ontology.jsx</code></td><td>pokemon-resort-page</td><td>Graph UI, focus mode, route detail panel</td></tr><tr><td><code>tools/admin → Compatibility</code></td><td>pokemon-resort-page</td><td>Edit route status and metadata</td></tr><tr><td><code>public/data/features.json</code> feature-ontology</td><td>pokemon-resort-page</td><td>Feature tracker linked to ontology bugs/routes</td></tr><tr><td><code>docs/openhome-resort-bridge.md</code></td><td>pokemon-resort</td><td>Bridge commands: pull-to-home, push-to-game, sync-save</td></tr><tr><td><code>docs/openhome-persistent-identity-integration.md</code></td><td>pokemon-resort</td><td>OHPKM, openhomeId, syncWithGameData contract</td></tr><tr><td><code>docs/transfer_system/SAVE_EXIT_SAFETY.md</code></td><td>pokemon-resort</td><td>No dup / no drop invariants</td></tr><tr><td><code>docs/openhome-first-mirror-retirement.md</code></td><td>pokemon-resort</td><td>Migration from mirror-first to OpenHome-first</td></tr><tr><td><code>tools/pkhex_bridge/</code></td><td>pokemon-resort</td><td>Legacy import/projection; EntityConverter for cross-gen bytes</td></tr><tr><td><code>MIRROR_PROJECTION_ARCHITECTURE.md</code></td><td>pokemon-resort</td><td>Legacy design history: do not implement new work from it</td></tr></tbody></table>"
           }
         ]
       },
@@ -191,14 +191,14 @@
           {
             "type": "figure",
             "path": "media/docs/pokemon-resort/compatibility-route-detail.webp",
-            "body": "Gen II → Resort → Gen II self route (gen2-gen2) selected — red status, failing checklist, linked bug BUG-TRANSFER-GEN2-SELF.",
+            "body": "Gen II → Resort → Gen II self route (gen2-gen2) selected: red status, failing checklist, linked bug BUG-TRANSFER-GEN2-SELF.",
             "caption": "Route detail: checklist, coverage, related bugs",
             "layout": "stacked"
           },
           {
             "type": "figure",
             "path": "media/docs/pokemon-resort/compatibility-admin-desk.webp",
-            "body": "Operations Desk → Compatibility tab — edit route status on the same 9×9 graph and save to public/data/compatibility.json.",
+            "body": "Operations Desk → Compatibility tab: edit route status on the same 9×9 graph and save to public/data/compatibility.json.",
             "caption": "Editing routes in Operations Desk",
             "layout": "stacked"
           }
@@ -215,7 +215,7 @@
             "images": [
               {
                 "path": "media/docs/pokemon-resort/compatibility-ontology-graph.webp",
-                "caption": "#/ontology — full graph"
+                "caption": "#/ontology: full graph"
               },
               {
                 "path": "media/docs/pokemon-resort/compatibility-route-detail.webp",
@@ -245,7 +245,7 @@
           },
           {
             "type": "html",
-            "html": "<table><thead><tr><th>Source (screenshots/)</th><th>Docs path</th></tr></thead><tbody><tr><td><code>game_transfer_emerald.webp</code></td><td><code>transfer-system-screens.webp</code></td></tr><tr><td><code>game_transfer_emerald_2.webp</code></td><td><code>transfer-system-emerald-2.webp</code></td></tr><tr><td><code>transfer_tickets.webp</code></td><td><code>transfer-tickets.webp</code></td></tr><tr><td><code>title_screen.webp</code></td><td><code>title-screen.webp</code></td></tr><tr><td><code>title_screen_2.webp</code></td><td><code>title-screen-2.webp</code></td></tr><tr><td colspan=\"2\">Ontology UI captures (Playwright) — graph, route detail, focus, admin desk, planning map</td></tr></tbody></table>"
+            "html": "<table><thead><tr><th>Source (screenshots/)</th><th>Docs path</th></tr></thead><tbody><tr><td><code>game_transfer_emerald.webp</code></td><td><code>transfer-system-screens.webp</code></td></tr><tr><td><code>game_transfer_emerald_2.webp</code></td><td><code>transfer-system-emerald-2.webp</code></td></tr><tr><td><code>transfer_tickets.webp</code></td><td><code>transfer-tickets.webp</code></td></tr><tr><td><code>title_screen.webp</code></td><td><code>title-screen.webp</code></td></tr><tr><td><code>title_screen_2.webp</code></td><td><code>title-screen-2.webp</code></td></tr><tr><td colspan=\"2\">Ontology UI captures (Playwright): graph, route detail, focus, admin desk, planning map</td></tr></tbody></table>"
           }
         ]
       },
@@ -255,7 +255,7 @@
         "blocks": [
           {
             "type": "text",
-            "body": "Public site: #/ontology (Compatibility), #/operations (bugs linked from routes), Operations Desk → Compatibility tab.\n\nGame repo deep dives:\n\n• docs/transfer_system/README.md — Transfer System ownership map\n• docs/openhome-cross-generation-lessons-corrected.md — OHPKM projection vs Resort merge policy comparison\n• docs/PKHEX_BRIDGE.md — read-only / legacy projection boundary\n\nOther Resort Docs: follower-pokemon (overworld, separate from transfer bytes), charbin-schema (sprite packages for UI)."
+            "body": "Public site: #/ontology (Compatibility), #/operations (bugs linked from routes), Operations Desk → Compatibility tab.\n\nGame repo deep dives:\n\n• docs/transfer_system/README.md: Transfer System ownership map\n• docs/openhome-cross-generation-lessons-corrected.md: OHPKM projection vs Resort merge policy comparison\n• docs/PKHEX_BRIDGE.md: read-only / legacy projection boundary\n\nOther Resort Docs: follower-pokemon (overworld, separate from transfer bytes), charbin-schema (sprite packages for UI)."
           },
           {
             "type": "links",

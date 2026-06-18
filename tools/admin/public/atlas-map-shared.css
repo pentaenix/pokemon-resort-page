@@ -1,4 +1,4 @@
-/* Island Atlas — 2D cork board (shared with admin via duplicated rules in atlas-map-editor.css) */
+/* Island Atlas: 2D cork board (shared with admin via duplicated rules in atlas-map-editor.css) */
 .atlas-map-layout { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, .55fr); gap: 20px; align-items: start; margin-bottom: 28px; }
 .atlas-map-main { min-width: 0; }
 .atlas-card--map { padding: 16px; }
@@ -20,8 +20,37 @@
 .atlas-pin-summary { margin: 0 0 16px; line-height: 1.6; color: var(--muted); }
 .atlas-pin-links { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .atlas-pin-dossier { margin-top: 8px; }
-.atlas-3d-section { margin-top: 36px; scroll-margin-top: 160px; }
-.island-stage-wrap--secondary .island-stage--compact { height: 340px; border-radius: 24px; }
+.atlas-3d-section {
+  margin-top: 36px;
+  scroll-margin-top: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.atlas-3d-section .section-intro.compact {
+  text-align: center;
+  max-width: 640px;
+}
+.atlas-3d-section .atlas-card--3d {
+  width: 100%;
+  max-width: min(920px, 96vw);
+  margin-top: 0;
+}
+.island-stage-wrap--atlas {
+  width: 100%;
+}
+.island-stage-wrap--atlas .island-stage-hint {
+  text-align: center;
+}
+.island-stage-wrap--atlas .island-stage--atlas {
+  height: min(52vh, 520px);
+  min-height: 360px;
+  border-radius: 28px;
+  background:
+    radial-gradient(ellipse 80% 55% at 50% 72%, rgba(126, 200, 216, 0.28), transparent 58%),
+    radial-gradient(circle at 50% 46%, #fbffff 0%, #e8f7fc 48%, #d4eef8 100%);
+  box-shadow: inset 0 0 0 1px rgba(14, 117, 146, 0.1);
+}
 .atlas-pin-legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 24px 0 8px; }
 .atlas-pin-legend-item { padding: 8px 12px; border-radius: 999px; font-size: 12px; font-weight: 900; background: rgba(255,255,255,.76); }
 .atlas-pin-legend-item--blue { color: #0e4a86; background: rgba(47,127,212,.14); }
@@ -55,7 +84,7 @@
 .island-map2d-layer--paths { z-index: 3; }
 .island-map2d-pins { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 
-/* Map markers — stick point at (x,y); simple disc + stem, ink outline, no lift */
+/* Map markers: stick point at (x,y); simple disc + stem, ink outline, no lift */
 .cork-pin {
   --pin-tilt: 0deg;
   --pin-ink: rgba(12, 28, 36, .82);
@@ -107,7 +136,7 @@
   height: 15px;
   transform: translateX(-50%);
   border-radius: 50%;
-  /* dark ink ring — reads on light terrain, paths, and water */
+  /* dark ink ring: reads on light terrain, paths, and water */
   box-shadow:
     0 0 0 1.5px var(--pin-ink),
     0 2px 4px rgba(0, 0, 0, .32);

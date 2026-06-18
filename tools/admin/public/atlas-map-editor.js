@@ -3,6 +3,12 @@ import { openAssetUploadModal } from './asset-upload.js';
 import { parseFrameFilename, resolveCarouselSlideDisplay } from './frame-filename.js';
 import { featureHasDossierContent } from './dossier-shared.js';
 import { normalizeFeatureDossierRaw } from './feature-dossier-editor.js';
+import { bindAtlasIslandPreview } from './atlas-island-preview.js';
+
+const DEFAULT_ISLAND_DISPLAY_SIZE = 6.2;
+const MIN_ISLAND_DISPLAY_SIZE = 0.5;
+const MAX_ISLAND_DISPLAY_SIZE = 120;
+let atlasIslandPreviewBind = null;
 
 const PIN_COLORS = ['blue', 'yellow', 'red'];
 
@@ -340,8 +346,8 @@ function atlasCarouselRowHtml(item, index, esc) {
           <button type="button" class="btn small" data-atlas-carousel-upload>Upload</button>
         </span>
       </label>
-      <label>Title <span class="hint">optional — auto from filename</span><input data-atlas-carousel-title value="${esc(slide.title)}" placeholder="Ima Role Model Now"></label>
-      <label>Description <span class="hint">optional — auto “frame from episode…”</span><input data-atlas-carousel-caption value="${esc(slide.caption)}" placeholder="Frame from Pokémon Concierge, episode 7"></label>
+      <label>Title <span class="hint">optional: auto from filename</span><input data-atlas-carousel-title value="${esc(slide.title)}" placeholder="Ima Role Model Now"></label>
+      <label>Description <span class="hint">optional: auto “frame from episode…”</span><input data-atlas-carousel-caption value="${esc(slide.caption)}" placeholder="Frame from Pokémon Concierge, episode 7"></label>
       <input type="hidden" data-atlas-carousel-id value="${esc(slide.id)}">
       <button type="button" class="btn ghost small" data-atlas-carousel-remove>Remove slide</button>
     </div>
@@ -541,20 +547,216 @@ function renderAtlasMapMediaPanel(state, deps) {
   bindAtlasMapMediaPanel(state, deps);
 }
 
+function islandDisplaySize(models) {
+  const n = Number(models?.mainModel?.displaySize);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_ISLAND_DISPLAY_SIZE;
+}
+
+function atlasIslandModelPanelHtml(models, esc) {
+  const main = models?.mainModel || {};
+  const file = main.file || '';
+  const displaySize = islandDisplaySize(models);
+  const fileLabel = file ? file.split('/').pop() : 'No model uploaded';
+  return `<section class="panel atlas-island-model-panel" id="atlasIslandModelPanel">
+    <div class="atlas-island-model-head">
+      <div>
+        <h3>Island 3D model</h3>
+        <p class="hint">Replacing removes other .glb files in <code>media/models/island/</code>.</p>
+      </div>
+      <button type="button" class="btn" id="saveAtlasIslandModel">Save island model</button>
+    </div>
+    <div class="atlas-island-model-controls-block">
+      <div class="atlas-island-model-file-row">
+        <label class="btn ghost atlas-island-model-replace">
+          Replace .glb
+          <input type="file" accept=".glb,model/gltf-binary" data-atlas-island-file hidden>
+        </label>
+        <span class="atlas-island-model-file" data-atlas-island-file-label>${esc(fileLabel)}</span>
+      </div>
+      <label class="atlas-island-model-size">
+        <span>Display size</span>
+        <input type="range" min="${MIN_ISLAND_DISPLAY_SIZE}" max="${MAX_ISLAND_DISPLAY_SIZE}" step="0.5" value="${displaySize}" data-atlas-island-size>
+        <output data-atlas-island-size-val>${displaySize.toFixed(1)}</output>
+      </label>
+      <p class="hint">Scales the mesh on the public Atlas page (${MIN_ISLAND_DISPLAY_SIZE}–${MAX_ISLAND_DISPLAY_SIZE}).</p>
+      <p class="atlas-island-model-status" data-atlas-island-status role="status"></p>
+    </div>
+    <div class="atlas-island-model-preview-wrap">
+      <p class="hint atlas-island-model-preview-label">Public page preview</p>
+      <div class="atlas-card atlas-card--3d">
+        <div class="island-stage-wrap island-stage-wrap--atlas">
+          <div class="island-stage island-stage--atlas" data-atlas-island-viewport></div>
+          <span class="island-stage-hint soft-label" data-atlas-island-hint>Island model in progress</span>
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function applyIslandModelFromDom(state, deps, panel = deps.$('#atlasIslandModelPanel')) {
+  const models = state.data['models.json'];
+  if (!models?.mainModel) return;
+  const sizeInput = panel?.querySelector('[data-atlas-island-size]');
+  const size = Number(sizeInput?.value);
+  if (!Number.isFinite(size) || size <= 0) return;
+  const before = models.mainModel.displaySize;
+  models.mainModel.displaySize = size;
+  if (before !== size) deps.markDirty('models.json');
+}
+
+function updateAtlasIslandDisplaySize(state, deps, size, panel) {
+  applyIslandModelFromDom(state, deps, panel);
+  if (atlasIslandPreviewBind?.setDisplaySize) {
+    atlasIslandPreviewBind.setDisplaySize(size);
+    const cacheKey = `${state.data['models.json']?.mainModel?.file || ''}|${size}`;
+    if (panel) panel.dataset.previewKey = cacheKey;
+    return;
+  }
+  refreshAtlasIslandPreview(state, deps, { force: true });
+}
+
+function setAtlasIslandStatus(panel, message, tone = '') {
+  const el = panel?.querySelector('[data-atlas-island-status]');
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = `atlas-island-model-status${tone ? ` atlas-island-model-status--${tone}` : ''}`;
+}
+
+async function refreshAtlasIslandPreview(state, deps, { force = false } = {}) {
+  const panel = deps.$('#atlasIslandModelPanel');
+  const host = panel?.querySelector('[data-atlas-island-viewport]');
+  const hintEl = panel?.querySelector('[data-atlas-island-hint]');
+  if (!host) return;
+
+  const models = state.data['models.json'] || {};
+  const file = models.mainModel?.file;
+  const displaySize = islandDisplaySize(models);
+  const cacheKey = `${file || ''}|${displaySize}`;
+  if (!force && panel.dataset.previewKey === cacheKey && atlasIslandPreviewBind) return;
+  panel.dataset.previewKey = cacheKey;
+
+  if (atlasIslandPreviewBind?.dispose) {
+    atlasIslandPreviewBind.dispose();
+    atlasIslandPreviewBind = null;
+  }
+
+  const onHint = (text) => {
+    if (hintEl) hintEl.textContent = text;
+  };
+
+  const url = file ? `/${file}?_=${Date.now()}` : null;
+  try {
+    atlasIslandPreviewBind = bindAtlasIslandPreview(host, {
+      url,
+      displaySize,
+      onHint,
+    });
+  } catch (error) {
+    onHint('Could not load model');
+    setAtlasIslandStatus(panel, error.message, 'error');
+  }
+}
+
+async function uploadAtlasIslandModel(file, state, deps, panel) {
+  const isGlb = /\.glb$/i.test(file.name) || file.type === 'model/gltf-binary';
+  if (!isGlb) {
+    setAtlasIslandStatus(panel, 'Choose a .glb file.', 'error');
+    deps.log('Island model must be a .glb file.', 'error');
+    return;
+  }
+
+  setAtlasIslandStatus(panel, `Uploading ${file.name}…`, 'busy');
+  deps.log(`Uploading ${file.name}…`, 'ok');
+
+  try {
+    const body = new FormData();
+    body.append('file', file, file.name || 'island.glb');
+    const resp = await fetch('/api/atlas/island-model/replace', { method: 'POST', body });
+    const raw = await resp.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(raw.trim().slice(0, 180) || `Upload failed (${resp.status})`);
+    }
+    if (!resp.ok || !data.ok) {
+      if (resp.status === 404) {
+        throw new Error('Island upload API missing — restart with: npm run admin');
+      }
+      throw new Error(data.error || `Upload failed (${resp.status})`);
+    }
+
+    const models = state.data['models.json'];
+    if (!models.mainModel) models.mainModel = {};
+    models.mainModel.file = data.path;
+    deps.markDirty('models.json');
+
+    const label = panel.querySelector('[data-atlas-island-file-label]');
+    if (label) label.textContent = data.path.split('/').pop();
+    setAtlasIslandStatus(panel, `Replaced island model (${Math.round(data.bytes / 1024)} KB). Save when ready.`, 'ok');
+    await refreshAtlasIslandPreview(state, deps, { force: true });
+    deps.log(`Island model replaced → ${data.path}`, 'ok');
+  } catch (error) {
+    setAtlasIslandStatus(panel, error.message || 'Upload failed.', 'error');
+    deps.log(error.message || 'Island model upload failed.', 'error');
+  }
+}
+
+function bindAtlasIslandModelPanel(state, deps) {
+  const panel = deps.$('#atlasIslandModelPanel');
+  if (!panel) return;
+
+  if (!panel.dataset.islandBound) {
+    panel.dataset.islandBound = '1';
+
+    const sizeInput = panel.querySelector('[data-atlas-island-size]');
+    const sizeOut = panel.querySelector('[data-atlas-island-size-val]');
+
+    sizeInput?.addEventListener('input', () => {
+      const size = Number(sizeInput.value);
+      if (sizeOut) sizeOut.textContent = size.toFixed(1);
+      updateAtlasIslandDisplaySize(state, deps, size, panel);
+    });
+
+    panel.addEventListener('change', (event) => {
+      const input = event.target.closest('[data-atlas-island-file]');
+      if (!input || !input.files?.length) return;
+      const picked = input.files[0];
+      uploadAtlasIslandModel(picked, state, deps, panel).finally(() => {
+        input.value = '';
+      });
+    });
+
+    deps.$('#saveAtlasIslandModel')?.addEventListener('click', async () => {
+      applyIslandModelFromDom(state, deps);
+      await deps.saveFile('models.json', state.data['models.json']);
+      setAtlasIslandStatus(panel, 'Saved to public/data/models.json.', 'ok');
+      deps.log('Written to public/data/models.json.', 'ok');
+    });
+  }
+
+  refreshAtlasIslandPreview(state, deps);
+}
+
 export function atlasMapEditorHtml(state, esc, dossierDeps) {
   const atlas = state.data['atlas-pins.json'] || { pins: [] };
   const pins = atlas.pins || [];
   const id = state.selected.atlasPin || pins[0]?.id;
   state.selected.atlasPin = id;
   const pin = pins.find((p) => p.id === id);
-  const dirty = state.dirty.has('atlas-pins.json');
+  const pinsDirty = state.dirty.has('atlas-pins.json');
+  const modelsDirty = state.dirty.has('models.json');
+  const dirty = pinsDirty || modelsDirty;
+  const dirtyHint = dirty
+    ? `<p class="hint feature-unsaved"><strong>Unsaved changes</strong>${pinsDirty ? ' · atlas pins' : ''}${modelsDirty ? ' · island model' : ''}</p>`
+    : '<p class="hint feature-disk-ok">Atlas pins and island model saved</p>';
   return `<section class="toolbar feature-toolbar atlas-map-toolbar">
-    <div><h2>Island Atlas</h2><p>Cork-board map for show research — drag pins, tune tilt, toggle layers, and attach dossiers.</p>
-      ${dirty ? '<p class="hint feature-unsaved"><strong>Unsaved changes</strong> — Save atlas pins when ready.</p>' : '<p class="hint feature-disk-ok">Saved to public/data/atlas-pins.json</p>'}
+    <div><h2>Island Atlas</h2><p>Cork-board map for show research: drag pins, tune tilt, toggle layers, and attach dossiers.</p>
+      ${dirtyHint}
     </div>
     <div class="actions">
       <button type="button" class="btn ghost" id="newAtlasPin">Add pin</button>
-      <button type="button" class="btn" id="saveAtlasPins">Save atlas pins</button>
+      <button type="button" class="btn" id="saveAtlasPins">Save atlas</button>
     </div>
   </section>
   <section class="atlas-map-editor-layout">
@@ -573,6 +775,7 @@ export function atlasMapEditorHtml(state, esc, dossierDeps) {
     </div>
     <div class="atlas-map-editor-footer">
       ${atlasMapMediaPanelHtml(atlas, esc)}
+      ${atlasIslandModelPanelHtml(state.data['models.json'] || {}, esc)}
     </div>
   </section>`;
 }
@@ -854,22 +1057,36 @@ function syncAtlasMapUI(state, deps) {
 
 export function bindAtlasMapEditor(state, deps) {
   syncAtlasMapUI(state, deps);
+  bindAtlasIslandModelPanel(state, deps);
+
+  if (state.atlasEditorToolbarBound) return;
+  state.atlasEditorToolbarBound = true;
 
   deps.$('#saveAtlasPins')?.addEventListener('click', async () => {
     applyPinFromForm(state, deps);
     applyAtlasMapMediaToData(state, deps);
+    applyIslandModelFromDom(state, deps);
     (state.data['atlas-pins.json'].pins || []).forEach((pin) => {
       if (pin.dossier && !featureHasDossierContent(pin, normalizeFeatureDossierRaw)) delete pin.dossier;
     });
-    await deps.saveFile('atlas-pins.json', state.data['atlas-pins.json']);
-    deps.log('Written to public/data/atlas-pins.json.', 'ok');
+    if (state.dirty.has('atlas-pins.json')) {
+      await deps.saveFile('atlas-pins.json', state.data['atlas-pins.json']);
+      deps.log('Written to public/data/atlas-pins.json.', 'ok');
+    }
+    if (state.dirty.has('models.json')) {
+      await deps.saveFile('models.json', state.data['models.json']);
+      deps.log('Written to public/data/models.json.', 'ok');
+    }
+    if (!state.dirty.has('atlas-pins.json') && !state.dirty.has('models.json')) {
+      deps.log('Nothing to save.', 'ok');
+    }
   });
 
   deps.$('#newAtlasPin')?.addEventListener('click', () => {
     applyPinFromForm(state, deps);
     state.atlasAddMode = true;
     syncAtlasMapUI(state, deps);
-    deps.log('Add pin mode — click the map.', 'ok');
+    deps.log('Add pin mode: click the map.', 'ok');
   });
 }
 

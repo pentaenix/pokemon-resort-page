@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="/admin.css" />
   <link rel="stylesheet" href="/map-editor.css" />
   <link rel="stylesheet" href="/atlas-map-editor.css" />
+  <link rel="stylesheet" href="/character-editor.css" />
+  <link rel="stylesheet" href="/game-engine.css" />
   <script type="importmap">
   {
     "imports": {
@@ -17,11 +19,17 @@
   </script>
 </head>
 <body>
-  <header class="topbar">
-    <div><span>Local-only</span><h1>Resort Operations Desk</h1></div>
-    <nav id="tabs"></nav>
-  </header>
-  <main id="app"><p class="loading">Loading resort data…</p></main>
+  <div id="adminViewport" class="admin-viewport">
+    <div id="deskPanel" class="desk-panel">
+      <header class="topbar">
+        <div><span>Local-only</span><h1>Resort Operations Desk</h1></div>
+        <nav id="tabs"></nav>
+      </header>
+      <main id="app"><p class="loading">Loading resort data…</p></main>
+    </div>
+    <div id="workbenchPanel" class="workbench-panel" aria-hidden="true"></div>
+  </div>
+  <button type="button" id="workbenchPanicBack" class="workbench-panic-back" hidden>← Back to Admin</button>
   <aside id="logDock" class="log-dock" aria-label="Activity log">
     <header class="log-dock-head">
       <div><strong>Activity log</strong><span id="logStatus" class="log-status">Ready</span></div>

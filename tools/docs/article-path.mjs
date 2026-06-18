@@ -1,7 +1,7 @@
 const SAFE_SEGMENT = /^[a-z0-9-]+$/;
 const SAFE_REL_PATH = /^[a-z0-9-]+(\/[a-z0-9-]+)*\.json$/;
 
-/** Category folders under public/docs/articles/ — must match docs.json categories[].id */
+/** Category folders under public/docs/articles/: must match docs.json categories[].id */
 export const DOC_ARTICLE_CATEGORY_IDS = ['meta', 'formats', 'gameplay', 'design', 'apps'];
 
 /**

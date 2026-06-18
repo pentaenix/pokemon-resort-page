@@ -1,6 +1,6 @@
 {
   "dossier": {
-    "overview": "A `.charbin` file is a portable, static character package for Pokémon Resort. It bundles identity metadata, embedded PNG sprite sheets, logical actions (idle, walk, pause, …), and optional dialogue — everything the C++ overworld loader needs without calling SPMK or the network at runtime.\n\nCharbins are not save files. Map placement, spawn coordinates, party state, and other runtime fields must never appear inside a package. SPMK authors packages; the game reads them from `pokemon-resort/assets/characters/{playable|npc|pokemon|objects}/{id}.charbin`.\n\nCanonical schema source: `spmk/docs/CHARBIN_SCHEMA.md` (SPMK copies it into the library folder for C++). This article is the Resort Docs walkthrough with SPMK UI captures.",
+    "overview": "A `.charbin` file is a portable, static character package for Pokémon Resort. It bundles identity metadata, embedded PNG sprite sheets, logical actions (idle, walk, pause, …), and optional dialogue: everything the C++ overworld loader needs without calling SPMK or the network at runtime.\n\nCharbins are not save files. Map placement, spawn coordinates, party state, and other runtime fields must never appear inside a package. SPMK authors packages; the game reads them from `pokemon-resort/assets/characters/{playable|npc|pokemon|objects}/{id}.charbin`.\n\nCanonical schema source: `spmk/docs/CHARBIN_SCHEMA.md` (SPMK copies it into the library folder for C++). This article is the Resort Docs walkthrough with SPMK UI captures.",
     "sections": [
       {
         "id": "library",
@@ -11,7 +11,7 @@
             "type": "figure",
             "path": "media/docs/spmk/charbin-library.webp",
             "body": "SPMK Characters view (`./spmk run` → http://127.0.0.1:8788). The library scans `pokemon-resort/assets/characters/` by default, grouped into playable, NPC, Pokémon (by generation), and objects. Toggle **Show sprite previews** to load thumbnails lazily per generation.",
-            "caption": "SPMK character library — one .charbin per card",
+            "caption": "SPMK character library: one .charbin per card",
             "layout": "stacked"
           },
           {
@@ -57,7 +57,7 @@
                     "path": "spmk_app/charbin_io.py",
                     "lines": "36-49",
                     "language": "python",
-                    "caption": "write_charbin — serialize JSON + sorted embedded assets",
+                    "caption": "write_charbin: serialize JSON + sorted embedded assets",
                     "body": "def write_charbin(package: Dict[str, Any], assets: Dict[str, bytes]) -> bytes:\n    payload = json.dumps(package, ensure_ascii=False, separators=(\",\", \":\")).encode(\"utf-8\")\n    parts = [MAGIC, struct.pack(\"<II\", FORMAT_VERSION, len(payload)), payload]\n    table_ids = sorted(assets.keys())\n    parts.append(struct.pack(\"<I\", len(table_ids)))\n    for asset_id in table_ids:\n        blob = assets[asset_id]\n        mime = \"image/png\"\n        parts.append(_pack_str(asset_id))\n        parts.append(_pack_str(mime))\n        parts.append(struct.pack(\"<I\", len(blob)))\n        parts.append(blob)\n    return b\"\".join(parts)"
                   },
                   {
@@ -66,7 +66,7 @@
                     "path": "src/gameplay/world3d/data/JsonOverworldLoader.cpp",
                     "lines": "140-197",
                     "language": "cpp",
-                    "caption": "loadCharacterDefinition — game-side binary reader",
+                    "caption": "loadCharacterDefinition: game-side binary reader",
                     "body": "CharacterSpriteDefinition loadCharacterDefinition(const std::string& project_root, const std::string& character_package_path) {\n    // Validates SPMKCHAR magic, formatVersion 1, json_len, asset table\n    // Parses JSON root, loads embedded PNG blobs into assets map\n    // Rejects trailing bytes after last asset\n    // … resolves baseProfile from config/gameplay/sprites/sprite_profiles.json …\n}"
                   }
                 ]
@@ -77,7 +77,7 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Top-level contract (`schemaVersion` 1). Unknown keys on import are preserved — deep merge does not strip forward-compatible fields. Use `custom` bags at the root and under `metadata` / `dialogue` for extensions today; bump `schemaVersion` when you introduce breaking top-level shape changes."
+                    "body": "Top-level contract (`schemaVersion` 1). Unknown keys on import are preserved: deep merge does not strip forward-compatible fields. Use `custom` bags at the root and under `metadata` / `dialogue` for extensions today; bump `schemaVersion` when you introduce breaking top-level shape changes."
                   },
                   {
                     "type": "html",
@@ -85,11 +85,11 @@
                   },
                   {
                     "type": "html",
-                    "html": "<p><strong>Forbidden root keys</strong> (runtime / map state — validator errors if present):</p><p><code>mapId</code>, <code>map</code>, <code>position</code>, <code>worldPosition</code>, <code>spawn</code>, <code>spawnPoint</code>, <code>currentDirection</code>, <code>currentMap</code>, <code>partyState</code>, <code>runtimeState</code>, <code>eventState</code>, <code>x</code>, <code>y</code>, <code>z</code>, <code>tileX</code>, <code>tileY</code></p>"
+                    "html": "<p><strong>Forbidden root keys</strong> (runtime / map state: validator errors if present):</p><p><code>mapId</code>, <code>map</code>, <code>position</code>, <code>worldPosition</code>, <code>spawn</code>, <code>spawnPoint</code>, <code>currentDirection</code>, <code>currentMap</code>, <code>partyState</code>, <code>runtimeState</code>, <code>eventState</code>, <code>x</code>, <code>y</code>, <code>z</code>, <code>tileX</code>, <code>tileY</code></p>"
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th><code>metadata</code> field</th><th>Type</th><th>When</th><th>Purpose</th></tr></thead><tbody><tr><td><code>characterType</code></td><td>string</td><td>all</td><td><code>player</code>, <code>npc</code>, <code>pokemon</code>, <code>object</code></td></tr><tr><td><code>pokemonId</code>, <code>speciesName</code></td><td>number / string</td><td>Pokémon</td><td>Dex identity</td></tr><tr><td><code>pokemonSize</code></td><td>string</td><td>Pokémon</td><td><code>small</code> or <code>large</code> (64×64 cells on 256×256 sheet)</td></tr><tr><td><code>pokeapi</code></td><td>object</td><td>Pokémon</td><td>Cached PokéAPI snapshot (no image URLs)</td></tr><tr><td><code>objectAnimated</code></td><td>boolean</td><td>Object</td><td>Hint: <code>play</code> vs <code>static</code> when both exist</td></tr><tr><td><code>personality</code>, <code>likes</code>, <code>tags</code></td><td>string[]</td><td>NPC</td><td>Story chips (UI clears for <code>player</code>)</td></tr><tr><td><code>partnerPokemon</code></td><td>object|null</td><td>NPC</td><td>Main partner species reference</td></tr><tr><td><code>custom</code></td><td>object</td><td>all</td><td>Extension point — e.g. <code>overworldSpriteKeys</code>, <code>bodyMarkers</code></td></tr></tbody></table>"
+                    "html": "<table><thead><tr><th><code>metadata</code> field</th><th>Type</th><th>When</th><th>Purpose</th></tr></thead><tbody><tr><td><code>characterType</code></td><td>string</td><td>all</td><td><code>player</code>, <code>npc</code>, <code>pokemon</code>, <code>object</code></td></tr><tr><td><code>pokemonId</code>, <code>speciesName</code></td><td>number / string</td><td>Pokémon</td><td>Dex identity</td></tr><tr><td><code>pokemonSize</code></td><td>string</td><td>Pokémon</td><td><code>small</code> or <code>large</code> (64×64 cells on 256×256 sheet)</td></tr><tr><td><code>pokeapi</code></td><td>object</td><td>Pokémon</td><td>Cached PokéAPI snapshot (no image URLs)</td></tr><tr><td><code>objectAnimated</code></td><td>boolean</td><td>Object</td><td>Hint: <code>play</code> vs <code>static</code> when both exist</td></tr><tr><td><code>personality</code>, <code>likes</code>, <code>tags</code></td><td>string[]</td><td>NPC</td><td>Story chips (UI clears for <code>player</code>)</td></tr><tr><td><code>partnerPokemon</code></td><td>object|null</td><td>NPC</td><td>Main partner species reference</td></tr><tr><td><code>custom</code></td><td>object</td><td>all</td><td>Extension point: e.g. <code>overworldSpriteKeys</code>, <code>bodyMarkers</code></td></tr></tbody></table>"
                   },
                   {
                     "type": "html",
@@ -97,7 +97,7 @@
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th><code>actions[]</code></th><th>Type</th><th>Notes</th></tr></thead><tbody><tr><td><code>id</code></td><td>string</td><td>Unique (e.g. <code>idle</code>, <code>walk</code>, <code>pause</code>, <code>play</code>)</td></tr><tr><td><code>type</code></td><td>string</td><td><code>idle</code>, <code>movement</code>, or legacy <code>walk</code></td></tr><tr><td><code>sheetId</code></td><td>string</td><td>Must match a <code>spriteSheets[].id</code></td></tr><tr><td><code>animationName</code></td><td>string</td><td>Key in sprite profile <code>animations</code> or sheet override</td></tr><tr><td><code>movementDriven</code></td><td>boolean</td><td><code>true</code> for walk-style actions</td></tr></tbody></table>"
+                    "html": "<table><thead><tr><th><code>actions[]</code></th><th>Type</th><th>Notes</th></tr></thead><tbody><tr><td><code>id</code></td><td>string</td><td>Unique (e.g. <code>idle</code>, <code>walk</code>, <code>fishing</code>)</td></tr><tr><td><code>type</code></td><td>string</td><td><code>idle</code>, <code>movement</code>, legacy <code>walk</code>, or <code>activity</code> (see Activity actions)</td></tr><tr><td><code>sheetId</code></td><td>string</td><td>Must match a <code>spriteSheets[].id</code></td></tr><tr><td><code>animationName</code></td><td>string</td><td>For idle/movement: key in profile or sheet override. Not used on <code>activity</code> (phases name clips).</td></tr><tr><td><code>movementDriven</code></td><td>boolean</td><td><code>true</code> for walk/run; always <code>false</code> for <code>activity</code></td></tr><tr><td><code>activityKind</code></td><td>string</td><td><code>activity</code> only: <code>single</code> or <code>session</code></td></tr><tr><td><code>phases</code></td><td>object</td><td><code>activity</code> only: phase id → <code>{ animationName, loop? }</code></td></tr><tr><td><code>facingMode</code></td><td>string</td><td><code>activity</code> optional: <code>four_direction</code> (default) or <code>south_only</code></td></tr></tbody></table>"
                   }
                 ]
               },
@@ -107,26 +107,72 @@
                 "blocks": [
                   {
                     "type": "text",
-                    "body": "Sprite profiles define grid geometry, direction rows, default animation frame lists, and rendering hints. SPMK ships built-in profiles in `spmk_app/data/sprite_profiles.json`. The game mirrors them in `pokemon-resort/config/gameplay/sprites/sprite_profiles.json` — keep both aligned when changing frame layout."
+                    "body": "Sprite profiles define grid geometry, direction rows, default animation frame lists, and rendering hints. SPMK ships built-in profiles in `spmk_app/data/sprite_profiles.json`. The game mirrors them in `pokemon-resort/config/gameplay/sprites/sprite_profiles.json`: keep both aligned when changing frame layout."
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th>Profile key</th><th>Grid</th><th>Use</th></tr></thead><tbody><tr><td><code>character</code></td><td>4×4 × 32px</td><td>Trainers, NPCs, playable humans</td></tr><tr><td><code>pokemon_small</code></td><td>4×4 × 32px</td><td>Small Pokémon overworld</td></tr><tr><td><code>pokemon_large</code></td><td>4×4 × 64px on 256×256</td><td>Large Pokémon overworld</td></tr><tr><td><code>object</code></td><td>4×4 × 32px (row 0 only)</td><td>Map props — <code>static</code> / <code>play</code> animations</td></tr></tbody></table>"
+                    "html": "<table><thead><tr><th>Profile key</th><th>Grid</th><th>Use</th></tr></thead><tbody><tr><td><code>character</code></td><td>4×4 × 32px</td><td>Trainers, NPCs, playable humans</td></tr><tr><td><code>pokemon_small</code></td><td>4×4 × 32px</td><td>Small Pokémon overworld</td></tr><tr><td><code>pokemon_large</code></td><td>4×4 × 64px on 256×256</td><td>Large Pokémon overworld</td></tr><tr><td><code>object</code></td><td>4×4 × 32px (row 0 only)</td><td>Map props: <code>static</code> / <code>play</code> animations</td></tr></tbody></table>"
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th>Direction</th><th>Sheet row</th><th>Walk frames</th></tr></thead><tbody><tr><td><code>south</code> (down)</td><td>0</td><td>columns 0–3 on that row</td></tr><tr><td><code>west</code> (left)</td><td>1</td><td>columns 0–3</td></tr><tr><td><code>east</code> (right)</td><td>2</td><td>columns 0–3</td></tr><tr><td><code>north</code> (up)</td><td>3</td><td>columns 0–3</td></tr></tbody></table><p>Standard trainer sheet: 128×128 PNG (4×4 cells of 32×32). Pokémon profiles define <code>walk</code> (4 frames) and <code>pause</code> (frame 0 only) — there is no profile-level <code>idle</code>; the package <code>idle</code> action points at <code>walk</code> for Gen-style bob while standing.</p>"
+                    "html": "<table><thead><tr><th>Direction</th><th>Sheet row</th><th>Walk frames</th></tr></thead><tbody><tr><td><code>south</code> (down)</td><td>0</td><td>columns 0–3 on that row</td></tr><tr><td><code>west</code> (left)</td><td>1</td><td>columns 0–3</td></tr><tr><td><code>east</code> (right)</td><td>2</td><td>columns 0–3</td></tr><tr><td><code>north</code> (up)</td><td>3</td><td>columns 0–3</td></tr></tbody></table><p>Standard trainer sheet: 128×128 PNG (4×4 cells of 32×32). Pokémon profiles define <code>walk</code> (4 frames) and <code>pause</code> (frame 0 only): there is no profile-level <code>idle</code>; the package <code>idle</code> action points at <code>walk</code> for Gen-style bob while standing.</p>"
                   },
                   {
                     "type": "figure",
                     "path": "media/docs/spmk/charbin-sheet-preview.webp",
-                    "body": "Package detail in SPMK: selected walk sheet thumbnail, direction previews (idle + walk × four facings), and action list. Canvas previews use nearest-neighbor scaling — pixel-perfect like the game.",
+                    "body": "Package detail in SPMK: selected walk sheet thumbnail, direction previews (idle + walk × four facings), and action list. Canvas previews use nearest-neighbor scaling: pixel-perfect like the game.",
                     "caption": "Sheet + direction animation previews",
                     "layout": "side"
                   },
                   {
                     "type": "html",
-                    "html": "<table><thead><tr><th><code>characterType</code></th><th>Recommended actions</th></tr></thead><tbody><tr><td><code>npc</code> / <code>player</code></td><td><code>idle</code> → <code>idle</code> anim · <code>walk</code> → <code>walk</code> anim (<code>movementDriven: true</code>)</td></tr><tr><td><code>pokemon</code></td><td><code>idle</code> → <code>walk</code> anim (bob) · <code>pause</code> → frame 0 · <code>walk</code> → movement</td></tr><tr><td><code>object</code></td><td><code>play</code> only — row-major 4×4, non-looping; no movement actions</td></tr></tbody></table>"
+                    "html": "<table><thead><tr><th><code>characterType</code></th><th>Recommended actions</th></tr></thead><tbody><tr><td><code>npc</code> / <code>player</code></td><td><code>idle</code> → <code>idle</code> anim · <code>walk</code> → <code>walk</code> anim (<code>movementDriven: true</code>)</td></tr><tr><td><code>pokemon</code></td><td><code>idle</code> → <code>walk</code> anim (bob) · <code>pause</code> → frame 0 · <code>walk</code> → movement</td></tr><tr><td><code>object</code></td><td><code>play</code> only: row-major 4×4, non-looping; no movement actions</td></tr></tbody></table>"
+                  }
+                ]
+              },
+              {
+                "id": "activities",
+                "label": "Activity actions",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Stationary overworld clips use the same 4-direction grid as walk and run, but the actor does not move across tiles. Examples: fishing (cast → idle bob → reel), watering plants (one short pour), petting a Pokémon (one emote).\n\nUse `type: activity` with `movementDriven: false`. Do not use `type: movement` for these: movement is for tile-stepping walk, run, and bike.\n\nTwo kinds:\n\n• **single** — one `play` phase, then back to normal idle (water, pet, use item).\n• **session** — `enter` (one-shot) → `stay` (usually looping) → `exit` (one-shot) when gameplay ends or cancels (fishing, sitting).\n\nEach phase names an `animationName` that resolves on the activity sheet's `spriteSheets[].animations` overrides. Set `loop: true` on `stay`; `enter`, `exit`, and `play` default to one-shot (`loop: false`).\n\n**Not yet implemented** in SPMK validators or C++ (`SpriteSheetAnimator` only toggles idle/walk today). Author via debug export JSON until tooling ships."
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Kind</th><th><code>activityKind</code></th><th>Required phases</th><th>Examples</th></tr></thead><tbody><tr><td>Single</td><td><code>single</code></td><td><code>play</code></td><td>Water plants, pet Pokémon, knock on door</td></tr><tr><td>Session</td><td><code>session</code></td><td><code>enter</code>, <code>stay</code>, <code>exit</code></td><td>Fishing, sitting, hold pose while using tool</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Session activity (game runtime)",
+                    "caption": "Charbin names clips; gameplay owns phase transitions",
+                    "source": "stateDiagram-v2\n    [*] --> Inactive\n    Inactive --> Enter: startActivity\n    Enter --> Stay: enter finished\n    Stay --> Stay: loop\n    Stay --> Exit: end or cancel\n    Exit --> Inactive: exit finished"
+                  },
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Use case</th><th>Action type</th><th><code>movementDriven</code></th><th>Tile steps?</th></tr></thead><tbody><tr><td>Walk / run / bike</td><td><code>movement</code></td><td><code>true</code></td><td>Yes</td></tr><tr><td>Stand idle</td><td><code>idle</code></td><td><code>false</code></td><td>No</td></tr><tr><td>Water, pet, use item</td><td><code>activity</code> (<code>single</code>)</td><td><code>false</code></td><td>No</td></tr><tr><td>Fishing, sit</td><td><code>activity</code> (<code>session</code>)</td><td><code>false</code></td><td>No</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "spmk",
+                    "path": "docs/CHARBIN_SCHEMA.md",
+                    "lines": "252-295",
+                    "language": "json",
+                    "caption": "Example: fishing session + water single on one package",
+                    "body": "{\n  \"spriteSheets\": [\n    {\n      \"id\": \"fishing\",\n      \"assetId\": \"fishing_png\",\n      \"profile\": \"character\",\n      \"animations\": {\n        \"cast\": { \"frames\": [0, 1], \"frameTimeMs\": 120, \"loop\": false },\n        \"fishing\": { \"frames\": [2, 3], \"frameTimeMs\": 200, \"loop\": true },\n        \"exit\": { \"frames\": [4, 5, 6], \"frameTimeMs\": 120, \"loop\": false }\n      }\n    },\n    {\n      \"id\": \"water\",\n      \"assetId\": \"water_png\",\n      \"profile\": \"character\",\n      \"animations\": {\n        \"water\": { \"frames\": [0, 1, 2], \"frameTimeMs\": 100, \"loop\": false }\n      }\n    }\n  ],\n  \"actions\": [\n    {\n      \"id\": \"fishing\",\n      \"type\": \"activity\",\n      \"activityKind\": \"session\",\n      \"sheetId\": \"fishing\",\n      \"movementDriven\": false,\n      \"facingMode\": \"four_direction\",\n      \"phases\": {\n        \"enter\": { \"animationName\": \"cast\", \"loop\": false },\n        \"stay\": { \"animationName\": \"fishing\", \"loop\": true },\n        \"exit\": { \"animationName\": \"exit\", \"loop\": false }\n      }\n    },\n    {\n      \"id\": \"water\",\n      \"type\": \"activity\",\n      \"activityKind\": \"single\",\n      \"sheetId\": \"water\",\n      \"movementDriven\": false,\n      \"phases\": {\n        \"play\": { \"animationName\": \"water\", \"loop\": false }\n      }\n    }\n  ]\n}"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Sheet layout: pack enter, stay, and exit frames left-to-right on each direction row (same column ranges on all four rows). Example fishing row: columns 0–1 cast, 2–3 idle loop, 4–6 reel/stand.\n\nC++ handoff (planned): `JsonOverworldLoader` collects `type: activity` into an activity catalog; a new activity animator advances phases per facing row; `CharacterController` calls `startActivity(id)` / `cancelActivity()` while blocking walk input during `stay`."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "src/gameplay/world3d/characters/SpriteSheetAnimator.cpp",
+                    "lines": "23-60",
+                    "language": "cpp",
+                    "caption": "Current runtime: idle vs walk only (activities not wired yet)",
+                    "body": "void SpriteSheetAnimator::setMoving(bool moving) {\n    // Toggles def_.walk vs def_.idle — activity phases need separate playback\n}"
                   }
                 ]
               }
@@ -137,13 +183,13 @@
       {
         "id": "pokemon-variants",
         "title": "Pokémon multi-sheet merge",
-        "summary": "One .charbin per species — forms, shiny, swim, and eating layers.",
+        "summary": "One .charbin per species: forms, shiny, swim, and eating layers.",
         "blocks": [
           {
             "type": "figure",
             "path": "media/docs/spmk/charbin-batch-import.webp",
             "body": "Batch import modal: one character type per batch, filename-driven form and animation layer parsing. Plain `SPECIES.png` can create or replace base walk; any form or layer suffix merges into the existing `{species}.charbin`.",
-            "caption": "SPMK batch import — merges into one file per species",
+            "caption": "SPMK batch import: merges into one file per species",
             "layout": "stacked"
           },
           {
@@ -152,7 +198,7 @@
           },
           {
             "type": "text",
-            "body": "Import modes: `create` replaces the whole package only for plain base import (`SPECIES.png`, no form, no layers). `add` merges base walk only. Imports with any form or animation layer always merge — they never wipe sibling sheets on the same species file."
+            "body": "Import modes: `create` replaces the whole package only for plain base import (`SPECIES.png`, no form, no layers). `add` merges base walk only. Imports with any form or animation layer always merge: they never wipe sibling sheets on the same species file."
           }
         ]
       },
@@ -164,7 +210,7 @@
           {
             "type": "figure",
             "path": "media/docs/spmk/charbin-detail.webp",
-            "body": "Opening a library card loads the draft editor: metadata fields, PokéAPI autofill (species snapshot embedded in JSON — no runtime API calls), embedded sheet upload, live direction previews, and **Save to library**.",
+            "body": "Opening a library card loads the draft editor: metadata fields, PokéAPI autofill (species snapshot embedded in JSON: no runtime API calls), embedded sheet upload, live direction previews, and **Save to library**.",
             "caption": "Package detail editor",
             "layout": "stacked"
           },
@@ -185,7 +231,7 @@
         "blocks": [
           {
             "type": "text",
-            "body": "Prefer extension without breaking existing packages:\n\n1. **`custom` objects** — Add keys under root `custom`, `metadata.custom`, or `dialogue.custom`. SPMK merge preserves unknown keys. Game code can read optional fields without a schemaVersion bump.\n\n2. **New metadata fields** — Add optional keys to `metadata` in `character_package.py` validation docs first. Keep them optional so old charbins still validate.\n\n3. **New sprite profile** — Add an entry to `spmk_app/data/sprite_profiles.json` and mirror it in `pokemon-resort/config/gameplay/sprites/sprite_profiles.json`. Teach the C++ loader to resolve the new `baseProfile` key.\n\n4. **New action ids** — Add actions pointing at existing profile animation names, or add animation overrides on the sheet. Follower / overworld systems select actions by id at runtime (e.g. `pause`, `sleep_*`).\n\n5. **`schemaVersion` bump** — Reserve for breaking top-level renames or required-field changes. Bump `formatVersion` only if the binary container changes (today both are 1). Update `_SUPPORTED_SCHEMA` in SPMK, C++ magic/version checks, and this doc in the same change.\n\n6. **Sync canonical markdown** — Edit `spmk/docs/CHARBIN_SCHEMA.md` whenever package code changes; SPMK copies it to `assets/characters/CHARBIN_SCHEMA.md` in the game repo on save/scan."
+            "body": "Prefer extension without breaking existing packages:\n\n1. **`custom` objects**: Add keys under root `custom`, `metadata.custom`, or `dialogue.custom`. SPMK merge preserves unknown keys. Game code can read optional fields without a schemaVersion bump.\n\n2. **New metadata fields**: Add optional keys to `metadata` in `character_package.py` validation docs first. Keep them optional so old charbins still validate.\n\n3. **New sprite profile**: Add an entry to `spmk_app/data/sprite_profiles.json` and mirror it in `pokemon-resort/config/gameplay/sprites/sprite_profiles.json`. Teach the C++ loader to resolve the new `baseProfile` key.\n\n4. **New action ids**: Add actions pointing at existing profile animation names, or add animation overrides on the sheet. Follower / overworld systems select actions by id at runtime (e.g. `pause`, `sleep_*`).\n\n5. **Activity actions**: Use `type: activity` with `activityKind` and `phases` for stationary 4-direction clips (see **Activity actions** tab in Schema reference above). Sync `spmk/docs/CHARBIN_SCHEMA.md` when the contract changes.\n\n6. **`schemaVersion` bump**: Reserve for breaking top-level renames or required-field changes. Bump `formatVersion` only if the binary container changes (today both are 1). Update `_SUPPORTED_SCHEMA` in SPMK, C++ magic/version checks, and this doc in the same change.\n\n7. **Sync canonical markdown**: Edit `spmk/docs/CHARBIN_SCHEMA.md` whenever package code changes; SPMK copies it to `assets/characters/CHARBIN_SCHEMA.md` in the game repo on save/scan."
           },
           {
             "type": "diagram",
@@ -199,7 +245,7 @@
             "path": "spmk_app/character_package.py",
             "lines": "19-37",
             "language": "python",
-            "caption": "_FORBIDDEN_ROOT_KEYS — runtime fields that must never ship in a package",
+            "caption": "_FORBIDDEN_ROOT_KEYS: runtime fields that must never ship in a package",
             "body": "_FORBIDDEN_ROOT_KEYS = {\n    \"mapId\", \"map\", \"position\", \"worldPosition\",\n    \"spawn\", \"spawnPoint\", \"currentDirection\", \"currentMap\",\n    \"partyState\", \"runtimeState\", \"eventState\",\n    \"x\", \"y\", \"z\", \"tileX\", \"tileY\",\n}"
           }
         ]
@@ -215,7 +261,7 @@
           },
           {
             "type": "text",
-            "body": "Game resolution examples:\n\n• Follower species → `assets/characters/pokemon/{species}.charbin` (`FollowerConfig.cpp`)\n• Poké Ball prop → `assets/characters/objects/{ball_id}.charbin` (fallback `poke_ball.charbin`)\n• Owmap placed characters → `loadCharacterDefinition` in `JsonOverworldLoader.cpp`\n\nSPMK workspace sprites (`workspace/assets/`) are a separate legacy pipeline — they do not ship inside charbins unless exported via **Save to library**."
+            "body": "Game resolution examples:\n\n• Follower species → `assets/characters/pokemon/{species}.charbin` (`FollowerConfig.cpp`)\n• Poké Ball prop → `assets/characters/objects/{ball_id}.charbin` (fallback `poke_ball.charbin`)\n• Owmap placed characters → `loadCharacterDefinition` in `JsonOverworldLoader.cpp`\n\nSPMK workspace sprites (`workspace/assets/`) are a separate legacy pipeline: they do not ship inside charbins unless exported via **Save to library**."
           },
           {
             "type": "gallery",
@@ -229,7 +275,7 @@
           },
           {
             "type": "text",
-            "body": "In-repo references:\n\n• `spmk/docs/CHARBIN_SCHEMA.md` — canonical schema (update with every package code change)\n• `spmk/README.md` — `./spmk run`, library paths, batch workflow\n• `pokemon-resort/assets/characters/CHARBIN_SCHEMA.md` — synced copy for C++ contributors"
+            "body": "In-repo references:\n\n• `spmk/docs/CHARBIN_SCHEMA.md`: canonical schema (update with every package code change)\n• `spmk/README.md`: `./spmk run`, library paths, batch workflow\n• `pokemon-resort/assets/characters/CHARBIN_SCHEMA.md`: synced copy for C++ contributors"
           },
           {
             "type": "links",

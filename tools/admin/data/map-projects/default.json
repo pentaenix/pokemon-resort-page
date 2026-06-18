@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "default",
+  "name": "Default Project",
+  "maps": [
+    {
+      "id": "testing-ground",
+      "name": "tester",
+      "file": "testing.owmap",
+      "gridX": 0,
+      "gridY": 0
+    }
+  ],
+  "tilePackages": [
+    {
+      "id": "map_tiles",
+      "file": "maptiles.rtpks",
+      "name": "map_tiles"
+    }
+  ],
+  "defaultTilePackageId": "map_tiles",
+  "pathSets": [],
+  "editor": {
+    "activeMapId": "testing-ground",
+    "viewMode": "2d",
+    "zoom": 1,
+    "overlays": {
+      "values": true,
+      "neighbors": true
+    }
+  },
+  "export": {}
+}

@@ -25,7 +25,7 @@ The theme is **nouns and labels**, not poetry. Write like a staff member leaving
 
 ## Hard rules
 
-1. **No em dashes (—)** in UI copy. Use a comma, period, or parentheses instead.
+1. **No em-dash character** in UI copy. Use a comma, period, or parentheses instead.
 2. **No contractions** in new or revised UI strings: write **do not**, **we will**, **it is**, **you will**, not don’t, we’ll, it’s, you’ll.
 3. **One main idea per sentence** for blurbs (summaries, intros, nav card descriptions).
 4. **Say what exists** when you can: file paths, pin colors, counts, episode numbers, stage names.
@@ -97,7 +97,7 @@ Statuses: `spark`, `promising`, etc. (see existing items). Titles are plain noun
 |-------|--------|
 | Where sparks become the path forward. | Ideas and the path ahead |
 | A stable directional route lab for generation round trips. | Transfer routes between generations |
-| Everything we learn about the series — not just map pins. | Research beyond the map pins |
+| Everything we learn about the series: not just map pins. | Research beyond the map pins |
 
 Drop trailing periods on short section `h2` lines when they read like poster taglines (“What we are building toward”, not “What we are building toward.”).
 

@@ -1,8 +1,8 @@
-# Pokémon Resort site — guide for coding agents
+# Pokémon Resort site: guide for coding agents
 
 Read this file first when working in **`pokemon-resort-page/`** (not the workspace root).
 
-The public site is written for human contributors and fans — no agent/LLM wording on the page. This file and the other repo markdown guides hold automation details.
+The public site is written for human contributors and fans: no agent/LLM wording on the page. This file and the other repo markdown guides hold automation details.
 
 ## UI copy (read before changing blurbs or page text)
 
@@ -18,7 +18,7 @@ The public site is written for human contributors and fans — no agent/LLM word
 |------|-----------------|
 | [`docs/AUTHORING.md`](./AUTHORING.md) | JSON layout, block types, validation, categories, apps, freshness |
 | [`docs/TEMPLATE.md`](./TEMPLATE.md) | Copy-paste article skeleton, `code` + `tabs` blocks |
-| [`docs/MEDIA.md`](./MEDIA.md) | Real screenshots via Playwright — **no AI images** |
+| [`docs/MEDIA.md`](./MEDIA.md) | Real screenshots via Playwright: **no AI images** |
 | [`docs/OVERWORLD_GLB_AGENT_NOTES.md`](./OVERWORLD_GLB_AGENT_NOTES.md) | Overworld GLB prop pipeline: conversion fixes, pitfalls, and C++ handoff (internal, non-public) |
 
 ## JSON template (copy this)
@@ -78,7 +78,7 @@ npm run validate:data          # also refreshes docs-freshness.json
 
 # Optional: real UI captures (not AI)
 npm run dev                    # 127.0.0.1:5174
-npm run admin                  # 127.0.0.1:9477 — restart after pulling
+npm run admin                  # 127.0.0.1:9477: restart after pulling
 npm run docs:screenshots
 npm run docs:freshness         # alone, if you only need staleness data
 ```
@@ -148,13 +148,13 @@ Renders directly under the article heading on the public site (not buried under 
 
 - Put all articles in `public/docs/articles/` without a category subfolder
 - Put “LLM”, “agent”, or “AI-generated” wording in public JSON or JSX
-- Use em dashes (—) in UI copy ([`UI-COPY.md`](./UI-COPY.md))
+- Use em-dash character in UI copy ([`UI-COPY.md`](./UI-COPY.md))
 - Use contractions in UI copy (write **do not**, **we will**, not don’t, we’ll)
 - Write idea/feature/homepage blurbs as marketing pitch lines (see ideas section in [`UI-COPY.md`](./UI-COPY.md))
-- Generate fake UI screenshots with AI — use `npm run docs:screenshots` ([MEDIA.md](./MEDIA.md))
-- Hotlink external images — commit under `public/media/docs/` or `public/assets/docs/`
-- Skip validation — `npm run validate:data` must pass before publish
+- Generate fake UI screenshots with AI: use `npm run docs:screenshots` ([MEDIA.md](./MEDIA.md))
+- Hotlink external images: commit under `public/media/docs/` or `public/assets/docs/`
+- Skip validation: `npm run validate:data` must pass before publish
 
 ## Human-readable mirror
 
-Contributors browse **`#/docs?article=writing-docs`** — same workflows, contributor-facing prose.
+Contributors browse **`#/docs?article=writing-docs`**: same workflows, contributor-facing prose.

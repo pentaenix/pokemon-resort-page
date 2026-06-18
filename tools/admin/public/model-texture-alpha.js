@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyRaeMaterialPolicy } from './rae-material-policy.js';
 
 const alphaCache = new WeakMap();
 
@@ -67,10 +68,7 @@ export function tuneGltfTexture(texture) {
 }
 
 /**
- * Keep GLTFLoader materials/maps; only tune sampling. Alpha handling is taken verbatim
- * from the GLB material (alphaMode → transparent/alphaTest set by GLTFLoader). We do NOT
- * re-derive transparency from the texture's alpha channel: DS-ripped PNGs often carry an
- * unreliable alpha channel, and forcing cutout from it punches holes in opaque surfaces.
+ * Keep GLTFLoader materials/maps; tune sampling and honor extras.rae.renderClass.
  * @param {THREE.Object3D} root
  */
 export function tuneGltfMaterials(root) {
@@ -78,10 +76,8 @@ export function tuneGltfMaterials(root) {
     if (!obj.isMesh) return;
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
     for (const mat of mats) {
-      if (!mat) continue;
-      mat.side = THREE.DoubleSide;
-      mat.depthWrite = true;
-      if (mat.map) tuneGltfTexture(mat.map);
+      if (mat?.map) tuneGltfTexture(mat.map);
     }
   });
+  applyRaeMaterialPolicy(root);
 }

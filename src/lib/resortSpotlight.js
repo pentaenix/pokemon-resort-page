@@ -125,7 +125,7 @@ function shuffleInPlace(items) {
   return items;
 }
 
-/** One bulletin-style highlight for the homepage — random on each visit. */
+/** One bulletin-style highlight for the homepage: random on each visit. */
 export function pickResortSpotlight(data) {
   const candidates = collectSpotlightCandidates(data);
   if (!candidates.length) return null;

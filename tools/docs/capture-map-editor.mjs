@@ -95,8 +95,8 @@ async function main() {
 
     await capture(page, 'map-editor-3d-preview', async (p) => {
       await loadTestingMap(p);
-      await p.click('#mapTogglePreview');
-      await p.waitForSelector('#mapPreviewModal', { timeout: 15_000 });
+      await p.click('[data-workspace-view="3d"]');
+      await p.waitForSelector('#map3dMount', { timeout: 15_000 });
       await p.waitForTimeout(1500);
     });
   } finally {

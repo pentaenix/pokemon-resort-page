@@ -44,6 +44,7 @@ function extractCodeRefs(dossier) {
   const add = (repo, path) => {
     const key = `${repo}:${path}`;
     if (!repo || !path || seen.has(key)) return;
+    if (path.includes('REPLACE')) return;
     seen.add(key);
     refs.push({ repo, path });
   };
