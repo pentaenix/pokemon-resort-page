@@ -1,0 +1,12 @@
+{
+  "id": "characters",
+  "order": 2,
+  "title": "Character Editor",
+  "description": "Author .charbin packages — sprites, walk cycles, animations, and character metadata.",
+  "image": "/media/game_engine/characters.png",
+  "entry": "/modules/charactereditor/editor.js",
+  "styles": ["/modules/charactereditor/editor.css"],
+  "subprocess": "character-editor",
+  "legacyRoutes": ["character-editor"],
+  "capabilities": ["character-editor"]
+}

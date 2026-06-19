@@ -3,16 +3,52 @@ const $$ = (q, el=document)=>[...el.querySelectorAll(q)];
 const EMBED = new URLSearchParams(location.search).get('embed') === '1';
 if (EMBED) document.body.classList.add('embed');
 const api = async (url, opts={}) => {
+  const method=(opts.method||'GET').toUpperCase();
+  const loud=method!=='GET';
+  if(loud) termLog(`${method} ${url}`);
   const r = await fetch(url, opts);
-  if(!r.ok) throw new Error(await r.text());
-  return r.headers.get('content-type')?.includes('application/json') ? r.json() : r.text();
+  if(!r.ok){
+    const errText=await r.text();
+    termLog(`HTTP ${r.status}: ${errText.slice(0,240)}`,'error');
+    throw new Error(errText);
+  }
+  const out=r.headers.get('content-type')?.includes('application/json') ? await r.json() : await r.text();
+  if(loud) termLog(`HTTP ${r.status} OK`,'ok');
+  return out;
 };
 let state = {project:null, view:'packages', libraryPanel:'list', sheetPanel:'families', sheetFamilyId:null, selectedCharacter:null, selectedSheet:null, selectedSprite:null, selectedGenerated:null, sheetZoom:1, sheetFit:true};
 let lastProjectUpdatedAt=null, projectSyncTimer=null;
 const navItems = [['packages','◈','Characters'], ['sheets','▦','Sheets'], ['actions','✦','Actions'], ['generate','⧉','Generate'], ['editor','✎','Editor'], ['export','⇩','Export'], ['library','◇','Sprite workspace']];
-function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
-function setStatus(msg){$('#footerStatus').textContent=msg}
-function setSave(s){$('#saveState').textContent=s}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600); termLog(String(msg).replace(/\n/g,' | '));}
+function termLog(message, tone=''){
+  if(EMBED && window.parent !== window){
+    try{window.parent.postMessage({type:'spmk-log',message,tone}, window.location.origin);}catch{/* ignore */}
+  }
+  const el=$('#spmkTerminal');
+  if(!el)return;
+  const prefix=tone==='error'?'✗':tone==='ok'?'✓':tone==='warn'?'!':'·';
+  el.textContent+=`[${new Date().toLocaleTimeString()}] ${prefix} ${message}\n`;
+  el.scrollTop=el.scrollHeight;
+}
+function setStatus(msg){const fs=$('#footerStatus');if(fs)fs.textContent=msg;}
+function setSave(s){const el=$('#saveState');if(el)el.textContent=s;}
+function initSpmkTerminal(){
+  const btn=$('#toggleSpmkTerminal');
+  const collapsed=()=>document.body.classList.contains('spmk-terminal-collapsed');
+  const apply=(hide)=>{
+    document.body.classList.toggle('spmk-terminal-collapsed',hide);
+    if(btn){
+      btn.textContent=hide?'▲':'▼';
+      btn.setAttribute('aria-expanded',String(!hide));
+      btn.title=hide?'Show activity log':'Hide activity log';
+    }
+    try{localStorage.setItem('spmkTerminalCollapsed',hide?'1':'0');}catch{/* ignore */}
+  };
+  let startCollapsed=false;
+  try{startCollapsed=localStorage.getItem('spmkTerminalCollapsed')==='1';}catch{/* ignore */}
+  apply(startCollapsed);
+  if(btn)btn.onclick=()=>apply(!collapsed());
+}
 function esc(s=''){return String(s).replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function img(src, attrs){
   if(!src) return '';
@@ -25,6 +61,7 @@ function fmtTime(ms){ if(!ms) return 'never'; return new Date(ms).toLocaleString
 async function load(){
   state.view='packages';
   state.project=await api('/api/project');
+  if(EMBED) termLog('Character editor ready.');
   lastProjectUpdatedAt=state.project.updatedAt||null;
   if ($('#projectName')) $('#projectName').textContent=state.project.projectName;
   renderNav();
@@ -649,4 +686,5 @@ function v12AnimationStrip(frames=[], opts={}){
   return `<div class="v12-anim-preview">${title}<div class="sprite-strip anim-strip">${cells || '<div class="empty tiny">No frames</div>'}</div></div>`;
 }
 
+initSpmkTerminal();
 load();

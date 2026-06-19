@@ -32,7 +32,7 @@ export function gameEngineHubHtml(tools, esc) {
     </div>
   </section>
   <section class="panel game-engine-page">
-    <div class="game-engine-grid" role="list">${cards || '<p class="hint">No tools configured. See tools/admin/docs/adding-game-engine-tools.md</p>'}</div>
+    <div class="game-engine-grid" role="list">${cards || '<p class="hint">No editors found. Add a folder under <code>tools/admin/modules/</code> with <code>editor.json</code>.</p>'}</div>
   </section>`;
 }
 

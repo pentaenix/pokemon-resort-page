@@ -5,7 +5,8 @@ import { join, extname, resolve, relative, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { unzipSync } from 'fflate';
 import { encodeOwmap, decodeOwmap, mapFromJson } from './lib/owmap-format.mjs';
-import { bakeTerrainSpecials } from './public/ramp-specials.js';
+import { bakeTerrainSpecials } from './shared/ramp-specials.js';
+import { loadEditorManifests } from './lib/editor-registry.mjs';
 import {
   ingestUploadArchive,
   ingestGlbUpload,
@@ -38,6 +39,8 @@ import { LIBRETRO_BASE } from '../lib/libretro-thumbnails.mjs';
 loadProjectEnv();
 const root = resolve(new URL('../..', import.meta.url).pathname);
 const adminRoot = join(root, 'tools/admin/public');
+const modulesRoot = join(root, 'tools/admin/modules');
+const sharedRoot = join(root, 'tools/admin/shared');
 
 /** Decode URL-encoded public asset paths (spaces, unicode) without allowing traversal. */
 function publicRelativePath(pathname) {
@@ -74,13 +77,39 @@ const mime = {
   '.gltf': 'model/gltf+json',
   '.owmap': 'application/octet-stream',
 };
-const mapSettingsPath = join(root, 'tools/admin/map-editor-settings.json');
+const mapSettingsPath = join(modulesRoot, 'mapeditor/settings.json');
 const mapProjectsRoot = join(root, 'tools/admin/data/map-projects');
-const characterEditorModuleRoot = join(root, 'tools/admin/modules/charactereditor');
-const characterEditorSettingsPath = join(root, 'tools/admin/character-editor-settings.json');
+const characterEditorModuleRoot = join(modulesRoot, 'charactereditor');
+const characterEditorSettingsPath = join(characterEditorModuleRoot, 'settings.json');
 const CHARACTER_EDITOR_HOST = '127.0.0.1';
 const CHARACTER_EDITOR_PORT = Number(process.env.CHARACTER_EDITOR_PORT || 8789);
 const repoRoot = resolve(root, '..');
+
+function resolveModulesFile(pathname) {
+  const rel = pathname.replace(/^\/modules\//, '').replace(/\\/g, '/');
+  const segments = rel.split('/').filter(Boolean);
+  if (!segments.length) return null;
+  const blocked = new Set(['.venv', 'spmk_app', 'workspace', '__pycache__', 'node_modules']);
+  if (segments.some((seg) => blocked.has(seg) || seg.startsWith('.'))) return null;
+  const filePath = join(modulesRoot, ...segments);
+  if (!isPathInside(filePath, modulesRoot)) return null;
+  return filePath;
+}
+
+function resolveSharedFile(pathname) {
+  const rel = pathname.replace(/^\/shared\//, '').replace(/\\/g, '/');
+  const segments = rel.split('/').filter(Boolean);
+  if (!segments.length || segments.some((seg) => seg === '..' || seg.startsWith('.'))) return null;
+  const filePath = join(sharedRoot, ...segments);
+  if (!isPathInside(filePath, sharedRoot)) return null;
+  return filePath;
+}
+
+let cachedEditorTools = null;
+async function getEditorTools() {
+  if (!cachedEditorTools) cachedEditorTools = await loadEditorManifests(modulesRoot);
+  return cachedEditorTools;
+}
 
 function isPathInside(child, parent) {
   const rel = relative(resolve(parent), resolve(child));
@@ -897,9 +926,8 @@ const server = http.createServer(async (req, res) => {
       });
     }
     if (url.pathname === '/api/game-engine/tools') {
-      const toolsPath = join(root, 'tools/admin/data/game-engine-tools.json');
-      if (!existsSync(toolsPath)) return json(res, 200, { tools: [] });
-      return json(res, 200, JSON.parse(await readFile(toolsPath, 'utf8')));
+      const tools = await getEditorTools();
+      return json(res, 200, { tools });
     }
     if (url.pathname === '/api/character-editor/status') {
       return json(res, 200, await getCharacterEditorStatus());
@@ -1717,6 +1745,10 @@ const server = http.createServer(async (req, res) => {
       filePath = join(publicRoot, publicRelativePath(url.pathname));
     } else if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/media/')) {
       filePath = join(publicRoot, publicRelativePath(url.pathname));
+    } else if (url.pathname.startsWith('/modules/')) {
+      filePath = resolveModulesFile(url.pathname);
+    } else if (url.pathname.startsWith('/shared/')) {
+      filePath = resolveSharedFile(url.pathname);
     } else {
       filePath = url.pathname === '/' ? join(adminRoot, 'index.html') : join(adminRoot, url.pathname.replace(/^\//, ''));
     }
@@ -1724,10 +1756,15 @@ const server = http.createServer(async (req, res) => {
       ? mermaidRoot
       : url.pathname.startsWith('/vendor/')
       ? threeRoot
+      : url.pathname.startsWith('/modules/')
+      ? modulesRoot
+      : url.pathname.startsWith('/shared/')
+      ? sharedRoot
       : (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/media/') || url.pathname.startsWith('/docs/')) ? publicRoot : adminRoot;
-    const insideAllowed = filePath.startsWith(allowedRoot)
+    const insideAllowed = filePath
+      && (filePath.startsWith(allowedRoot)
       || (url.pathname.startsWith('/vendor/three-addons/') && filePath.startsWith(join(threeRoot, 'examples/jsm')))
-      || (url.pathname.startsWith('/vendor/mermaid/') && filePath.startsWith(mermaidRoot));
+      || (url.pathname.startsWith('/vendor/mermaid/') && filePath.startsWith(mermaidRoot)));
     if (!insideAllowed || !existsSync(filePath)) return json(res, 404, { error: 'Not found' });
     const type = mime[extname(filePath)] || 'application/octet-stream';
     res.writeHead(200, { 'Content-Type': type });

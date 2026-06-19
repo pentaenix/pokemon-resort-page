@@ -5,13 +5,13 @@ import {
   RAMP_PRESETS,
   cornerHeightsForTile,
   effectiveSpecial,
-} from './ramp-specials.js';
+} from '/shared/ramp-specials.js';
 import {
   bindGlbWebGLViewport,
   clearModelCache,
   closeModelViewport,
   renderGlbThumbnail,
-} from './model-viewer.js';
+} from '/shared/model-viewer.js';
 import { downloadRtpksTileGlb, mountMap3DView, mountRtpksTilePreview } from './map-3d-view.js';
 
 const LAYER_META = {
@@ -5619,3 +5619,8 @@ export async function initMapEditorTab(state, api) {
   });
   return editor.initializing;
 }
+
+/** Standard module API for editor-host.js */
+export const initEditorTab = initMapEditorTab;
+export const editorHtml = mapEditorHtml;
+export const bindEditor = bindMapEditor;

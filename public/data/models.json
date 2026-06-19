@@ -3,7 +3,7 @@
     "name": "Island terrain",
     "status": "in-atlas",
     "file": "media/models/island/island_terrain.glb",
-    "displaySize": 8.4,
+    "displaySize": 8.5,
     "preview": "media/models/island/island-preview.webp",
     "summary": "Primary 3D island model used by the Island Atlas viewport."
   },

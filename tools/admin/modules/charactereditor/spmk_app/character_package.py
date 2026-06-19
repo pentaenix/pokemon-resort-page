@@ -115,6 +115,95 @@ def _primary_sprite_sheet(sheets: List[Dict[str, Any]]) -> Optional[Dict[str, An
     return next((s for s in sheets if s.get("assetId")), None)
 
 
+def preferred_walk_sheet(package: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Primary walk/sprite sheet used for library thumbnails and size metadata."""
+    meta = package.get("metadata") or {}
+    ct = str(meta.get("characterType") or "npc").lower()
+    sheets = package.get("spriteSheets") or []
+    if ct == "pokemon":
+        return preferred_pokemon_walk_sheet(package)
+    if ct == "object":
+        return next((s for s in sheets if s.get("assetId")), None)
+    for sid in ("walk", "sheet"):
+        hit = next((s for s in sheets if s.get("assetId") and s.get("id") == sid), None)
+        if hit:
+            return hit
+    return next((s for s in sheets if s.get("assetId")), None)
+
+
+def effective_sheet_cell_size(sheet: Dict[str, Any], package: Dict[str, Any]) -> Tuple[int, int]:
+    prof_name = sheet.get("profile") or package.get("baseProfile") or "character"
+    prof = load_sprite_profiles().get("profiles", {}).get(prof_name, {})
+    overrides = sheet.get("profileOverrides") or {}
+    fw = int(overrides.get("frameWidth") or prof.get("frameWidth") or 32)
+    fh = int(overrides.get("frameHeight") or prof.get("frameHeight") or fw)
+    return fw, fh
+
+
+def library_walk_meta(
+    package: Dict[str, Any], assets: Optional[Dict[str, bytes]] = None
+) -> Dict[str, Any]:
+    """Walk-sheet cell + raw PNG dimensions for library filters."""
+    sheet = preferred_walk_sheet(package)
+    if not sheet:
+        return {}
+    fw, fh = effective_sheet_cell_size(sheet, package)
+    out: Dict[str, Any] = {
+        "walkSheetId": sheet.get("id"),
+        "walkCellWidth": fw,
+        "walkCellHeight": fh,
+        "baseProfile": sheet.get("profile") or package.get("baseProfile"),
+    }
+    aid = sheet.get("assetId")
+    if assets and aid and aid in assets:
+        import io
+
+        from PIL import Image
+
+        img = Image.open(io.BytesIO(assets[aid]))
+        out["walkSheetWidth"] = int(img.width)
+        out["walkSheetHeight"] = int(img.height)
+    return out
+
+
+def _sheet_png_size_bucket(width: int, height: int) -> str:
+    """Bucket raw PNG size by longest edge (128 / 160 / 256 / other)."""
+    longest = max(int(width), int(height))
+    if longest == 128:
+        return "128"
+    if longest == 160:
+        return "160"
+    if longest == 256:
+        return "256"
+    return "other"
+
+
+def library_all_sheets_meta(
+    package: Dict[str, Any], assets: Optional[Dict[str, bytes]] = None
+) -> Dict[str, Any]:
+    """Every embedded sheet PNG dimension + size buckets for library filters."""
+    if not assets:
+        return {"sheetDimensions": [], "sheetSizeBuckets": []}
+    import io
+
+    from PIL import Image
+
+    dimensions: List[Dict[str, Any]] = []
+    buckets: Set[str] = set()
+    for sheet in package.get("spriteSheets") or []:
+        aid = sheet.get("assetId")
+        if not aid or aid not in assets:
+            continue
+        img = Image.open(io.BytesIO(assets[aid]))
+        w, h = int(img.width), int(img.height)
+        dimensions.append({"id": sheet.get("id"), "width": w, "height": h})
+        buckets.add(_sheet_png_size_bucket(w, h))
+    return {
+        "sheetDimensions": dimensions,
+        "sheetSizeBuckets": sorted(buckets),
+    }
+
+
 def is_pokemon_walk_sheet_id(sheet_id: str) -> bool:
     return sheet_id == "walk" or sheet_id.startswith("walk_")
 
@@ -249,14 +338,30 @@ def ensure_package_actions(package: Dict[str, Any]) -> Dict[str, Any]:
     """Fill standard actions when a sheet with an embedded asset exists."""
     out = deepcopy(package)
     sheets = out.get("spriteSheets") or []
+    existing = out.get("actions") or []
+
+    def upsert_defaults(defaults: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Ensure default actions exist; preserve user-edited fields on matching ids."""
+        by_id = {a.get("id"): a for a in existing if a.get("id")}
+        merged: List[Dict[str, Any]] = []
+        for default in defaults:
+            did = default.get("id")
+            if did in by_id:
+                merged.append(deep_merge_preserve_unknown(default, by_id[did]))
+            else:
+                merged.append(deepcopy(default))
+        default_ids = {d["id"] for d in defaults}
+        extra = [a for a in existing if a.get("id") not in default_ids]
+        return merged + extra
+
     if is_object_package(out):
         primary = _primary_sprite_sheet(sheets)
         if not primary:
             return out
         sheet_id = primary.get("id") or "sheet"
-        defaults = default_object_actions(sheet_id)
+        out["actions"] = upsert_defaults(default_object_actions(sheet_id))
     elif is_pokemon_package(out):
-        merged: List[Dict[str, Any]] = []
+        merged_defaults: List[Dict[str, Any]] = []
         seen_sheets: Set[str] = set()
         for sheet in sheets:
             sid = sheet.get("id") or ""
@@ -265,22 +370,16 @@ def ensure_package_actions(package: Dict[str, Any]) -> Dict[str, Any]:
             if sid != "walk" and not sid.startswith("walk_"):
                 continue
             seen_sheets.add(sid)
-            merged.extend(default_pokemon_actions_for_sheet(sid))
-        if not merged:
+            merged_defaults.extend(default_pokemon_actions_for_sheet(sid))
+        if not merged_defaults:
             return out
-        keep_ids = {d["id"] for d in merged}
-        extra = [a for a in (out.get("actions") or []) if a.get("id") not in keep_ids]
-        out["actions"] = merged + extra
-        return out
+        out["actions"] = upsert_defaults(merged_defaults)
     else:
         walk_sheet = next((s for s in sheets if s.get("id") == "walk" and s.get("assetId")), None)
         if not walk_sheet:
             return out
         sheet_id = walk_sheet.get("id") or "walk"
-        defaults = default_character_actions(sheet_id)
-    keep_ids = {d["id"] for d in defaults}
-    extra = [a for a in (out.get("actions") or []) if a.get("id") not in keep_ids]
-    out["actions"] = defaults + extra
+        out["actions"] = upsert_defaults(default_character_actions(sheet_id))
     return out
 
 

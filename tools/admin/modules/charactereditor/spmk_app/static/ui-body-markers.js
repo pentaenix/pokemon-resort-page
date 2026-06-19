@@ -123,6 +123,7 @@ function bmApplyDirectionMarkers(dm) {
 async function openBodyMarkers(path, displayName) {
   if (typeof state !== 'undefined') state.view = 'packages';
   if (typeof renderNav === 'function') renderNav();
+  pkgLeaveListPanel();
   pkgState.panel = 'bodyMarkers';
   bmState.path = path || pkgState.selectedPath || null;
   bmState.displayName = displayName || '';
@@ -385,10 +386,7 @@ function renderBodyMarkers() {
 
   right(bmRightPanelHtml());
 
-  $('#bmBack').onclick = () => {
-    pkgState.panel = 'list';
-    renderPackages();
-  };
+  $('#bmBack').onclick = () => pkgBackToList();
   $('#bmSave')?.addEventListener('click', () => bmSave());
   $('#bmAddHead')?.addEventListener('click', () => bmAddBox('head'));
   $('#bmAddEye')?.addEventListener('click', () => bmAddBox('eye'));

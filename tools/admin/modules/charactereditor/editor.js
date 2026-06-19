@@ -60,6 +60,22 @@ export function bindCharacterEditor(state, deps) {
   const { api, log, render, navigateToTab } = deps;
   const ce = ensureCharacterEditorState(state);
 
+  if (!window.__spmkLogBridge) {
+    window.__spmkLogBridge = true;
+    window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.type !== 'spmk-log') return;
+      log(data.message, data.tone || '');
+    });
+  }
+
+  const frame = document.getElementById('characterEditorFrame');
+  if (frame && !frame.dataset.logBridgeBound) {
+    frame.dataset.logBridgeBound = '1';
+    frame.addEventListener('load', () => log('Character editor UI loaded.', 'ok'));
+  }
+
   const backBtn = document.getElementById('characterExitWorkbench');
   if (backBtn) {
     backBtn.onclick = () => navigateToTab(state.deskReturnTab || 'Dashboard');
@@ -101,3 +117,8 @@ export function bindCharacterEditor(state, deps) {
     };
   }
 }
+
+/** Standard module API for editor-host.js */
+export const initEditorTab = initCharacterEditorTab;
+export const editorHtml = characterEditorHtml;
+export const bindEditor = bindCharacterEditor;

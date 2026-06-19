@@ -1,7 +1,5 @@
 import { renderCompatGraphHtml, bindCompatGraph } from './ontology-picker.js';
 import { featureHasDossierContent } from './dossier-shared.js';
-import { mapEditorHtml, bindMapEditor, initMapEditorTab } from './map-editor.js';
-import { characterEditorHtml, bindCharacterEditor, initCharacterEditorTab } from './character-editor.js';
 import {
   bindGameEngineHub,
   gameEngineHubHtml,
@@ -9,6 +7,12 @@ import {
   loadGameEngineTools,
   workbenchTitleForTool,
 } from './game-engine.js';
+import {
+  initEditorWorkbench,
+  editorWorkbenchHtml,
+  bindEditorWorkbench,
+  applyEditorBodyClasses,
+} from './editor-host.js';
 import { atlasMapEditorHtml, bindAtlasMapEditor, initAtlasMapEditorTab } from './atlas-map-editor.js';
 import {
   bindDossierEditor,
@@ -108,7 +112,11 @@ function isGameEngineWorkbenchOpen() {
 function normalizeGameEngineToolId(toolId) {
   const key = String(toolId || '').trim().toLowerCase();
   if (!key) return null;
-  return state.gameEngineTools.some((t) => t.id === key) ? key : null;
+  for (const t of state.gameEngineTools || []) {
+    if (t.id === key) return t.id;
+    if ((t.legacyRoutes || []).some((route) => String(route).toLowerCase() === key)) return t.id;
+  }
+  return null;
 }
 
 function workshopSectionForTab(tab) {
@@ -280,7 +288,7 @@ function waitForAdminTransition() {
       resolve();
     };
     const onEnd = (event) => {
-      if (event.target === viewport && event.propertyName === 'transform') finish();
+      if (event.target === viewport && (event.propertyName === 'margin-left' || event.propertyName === 'transform')) finish();
     };
     viewport.addEventListener('transitionend', onEnd);
     setTimeout(finish, 520);
@@ -696,7 +704,7 @@ function dashboard() {
   ];
   return `<section class="grid dashboard">${cards.map(([label,val]) => `<article class="card"><span>${label}</span><strong>${val}</strong></article>`).join('')}</section>
   <section class="panel" style="margin-top:16px"><h2>Needs attention</h2><div class="grid">${attentionItems().map(item => `<p><span class="badge">${item.type}</span> ${item.text}</p>`).join('')}</div></section>
-  <section class="panel" style="margin-top:16px"><h2>Quick actions</h2><div class="actions"><button class="btn" data-go="Compatibility">Update Compatibility</button><button class="btn" data-go="Bugs">Add Bug</button><button class="btn" data-go="Workshop">Open Workshop</button><button class="btn ghost" data-game-engine-launch="maps">Map studio</button><button class="btn ghost" data-go="Game Engine">Game Engine</button><button class="btn ghost" data-go="Library">Library & box art</button><button class="btn ghost" data-go="Publish">Preview / Publish</button></div></section>`;
+  <section class="panel" style="margin-top:16px"><h2>Quick actions</h2><div class="actions"><button class="btn" data-go="Compatibility">Update Compatibility</button><button class="btn" data-go="Bugs">Add Bug</button><button class="btn" data-go="Workshop">Open Workshop</button><button class="btn ghost" data-game-engine-launch="maps">Map editor</button><button class="btn ghost" data-go="Game Engine">Game Engine</button><button class="btn ghost" data-go="Library">Library & box art</button><button class="btn ghost" data-go="Publish">Preview / Publish</button></div></section>`;
 }
 function attentionItems() {
   const data = state.data;
@@ -3696,16 +3704,14 @@ async function render() {
     const title = workbenchTitleForTool(state.gameEngineTools, state.gameEngineTool);
     workbenchPanel.innerHTML = workbenchLoadingShell(title);
     bindWorkbenchEscape();
-    if (activeTool?.workbench === 'map') {
-      try { await initMapEditorTab(state, api); } catch (e) {
-        log(`Map editor init failed: ${e.message}`, 'error');
+    applyEditorBodyClasses(state.gameEngineTools, activeTool);
+    if (activeTool) {
+      try {
+        await initEditorWorkbench(state, api, activeTool);
+        workbenchPanel.innerHTML = await editorWorkbenchHtml(state, esc, activeTool);
+      } catch (e) {
+        log(`Editor init failed: ${e.message}`, 'error');
       }
-      workbenchPanel.innerHTML = mapEditorHtml(state, esc);
-    } else if (activeTool?.workbench === 'character') {
-      try { await initCharacterEditorTab(state, api); } catch (e) {
-        log(`Character editor init failed: ${e.message}`, 'error');
-      }
-      workbenchPanel.innerHTML = characterEditorHtml(state, esc);
     }
     bindWorkbenchEscape();
     requestAnimationFrame(() => {
@@ -3713,6 +3719,7 @@ async function render() {
       bindWorkbenchEscape();
     });
   } else {
+    applyEditorBodyClasses(state.gameEngineTools, null);
     workbenchPanel.innerHTML = '';
     workbenchPanel.setAttribute('aria-hidden', 'true');
   }
@@ -3833,8 +3840,9 @@ function bind() {
     bindGameEngineHub(state, { openGameEngineTool });
   }
   const activeWorkbench = gameEngineToolById(state.gameEngineTools, state.gameEngineTool);
-  if (activeWorkbench?.workbench === 'map') bindMapEditor(state, { api, log, esc, render, navigateToTab });
-  if (activeWorkbench?.workbench === 'character') bindCharacterEditor(state, { api, log, esc, render, navigateToTab });
+  if (isGameEngineWorkbenchOpen() && activeWorkbench) {
+    bindEditorWorkbench(state, { api, log, esc, render, navigateToTab }, activeWorkbench);
+  }
   const saveGames = $('#saveGames'); if (saveGames) saveGames.onclick = () => { persistGameFromForm(); saveFile(files.compatibility, state.data['compatibility.json']).then(() => updateLibrarySaveHints()); };
   const saveJsonEditor = $('#saveJsonEditor');
   if (saveJsonEditor) {

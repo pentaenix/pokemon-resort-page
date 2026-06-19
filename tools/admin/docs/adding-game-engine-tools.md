@@ -1,94 +1,115 @@
-# Adding a Game Engine tool
+# Adding a Game Engine editor
 
-The **Game Engine** tab is a launcher hub. Each entry is a card (screenshot, title, description) that slides open into the shared workbench panel on the right.
+Each editor is a **self-contained module** under `tools/admin/modules/<name>/`. Drop in a folder with `editor.json` + `editor.js` (+ `editor.css`) and it appears on the Game Engine hub automatically — no changes to `admin.js`.
 
 ## Quick checklist
 
-1. Add a preview image under `pokemon-resort-page/public/media/game_engine/`.
-2. Register the tool in `pokemon-resort-page/tools/admin/data/game-engine-tools.json`.
-3. If the tool reuses an existing workbench, set `workbench` to `map` or `character`.
-4. If the tool needs a **new** editor (audio, config, playtest utilities), implement the workbench module and wire it in `admin.js` (see below).
-5. Replace placeholder screenshots with PNG/WebP captures when ready (recommended size: **640×400** or 16∶10). Re-capture from a running desk:
+1. Create `tools/admin/modules/<your-editor>/`
+2. Add `editor.json` (manifest — see below)
+3. Add `editor.js` exporting the standard module API
+4. Add `editor.css` (optional but typical)
+5. Add a card image under `public/media/game_engine/<id>.png`
+6. Restart `npm run admin` if you add server APIs or subprocess wiring
+
+Re-capture hub screenshots:
 
 ```bash
 cd pokemon-resort-page
-# admin on :9477, character editor deps installed
 node tools/admin/scripts/capture-game-engine-screenshots.mjs
 ```
 
-This writes `public/media/game_engine/maps.png` and `characters.png` from Playwright (real UI, not generated art).
+## Module layout
 
-## Manifest (`data/game-engine-tools.json`)
+```
+tools/admin/modules/
+  mapeditor/           # example: in-browser editor
+    editor.json
+    editor.js
+    editor.css
+    settings.json      # optional module-local config
+    map-3d-view.js     # optional private helpers
+  charactereditor/     # example: Python subprocess + iframe shell
+    editor.json
+    editor.js
+    editor.css
+    settings.json
+    spmk_app/          # private backend (not served over /modules/)
+```
+
+Shared JS used by multiple editors lives in `tools/admin/shared/` (served at `/shared/`).
+
+## Manifest (`editor.json`)
 
 ```json
 {
-  "tools": [
-    {
-      "id": "maps",
-      "title": "Map Studio",
-      "description": "Short user-facing blurb shown on the card.",
-      "image": "/media/game_engine/maps.png",
-      "workbench": "map"
-    }
-  ]
+  "id": "maps",
+  "order": 1,
+  "title": "Map Editor",
+  "description": "One or two sentences for the hub card.",
+  "image": "/media/game_engine/maps.png",
+  "entry": "/modules/mapeditor/editor.js",
+  "styles": ["/modules/mapeditor/editor.css"],
+  "bodyClass": "map-editor-active",
+  "legacyRoutes": ["map-editor"],
+  "capabilities": ["maps", "overworld-models"]
 }
 ```
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `id` | yes | URL slug: `#/game-engine/{id}`. Use lowercase `a-z`, digits, hyphens. |
-| `title` | yes | Card heading and workbench loading shell title. |
-| `description` | yes | One or two sentences on the card. |
-| `image` | yes | Public URL under `/media/game_engine/…`. Served from `pokemon-resort-page/public/`. |
-| `workbench` | yes | `map` \| `character` today. New types need a code hook (see below). |
+| `id` | yes | URL slug: `#/game-engine/{id}` |
+| `title` | yes | Card + workbench title |
+| `description` | yes | Hub card blurb |
+| `image` | yes | Public URL under `/media/game_engine/` |
+| `entry` | yes | ES module URL (usually `/modules/<folder>/editor.js`) |
+| `styles` | no | CSS URLs loaded when editor opens |
+| `bodyClass` | no | `document.body` class while workbench is open |
+| `legacyRoutes` | no | Old hash routes that redirect to this editor |
+| `order` | no | Hub sort order (lower first) |
+| `subprocess` | no | Hint for server-managed subprocesses (e.g. `character-editor`) |
+| `capabilities` | no | Documented API feature flags (informational) |
 
-Tools appear in **JSON array order**.
+Discovery: `lib/editor-registry.mjs` scans `modules/*/editor.json`.  
+API: `GET /api/game-engine/tools` returns the merged list.
 
-## Preview images
+## Standard module API (`editor.js`)
 
-- **Directory:** `pokemon-resort-page/public/media/game_engine/`
-- **Naming:** match the tool `id` when possible (`maps.png`, `characters.png`, `audio.png`).
-- **Aspect ratio:** 16∶10 (card uses `aspect-ratio: 16 / 10`).
-- **Format:** PNG or WebP preferred for real screenshots; SVG placeholders ship in-repo until replaced.
+Export these names so `public/editor-host.js` can load any editor uniformly:
 
-After adding a file, reference it in the manifest (`"image": "/media/game_engine/your-file.png"`). No server restart required for static files; hard-refresh the admin tab.
+```javascript
+export async function initEditorTab(state, api) { /* optional warm-up */ }
+export function editorHtml(state, esc) { /* workbench inner HTML */ }
+export function bindEditor(state, deps) { /* wire buttons, listeners */ }
+```
 
-## Existing workbench types
+You may keep internal names and alias at the bottom:
 
-| `workbench` | Module | Subprocess / notes |
-| --- | --- | --- |
-| `map` | `public/map-editor.js` | In-browser; Node APIs on admin port. |
-| `character` | `public/character-editor.js` | Python subprocess on port 8789 (see `DEV-PORTS.md`). |
+```javascript
+export const initEditorTab = initMapEditorTab;
+export const editorHtml = mapEditorHtml;
+export const bindEditor = bindMapEditor;
+```
 
-Registering a new card with `workbench: "map"` or `"character"` is **manifest-only**.
+## Server APIs
 
-## Adding a new workbench type (e.g. audio, config)
+- **In-browser editors** (like Map Editor): add routes in `tools/admin/server.mjs` or a `modules/<name>/server.mjs` imported from there.
+- **Subprocess editors** (like Character Editor): mirror `/api/character-editor/*` — spawn from `modules/<name>/`, proxy UI at `/character-editor/`.
 
-1. Create `public/your-editor.js` (+ CSS) with the same exports pattern as `character-editor.js`:
-   - `initYourEditorTab(state, api)`
-   - `yourEditorHtml(state, esc)`
-   - `bindYourEditor(state, deps)`
-2. In `admin.js` → `render()` workbench branch, handle `tool.workbench === 'your-type'`.
-3. Add the new `workbench` string to this doc and to the manifest entry.
-4. If the tool needs a subprocess or new API routes, extend `tools/admin/server.mjs` (mirror `character-editor`).
+Static assets: `/modules/<folder>/*` serves only editor-facing files (blocks `.venv`, `spmk_app/`, etc.).
 
 ## Routing
 
 | URL | Behavior |
 | --- | --- |
-| `#/game-engine` | Hub only |
-| `#/game-engine/maps` | Hub + Map Studio workbench |
-| `#/game-engine/characters` | Hub + Character Editor workbench |
-| `#/map-editor` | Legacy → `#/game-engine/maps` |
-| `#/character-editor` | Legacy → `#/game-engine/characters` |
-
-## API
-
-`GET /api/game-engine/tools` returns the parsed manifest (used by `game-engine.js` on first hub load).
+| `#/game-engine` | Hub |
+| `#/game-engine/maps` | Map Editor workbench |
+| `#/game-engine/characters` | Character Editor workbench |
+| `#/map-editor` | Legacy → maps |
+| `#/character-editor` | Legacy → characters |
 
 ## Related files
 
-- `public/game-engine.js` — hub UI
-- `public/game-engine.css` — card grid
-- `public/admin.js` — tab, routing, workbench slide
-- `public/index.html` — stylesheets
+- `public/editor-host.js` — dynamic import + CSS injection
+- `public/game-engine.js` — hub card grid
+- `public/admin.js` — tab + workbench shell (generic; no per-editor switches)
+- `lib/editor-registry.mjs` — manifest discovery

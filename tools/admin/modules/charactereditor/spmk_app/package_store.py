@@ -9,13 +9,15 @@ from typing import Any, Dict, List, Optional
 
 from PIL import Image
 
-from spmk_app.charbin_io import load_charbin_file, load_charbin_package_only, save_charbin_file
+from spmk_app.charbin_io import load_charbin_file, load_charbin_package_only, read_charbin, save_charbin_file
 from spmk_app.character_package import (
     collect_assets_from_package,
     deep_merge_preserve_unknown,
     empty_package,
     export_debug_loose,
     is_pokemon_walk_sheet_id,
+    library_all_sheets_meta,
+    library_walk_meta,
     load_sprite_profiles,
     preferred_pokemon_walk_sheet,
     validate_package,
@@ -253,13 +255,21 @@ class PackageStore:
         paths = self._collect_charbin_paths(base)
         for p in paths:
             try:
-                pkg = load_charbin_package_only(p)
+                pkg, assets = read_charbin(p.read_bytes())
                 sheets = pkg.get("spriteSheets") or []
                 has_thumb = any(s.get("assetId") for s in sheets)
                 meta = pkg.get("metadata") or {}
                 char_type = meta.get("characterType") or "npc"
                 if char_type == "playable":
                     char_type = "player"
+                walk_meta = library_walk_meta(pkg, assets)
+                sheets_meta = library_all_sheets_meta(pkg, assets)
+                tags = meta.get("tags") or []
+                if not isinstance(tags, list):
+                    tags = [str(tags)] if tags else []
+                poke_types = meta.get("pokemonTypes") or []
+                if not isinstance(poke_types, list):
+                    poke_types = [str(poke_types)] if poke_types else []
                 found.append(
                     {
                         "path": str(p),
@@ -269,11 +279,15 @@ class PackageStore:
                         "internalName": pkg.get("internalName"),
                         "characterType": char_type,
                         "pokemonId": meta.get("pokemonId"),
+                        "pokemonTypes": poke_types,
+                        "tags": [str(t).strip() for t in tags if str(t).strip()],
                         "schemaVersion": pkg.get("schemaVersion"),
                         "sheetCount": len(sheets),
                         "actionCount": len(pkg.get("actions") or []),
                         "hasThumb": has_thumb,
                         "modifiedAt": int(p.stat().st_mtime * 1000),
+                        **walk_meta,
+                        **sheets_meta,
                     }
                 )
             except Exception as exc:  # noqa: BLE001 — surface broken files in library

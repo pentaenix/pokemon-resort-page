@@ -34,6 +34,7 @@ function qaLoadPrefs() {
 }
 
 function openQuickAnimMode() {
+  pkgLeaveListPanel();
   qaLoadPrefs();
   pkgState.panel = 'quickAnim';
   renderQuickAnim();
@@ -43,6 +44,7 @@ function openQuickAnimMode() {
 async function goToPackageQuickAnim() {
   if (typeof state !== 'undefined') state.view = 'packages';
   if (typeof renderNav === 'function') renderNav();
+  pkgLeaveListPanel();
   pkgState.panel = 'quickAnim';
   qaLoadPrefs();
   if (typeof renderPackagesView === 'function') await renderPackagesView();
@@ -365,8 +367,7 @@ function qaBindQuickAnim() {
   $('#qaBack').onclick = () => {
     qaState.editor?.destroy();
     qaState.editor = null;
-    pkgState.panel = 'list';
-    renderPackages();
+    pkgBackToList();
   };
   $('#qaStart').onclick = () => qaStartOrResume();
   $('#qaSave').onclick = () => qaApply(false);

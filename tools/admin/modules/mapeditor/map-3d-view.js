@@ -9,9 +9,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
-import { loadGlbScene } from './model-glb-viewer.js';
-import { tuneGltfTexture } from './model-texture-alpha.js';
-import { cornerHeightsForTile, SPECIAL } from './ramp-specials.js';
+import { loadGlbScene } from '/shared/model-glb-viewer.js';
+import { tuneGltfTexture } from '/shared/model-texture-alpha.js';
+import { cornerHeightsForTile, SPECIAL } from '/shared/ramp-specials.js';
 
 const TOP_A = [116, 156, 190];
 const TOP_B = [125, 166, 200];

@@ -1,0 +1,12 @@
+{
+  "id": "maps",
+  "order": 1,
+  "title": "Map Editor",
+  "description": "Paint overworld tiles, place props, and export .owmap files for Pokémon Resort.",
+  "image": "/media/game_engine/maps.png",
+  "entry": "/modules/mapeditor/editor.js",
+  "styles": ["/modules/mapeditor/editor.css"],
+  "bodyClass": "map-editor-active",
+  "legacyRoutes": ["map-editor"],
+  "capabilities": ["maps", "overworld-models", "overworld-model-delete", "overworld-model-zip", "owmap-bake", "rtpks-tile-packages"]
+}
