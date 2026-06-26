@@ -48,19 +48,6 @@ function collectSpotlightCandidates(data) {
     });
   });
 
-  const research = data.research?.entries || [];
-  research.forEach((entry) => {
-    pushCandidate(candidates, {
-      id: `research:${entry.id}`,
-      eyebrow: entry.category || 'Research note',
-      title: entry.title,
-      summary: entry.summary,
-      href: routeHref('/research', { entry: entry.id }),
-      cta: 'Read the note',
-      image: firstImageFromRecord(entry),
-    });
-  });
-
   const features = data.features?.features || [];
   features.forEach((feature) => {
     pushCandidate(candidates, {

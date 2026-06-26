@@ -1,0 +1,78 @@
+{
+  "title": "Input and Controls",
+  "description": "Keybinds, controller toggles, navigation keys, and input options.",
+  "tags": [
+    "input",
+    "controls"
+  ],
+  "groups": [
+    {
+      "id": "devices",
+      "label": "Devices",
+      "order": 10
+    },
+    {
+      "id": "navigation",
+      "label": "Navigation",
+      "order": 20
+    },
+    {
+      "id": "actions",
+      "label": "Actions",
+      "order": 30
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 90
+    }
+  ],
+  "patterns": {
+    "*accept*": {
+      "widget": "checkbox",
+      "group": "devices"
+    },
+    "*controller*": {
+      "widget": "checkbox",
+      "group": "devices"
+    },
+    "*mouse*": {
+      "widget": "checkbox",
+      "group": "devices"
+    },
+    "*keyboard*": {
+      "widget": "checkbox",
+      "group": "devices"
+    },
+    "*navigate*": {
+      "widget": "key-list",
+      "group": "navigation"
+    },
+    "*movement*": {
+      "widget": "key-list",
+      "group": "navigation"
+    },
+    "*forward*keys": {
+      "widget": "key-list",
+      "group": "actions"
+    },
+    "*back*keys": {
+      "widget": "key-list",
+      "group": "actions"
+    },
+    "*run*keys": {
+      "widget": "key-list",
+      "group": "actions"
+    },
+    "*screenshot*": {
+      "widget": "key-list",
+      "group": "debug",
+      "advanced": true
+    },
+    "*record*": {
+      "widget": "key-list",
+      "group": "debug",
+      "advanced": true
+    }
+  }
+}

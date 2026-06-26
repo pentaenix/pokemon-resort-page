@@ -7,7 +7,6 @@ const nav = [
   ['/ontology', 'Compatibility'],
   ['/board', 'Operations'],
   ['/milestones', 'Ideas & Milestones'],
-  ['/research', 'Concierge Research'],
   ['/docs', 'Docs'],
   ['/source', 'Source Guide'],
   ['/legal', 'Legal'],

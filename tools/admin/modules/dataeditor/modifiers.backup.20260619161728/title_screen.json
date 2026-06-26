@@ -1,0 +1,197 @@
+{
+  "title": "Title Screen",
+  "description": "Real config/title_screen.json: title assets, intro timings, prompt/menu layout, transition, persistence, skip flags, and logo shine.",
+  "tags": [
+    "verified",
+    "title",
+    "menu",
+    "layout",
+    "colors"
+  ],
+  "preview": {
+    "enabled": true,
+    "type": "ui-layout",
+    "title": "Title screen placement preview",
+    "description": "Approximate 1280×800 mockup for prompt, menu, logos, and background anchors. It uses real paths from title_screen.json.",
+    "defaultWidth": 1280,
+    "defaultHeight": 800,
+    "maxElements": 16,
+    "elements": [
+      {
+        "label": "Splash Logo",
+        "centerX": "layout.splash_logo_center.x",
+        "centerY": "layout.splash_logo_center.y",
+        "defaultWidth": 420,
+        "defaultHeight": 140
+      },
+      {
+        "label": "Main Logo",
+        "centerX": "layout.main_logo_center.x",
+        "centerY": "layout.main_logo_center.y",
+        "defaultWidth": 460,
+        "defaultHeight": 160
+      },
+      {
+        "label": "Prompt",
+        "centerX": "prompt.center_x",
+        "y": "prompt.baseline_y",
+        "defaultWidth": 420,
+        "defaultHeight": 60,
+        "anchor": "bottom_center"
+      },
+      {
+        "label": "Menu",
+        "centerX": "menu.center_x",
+        "y": "menu.top_y",
+        "defaultWidth": 360,
+        "defaultHeight": 190,
+        "anchor": "top_center"
+      },
+      {
+        "label": "Background A",
+        "x": "layout.background_a_top_left.x",
+        "y": "layout.background_a_top_left.y",
+        "defaultWidth": 1280,
+        "defaultHeight": 800,
+        "anchor": "top_left"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "assets",
+      "label": "Title assets",
+      "order": 5
+    },
+    {
+      "id": "timings",
+      "label": "Intro timings",
+      "order": 10
+    },
+    {
+      "id": "prompt",
+      "label": "Press Start prompt",
+      "order": 20
+    },
+    {
+      "id": "layout",
+      "label": "Layout",
+      "order": 30
+    },
+    {
+      "id": "transition",
+      "label": "Transition",
+      "order": 40
+    },
+    {
+      "id": "menu",
+      "label": "Main menu",
+      "order": 50
+    },
+    {
+      "id": "persistence",
+      "label": "Save identity",
+      "order": 70
+    },
+    {
+      "id": "skip",
+      "label": "Skip flags",
+      "order": 80
+    },
+    {
+      "id": "shine",
+      "label": "Logo shine",
+      "order": 90
+    }
+  ],
+  "fields": {
+    "assets.logo_main_mask": {
+      "label": "Logo Main Mask Path",
+      "widget": "asset",
+      "group": "assets",
+      "order": 6,
+      "description": "Optional image path from the real JSON. This is not a pixel grid."
+    },
+    "prompt.color": {
+      "widget": "color-wheel",
+      "group": "prompt",
+      "order": 20
+    },
+    "menu.text_color": {
+      "widget": "color-wheel",
+      "group": "menu",
+      "order": 30
+    },
+    "menu.items": {
+      "widget": "list",
+      "rows": 4,
+      "group": "menu",
+      "order": 1
+    },
+    "persistence.save_options": {
+      "widget": "checkbox",
+      "group": "persistence",
+      "order": 1
+    },
+    "shine.repeat_count": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "group": "shine",
+      "order": 1
+    },
+    "shine.gap_seconds": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "unit": "s",
+      "group": "shine",
+      "order": 2
+    },
+    "shine.band_width": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "shine",
+      "order": 3
+    },
+    "shine.travel_padding": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "shine",
+      "order": 4
+    }
+  },
+  "patterns": {
+    "assets.*": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "timings.*": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timings"
+    },
+    "skip.*": {
+      "widget": "checkbox",
+      "group": "skip"
+    },
+    "transition.*": {
+      "group": "transition"
+    },
+    "menu.animation.*": {
+      "group": "menu"
+    },
+    "menu.selection.*": {
+      "group": "menu"
+    },
+    "menu.section_transition.*": {
+      "group": "menu"
+    }
+  }
+}

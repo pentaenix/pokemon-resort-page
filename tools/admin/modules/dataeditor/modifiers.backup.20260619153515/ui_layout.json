@@ -1,0 +1,185 @@
+{
+  "title": "UI Layout",
+  "description": "Position and size UI rectangles with a live mockup preview above the fields.",
+  "tags": [
+    "ui",
+    "layout",
+    "preview"
+  ],
+  "preview": {
+    "enabled": true,
+    "type": "ui-layout",
+    "title": "UI positioning preview",
+    "description": "Elements with x/y plus width/height appear here so layout tuning is faster.",
+    "defaultWidth": 1280,
+    "defaultHeight": 800,
+    "maxElements": 24
+  },
+  "groups": [
+    {
+      "id": "position",
+      "label": "Position",
+      "order": 10
+    },
+    {
+      "id": "size",
+      "label": "Size",
+      "order": 20
+    },
+    {
+      "id": "anchors",
+      "label": "Anchors",
+      "order": 30
+    },
+    {
+      "id": "spacing",
+      "label": "Spacing",
+      "order": 40
+    },
+    {
+      "id": "colors",
+      "label": "Colors",
+      "order": 50
+    },
+    {
+      "id": "advanced",
+      "label": "Advanced",
+      "order": 90
+    }
+  ],
+  "patterns": {
+    "*.x": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.y": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.left": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.top": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.screen_offset_x": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.screen_offset_y": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*offset*": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.width": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.height": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.w": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.h": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*padding*": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "spacing"
+    },
+    "*margin*": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "spacing"
+    },
+    "*gap*": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "spacing"
+    },
+    "*anchor*": {
+      "widget": "select",
+      "options": [
+        "top_left",
+        "top_center",
+        "top_right",
+        "center_left",
+        "center",
+        "center_right",
+        "bottom_left",
+        "bottom_center",
+        "bottom_right"
+      ],
+      "group": "anchors"
+    },
+    "*align*": {
+      "widget": "select",
+      "options": [
+        "left",
+        "center",
+        "right",
+        "top",
+        "middle",
+        "bottom"
+      ],
+      "group": "anchors"
+    },
+    "*.color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*_color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*visible*": {
+      "widget": "checkbox",
+      "group": "advanced"
+    },
+    "*enabled*": {
+      "widget": "checkbox",
+      "group": "advanced"
+    }
+  }
+}

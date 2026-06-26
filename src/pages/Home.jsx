@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { assetUrl } from '../lib/data.js';
 import { pickResortSpotlight } from '../lib/resortSpotlight.js';
 import { StatusPill } from '../components/StatusPill.jsx';
@@ -16,6 +16,125 @@ function computeDigest(data) {
 }
 
 
+function LazyHomeVideo({ video, className = '' }) {
+  const [active, setActive] = useState(false);
+  const videoRef = useRef(null);
+  const label = video.title || video.caption || 'Pokémon Resort video';
+
+  useEffect(() => {
+    if (!active || !videoRef.current) return;
+    const el = videoRef.current;
+    el.src = assetUrl(video.src);
+    el.load();
+    el.play().catch(() => {});
+  }, [active, video.src]);
+
+  return (
+    <div className={`home-lazy-video ${className}`.trim()}>
+      {!active ? (
+        <button
+          type="button"
+          className="home-lazy-video-poster"
+          onClick={() => setActive(true)}
+          aria-label={`Play ${label}`}
+        >
+          <img
+            src={assetUrl(video.poster)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+          <span className="home-lazy-video-play-badge" aria-hidden="true">
+            <span className="home-lazy-video-play-icon">▶</span>
+            <span>Play clip</span>
+          </span>
+        </button>
+      ) : (
+        <video
+          ref={videoRef}
+          className="home-lazy-video-player"
+          controls
+          playsInline
+          preload="none"
+          aria-label={label}
+        />
+      )}
+    </div>
+  );
+}
+
+function HomePreviewVideo({ video }) {
+  if (!video?.src || !video?.poster) return null;
+  return (
+    <section className="home-preview-video-section" aria-label={video.title || 'Resort preview clip'}>
+      <div className="home-preview-video-copy">
+        {video.eyebrow && <p className="eyebrow">{video.eyebrow}</p>}
+        {video.title && <h2>{video.title}</h2>}
+        {video.caption && <p>{video.caption}</p>}
+      </div>
+      <figure className="home-preview-video-frame">
+        <LazyHomeVideo video={video} className="home-preview-video-media" />
+      </figure>
+    </section>
+  );
+}
+
+function HomeCarouselHoverGif({ item }) {
+  const [playing, setPlaying] = useState(false);
+  const timerRef = useRef(null);
+  const delay = item.hoverPlayDelayMs ?? 300;
+
+  const clearTimer = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  useEffect(() => () => clearTimer(), []);
+
+  const startHoverPlay = () => {
+    clearTimer();
+    timerRef.current = setTimeout(() => setPlaying(true), delay);
+  };
+
+  const stopHoverPlay = () => {
+    clearTimer();
+    setPlaying(false);
+  };
+
+  return (
+    <img
+      src={assetUrl(playing ? item.src : item.poster)}
+      alt={item.title || item.caption || 'Pokémon Resort media'}
+      loading="lazy"
+      decoding="async"
+      onMouseEnter={startHoverPlay}
+      onMouseLeave={stopHoverPlay}
+      onFocus={startHoverPlay}
+      onBlur={stopHoverPlay}
+    />
+  );
+}
+
+function HomeCarouselItem({ item }) {
+  return (
+    <figure className="carousel-card home-carousel-card">
+      {item.type === 'video' ? (
+        <video src={assetUrl(item.src)} muted loop playsInline controls={false} aria-label={item.title || item.caption} />
+      ) : item.hoverPlay && item.poster ? (
+        <HomeCarouselHoverGif item={item} />
+      ) : (
+        <img src={assetUrl(item.src)} alt={item.title || item.caption || 'Pokémon Resort media'} loading="lazy" decoding="async" />
+      )}
+      <figcaption>
+        <strong>{item.title}</strong>
+        <span>{item.caption}</span>
+      </figcaption>
+    </figure>
+  );
+}
+
 function HomeCarousel({ items = [] }) {
   if (!items.length) return null;
   return (
@@ -26,17 +145,7 @@ function HomeCarousel({ items = [] }) {
       </div>
       <div className="media-carousel home-media-carousel">
         {items.map((item) => (
-          <figure key={item.id || item.src} className="carousel-card home-carousel-card">
-            {item.type === 'video' ? (
-              <video src={assetUrl(item.src)} muted loop playsInline controls={false} aria-label={item.title || item.caption} />
-            ) : (
-              <img src={assetUrl(item.src)} alt={item.title || item.caption || 'Pokémon Resort media'} />
-            )}
-            <figcaption>
-              <strong>{item.title}</strong>
-              <span>{item.caption}</span>
-            </figcaption>
-          </figure>
+          <HomeCarouselItem key={item.id || item.src} item={item} />
         ))}
       </div>
     </section>
@@ -92,6 +201,8 @@ export default function Home({ data }) {
 
       <HomeCarousel items={homepage.carousel || []} />
 
+      {homepage.previewVideo && <HomePreviewVideo video={homepage.previewVideo} />}
+
       <section className="status-strip" aria-label="Project status">
         {(homepage.statusCards || []).map((card) => (
           <article key={card.label}>
@@ -100,22 +211,6 @@ export default function Home({ data }) {
             <p>{card.detail}</p>
           </article>
         ))}
-      </section>
-
-      <section className="lobby-grid">
-        <div className="section-intro">
-          <p className="eyebrow">Front desk</p>
-          <h2>Where to check in</h2>
-        </div>
-        <div className="nav-card-grid">
-          {(homepage.navCards || []).map((card) => (
-            <a key={card.href} className="nav-card" href={card.href}>
-              <span className="nav-card-icon">{card.icon}</span>
-              <strong>{card.title}</strong>
-              <p>{card.description}</p>
-            </a>
-          ))}
-        </div>
       </section>
 
       <section className="digest-panel">

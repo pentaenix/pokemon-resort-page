@@ -17,9 +17,13 @@ if [[ -z "$PYTHON_BIN" ]]; then
   fi
 fi
 PORT="${CHARACTER_EDITOR_PORT:-8789}"
+cd "$ROOT"
 if [[ "$CMD" == "run" ]]; then
   "$PYTHON_BIN" -m spmk_app.server --host 127.0.0.1 --port "$PORT"
+elif [[ "$CMD" == "migrate-charbins" || "$CMD" == "fix-charbins" ]]; then
+  shift || true
+  "$PYTHON_BIN" -m spmk_app.migrate_charbin_actions "$@"
 else
-  echo "Usage: ./charactereditor run"
+  echo "Usage: ./charactereditor run | migrate-charbins [--write] [--path file.charbin]"
   exit 1
 fi

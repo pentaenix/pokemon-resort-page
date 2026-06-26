@@ -13,7 +13,12 @@ from spmk_app.character_package import (
     pokemon_sleep_sheet_id_for_walk,
 )
 from spmk_app.package_batch import _register_overworld_sprite_keys, _sheet_label
-from spmk_app.package_image import detect_object_play_frames, prepare_sheet_image_bytes
+from spmk_app.package_image import (
+    apply_pokemon_prep_to_sheet_record,
+    detect_object_play_frames,
+    prepare_pokemon_sheet_bytes,
+    prepare_sheet_image_bytes,
+)
 from spmk_app.package_quick_anim import normalize_anim_id
 from spmk_app.pokemon_batch_parse import (
     ParsedPokemonImport,
@@ -123,6 +128,7 @@ def _walk_variant_label(form_key: Optional[str], modifiers: Tuple[str, ...], suf
         species_id="species",
         form_key=form_key,
         modifiers=modifiers,
+        behavior="walk",
         sheet_suffix=suffix,
     )
     return _sheet_label(parsed)
@@ -134,20 +140,32 @@ def _merge_walk_variant_pokemon(
     sheet_id: str,
     parsed: ParsedPokemonImport,
 ) -> Dict[str, Any]:
-    out = deepcopy(package)
+    from spmk_app.pokemon_variant_model import (
+        action_ids_for_sheet_import,
+        actions_for_sheet_import,
+        migrate_package_variant_model,
+        register_pokemon_form,
+        register_pokemon_modifier_def,
+    )
+
+    out = migrate_package_variant_model(deepcopy(package))
     sheets = [s for s in (out.get("spriteSheets") or []) if s.get("id") != sheet_id]
     sheets.append(sheet_rec)
     out["spriteSheets"] = sheets
-    new_actions = default_pokemon_actions_for_sheet(sheet_id)
-    replace_ids = {a["id"] for a in new_actions}
+    new_actions = actions_for_sheet_import(
+        parsed.form_id, parsed.modifiers, parsed.behavior, sheet_id
+    )
+    replace_ids = action_ids_for_sheet_import(
+        parsed.form_id, parsed.modifiers, parsed.behavior
+    )
     actions = [a for a in (out.get("actions") or []) if a.get("id") not in replace_ids]
     out["actions"] = actions + new_actions
     meta = out.setdefault("metadata", {})
     _register_overworld_sprite_keys(meta, parsed)
-    prof = sheet_rec.get("profile") or out.get("baseProfile")
-    if prof == "pokemon_large":
-        out["baseProfile"] = "pokemon_large"
-        meta["pokemonSize"] = "large"
+    if parsed.form_id != "default":
+        out = register_pokemon_form(out, parsed.form_id, name=str(parsed.form_key or parsed.form_id))
+    for mod in parsed.modifiers:
+        out = register_pokemon_modifier_def(out, mod)
     return out
 
 
@@ -251,13 +269,17 @@ def resolve_add_sheet_target(
         if not is_pokemon_package(package):
             raise ValueError("walk_variant is only for Pokémon packages")
         form_key, mods, suffix = parse_walk_variant_label(label)
-        sheet_id = pokemon_sheet_id_for_suffix(suffix)
+        from spmk_app.pokemon_variant_model import sheet_id_for_variant
+
+        form_id = form_key or "default"
+        sheet_id = sheet_id_for_variant(form_id, mods, "walk")
         asset_id = f"{sheet_id}_png"
         sheet_name = _walk_variant_label(form_key, mods, suffix)
         parsed = ParsedPokemonImport(
             species_id=package.get("id") or "species",
             form_key=form_key,
             modifiers=mods,
+            behavior="walk",
             sheet_suffix=suffix,
         )
         return sheet_id, asset_id, sheet_name, sheet_id, "walk", parsed, {}, []
@@ -304,7 +326,11 @@ def add_sheet_to_draft_package(
 ) -> Tuple[Dict[str, Any], str, Dict[str, Any], str, bytes]:
     """Merge uploaded sheet bytes into package."""
     profile = profile_name or package.get("baseProfile") or "character"
-    prepared, prep = prepare_sheet_image_bytes(png_bytes, profile)
+    prep: Dict[str, Any]
+    if is_pokemon_package(package):
+        prepared, profile, prep = prepare_pokemon_sheet_bytes(png_bytes)
+    else:
+        prepared, prep = prepare_sheet_image_bytes(png_bytes, profile)
     sheet_id, asset_id, sheet_name, _action_id, _anim_key, parsed, anims, custom_actions = (
         resolve_add_sheet_target(
             package,
@@ -323,6 +349,8 @@ def add_sheet_to_draft_package(
         "assetId": asset_id,
         "profile": profile,
     }
+    if is_pokemon_package(package):
+        apply_pokemon_prep_to_sheet_record(sheet_rec, prep)
     if anims:
         sheet_rec["animations"] = anims
     mode_norm = (mode or "primary").strip().lower()

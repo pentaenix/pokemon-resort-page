@@ -1,0 +1,74 @@
+{
+  "title": "Renderer Settings",
+  "description": "Renderer backend, BGFX preference, performance, and diagnostics.",
+  "tags": [
+    "renderer",
+    "template"
+  ],
+  "groups": [
+    {
+      "id": "backend",
+      "label": "Backend",
+      "order": 10
+    },
+    {
+      "id": "performance",
+      "label": "Performance",
+      "order": 20
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 90
+    }
+  ],
+  "fields": {
+    "world3d_backend": {
+      "label": "World 3D backend",
+      "widget": "select",
+      "options": [
+        "auto",
+        "bgfx",
+        "software"
+      ],
+      "group": "backend",
+      "order": 1
+    },
+    "bgfx_preference": {
+      "label": "BGFX preference",
+      "widget": "select",
+      "options": [
+        "auto",
+        "metal",
+        "opengl",
+        "vulkan",
+        "direct3d11",
+        "direct3d12"
+      ],
+      "group": "backend",
+      "order": 2
+    },
+    "target_fps": {
+      "label": "Target FPS",
+      "widget": "slider",
+      "min": 15,
+      "max": 240,
+      "step": 1,
+      "unit": " fps",
+      "group": "performance",
+      "order": 1
+    }
+  },
+  "patterns": {
+    "*.debug": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    },
+    "enable_*": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    }
+  }
+}

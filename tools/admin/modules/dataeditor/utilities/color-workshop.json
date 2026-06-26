@@ -1,0 +1,6 @@
+{
+  "id": "color-workshop",
+  "type": "color-harmony",
+  "title": "Color Harmony Tool",
+  "description": "Inline color harmony wheel for choosing complementary, analogous, split, triad, tetradic, monochrome, or custom colors. It never writes to JSON by itself; copy a knob hex and paste it into a real field."
+}

@@ -1,0 +1,123 @@
+{
+  "title": "Color Palette",
+  "description": "Friendly color controls for theme, palette, tint, and UI color configs. Uses the native color picker plus editable hex text.",
+  "tags": [
+    "colors",
+    "theme",
+    "palette"
+  ],
+  "groups": [
+    {
+      "id": "brand",
+      "label": "Brand colors",
+      "order": 10
+    },
+    {
+      "id": "surface",
+      "label": "Surfaces",
+      "order": 20
+    },
+    {
+      "id": "text",
+      "label": "Text and outlines",
+      "order": 30
+    },
+    {
+      "id": "states",
+      "label": "States",
+      "order": 40
+    },
+    {
+      "id": "advanced",
+      "label": "Advanced",
+      "order": 90
+    }
+  ],
+  "patterns": {
+    "*primary*": {
+      "widget": "color-wheel",
+      "group": "brand"
+    },
+    "*secondary*": {
+      "widget": "color-wheel",
+      "group": "brand"
+    },
+    "*accent*": {
+      "widget": "color-wheel",
+      "group": "brand"
+    },
+    "*highlight*": {
+      "widget": "color-wheel",
+      "group": "brand"
+    },
+    "*background*": {
+      "widget": "color-wheel",
+      "group": "surface"
+    },
+    "*surface*": {
+      "widget": "color-wheel",
+      "group": "surface"
+    },
+    "*panel*": {
+      "widget": "color-wheel",
+      "group": "surface"
+    },
+    "*card*": {
+      "widget": "color-wheel",
+      "group": "surface"
+    },
+    "*text*": {
+      "widget": "color-wheel",
+      "group": "text"
+    },
+    "*font*": {
+      "widget": "color-wheel",
+      "group": "text"
+    },
+    "*border*": {
+      "widget": "color-wheel",
+      "group": "text"
+    },
+    "*outline*": {
+      "widget": "color-wheel",
+      "group": "text"
+    },
+    "*shadow*": {
+      "widget": "color-wheel",
+      "group": "advanced",
+      "advanced": true
+    },
+    "*disabled*": {
+      "widget": "color-wheel",
+      "group": "states"
+    },
+    "*success*": {
+      "widget": "color-wheel",
+      "group": "states"
+    },
+    "*warning*": {
+      "widget": "color-wheel",
+      "group": "states"
+    },
+    "*danger*": {
+      "widget": "color-wheel",
+      "group": "states"
+    },
+    "*error*": {
+      "widget": "color-wheel",
+      "group": "states"
+    },
+    "*.color": {
+      "widget": "color-wheel",
+      "group": "brand"
+    },
+    "*_color": {
+      "widget": "color-wheel",
+      "group": "brand"
+    },
+    "*.hex": {
+      "widget": "color-wheel",
+      "group": "brand"
+    }
+  }
+}

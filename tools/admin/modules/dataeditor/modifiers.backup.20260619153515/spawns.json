@@ -1,0 +1,104 @@
+{
+  "title": "Spawn Settings",
+  "description": "Template controls for spawn weights, caps, timings, and toggles.",
+  "tags": [
+    "spawns",
+    "template"
+  ],
+  "groups": [
+    {
+      "id": "weights",
+      "label": "Weights and likelihood",
+      "order": 10
+    },
+    {
+      "id": "timing",
+      "label": "Timing",
+      "order": 20
+    },
+    {
+      "id": "limits",
+      "label": "Limits",
+      "order": 30
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 90
+    }
+  ],
+  "patterns": {
+    "*.weight": {
+      "widget": "slider",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "group": "weights"
+    },
+    "*_weight": {
+      "widget": "slider",
+      "min": 0,
+      "max": 100,
+      "step": 1,
+      "unit": "%",
+      "group": "weights"
+    },
+    "*.chance": {
+      "widget": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "group": "weights"
+    },
+    "*_chance": {
+      "widget": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.01,
+      "group": "weights"
+    },
+    "*.cooldown": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*_cooldown": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*.interval": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*.max": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "group": "limits"
+    },
+    "*.limit": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "group": "limits"
+    },
+    "*.enabled": {
+      "widget": "checkbox",
+      "group": "limits"
+    },
+    "*.debug": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    }
+  }
+}

@@ -32,6 +32,7 @@ export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinC
           </div>
           {pin.coverImage?.path ? (
             <AtlasFramePreview
+              key={pin.id}
               image={pin.coverImage}
               label={pin.coverImage.label || pin.name}
               caption={pin.coverImage.caption}
@@ -41,11 +42,8 @@ export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinC
           ) : null}
           <div className="atlas-pin-panel-body">
             {pin.summary && <p className="atlas-pin-summary">{pin.summary}</p>}
-            {(pin.linkedResearch?.length > 0 || pin.linkedFeatures?.length > 0 || pin.linkedIdeas?.length > 0) && (
+            {(pin.linkedFeatures?.length > 0 || pin.linkedIdeas?.length > 0) && (
               <div className="atlas-pin-links">
-                {pin.linkedResearch?.map((id) => (
-                  <a key={id} className="button small ghost" href={routeHref('/research', { entry: id })}>{id}</a>
-                ))}
                 {pin.linkedFeatures?.map((id) => (
                   <a key={id} className="button small ghost" href={routeHref('/board')}>{id}</a>
                 ))}
@@ -60,7 +58,7 @@ export function PinDetailPanel({ pin, showReference, onOpenReference, onOpenPinC
               </div>
             )}
             {hasDossier ? (
-              <div className="atlas-pin-dossier feature-dossier-body">
+              <div key={pin.id} className="atlas-pin-dossier feature-dossier-body">
                 <RichContentBody record={{ dossier: pin.dossier }} title={pin.name} />
               </div>
             ) : (

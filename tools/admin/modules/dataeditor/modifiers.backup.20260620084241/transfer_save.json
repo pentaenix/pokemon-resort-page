@@ -1,0 +1,85 @@
+{
+  "title": "Transfer Save Modal",
+  "description": "Real config/transfer_save.json: save/exit modal placement, styling, row sizes, dimming, and text tuning.",
+  "tags": [
+    "verified",
+    "transfer",
+    "modal",
+    "layout"
+  ],
+  "preview": {
+    "enabled": true,
+    "type": "ui-layout",
+    "title": "Exit/save modal preview",
+    "description": "Approximate placement for the transfer save/exit card.",
+    "defaultWidth": 1280,
+    "defaultHeight": 800,
+    "maxElements": 8,
+    "elements": [
+      {
+        "label": "Exit Save Modal",
+        "x": "exit_save_modal.shown_x",
+        "bottomOffset": "exit_save_modal.gap_above_info_banner",
+        "width": "exit_save_modal.width",
+        "defaultHeight": 190
+      },
+      {
+        "label": "Dim Background",
+        "x": 0,
+        "y": 0,
+        "defaultWidth": 1280,
+        "defaultHeight": 800
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "modal",
+      "label": "Modal behavior",
+      "order": 5
+    },
+    {
+      "id": "layout",
+      "label": "Layout",
+      "order": 10
+    },
+    {
+      "id": "colors",
+      "label": "Colors",
+      "order": 20
+    },
+    {
+      "id": "text",
+      "label": "Text",
+      "order": 30
+    }
+  ],
+  "patterns": {
+    "exit_save_modal.enabled": {
+      "widget": "checkbox",
+      "group": "modal"
+    },
+    "exit_save_modal.*smoothing": {
+      "group": "modal"
+    },
+    "exit_save_modal.*": {
+      "group": "layout"
+    },
+    "exit_save_modal.*color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "exit_save_modal.*border": {
+      "group": "colors"
+    },
+    "exit_save_modal.*fill": {
+      "group": "colors"
+    },
+    "exit_save_modal.text_*": {
+      "group": "text"
+    },
+    "exit_save_modal.font_pt": {
+      "group": "text"
+    }
+  }
+}

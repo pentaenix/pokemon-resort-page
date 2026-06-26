@@ -1,0 +1,59 @@
+{
+  "title": "Audio Settings",
+  "description": "Generic audio config controls for volumes and asset paths.",
+  "tags": [
+    "audio",
+    "template"
+  ],
+  "groups": [
+    {
+      "id": "levels",
+      "label": "Levels",
+      "order": 10
+    },
+    {
+      "id": "assets",
+      "label": "Audio assets",
+      "order": 20
+    },
+    {
+      "id": "advanced",
+      "label": "Advanced",
+      "order": 90
+    }
+  ],
+  "patterns": {
+    "*.music_volume": {
+      "widget": "slider",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10",
+      "group": "levels"
+    },
+    "*.sfx_volume": {
+      "widget": "knob",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10",
+      "group": "levels"
+    },
+    "*_sfx": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*.sfx": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*_music": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*.music": {
+      "widget": "asset",
+      "group": "assets"
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "id": "data",
+  "order": 3,
+  "title": "Data Editor",
+  "description": "Browse, validate, and tune game JSON configs from the sibling Pok\u00e9mon Resort repo.",
+  "image": "/modules/dataeditor/icon.svg",
+  "entry": "/modules/dataeditor/editor.js?v=9",
+  "styles": [
+    "/modules/dataeditor/editor.css?v=9"
+  ],
+  "bodyClass": "data-editor-active",
+  "legacyRoutes": [
+    "data-editor",
+    "config-editor"
+  ],
+  "capabilities": [
+    "data-editor",
+    "json-configs",
+    "modifier-driven-ui",
+    "safe-config-save"
+  ]
+}

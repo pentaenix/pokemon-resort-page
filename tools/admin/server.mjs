@@ -4,7 +4,7 @@ import { existsSync, createReadStream } from 'node:fs';
 import { join, extname, resolve, relative, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { unzipSync } from 'fflate';
-import { encodeOwmap, decodeOwmap, mapFromJson } from './lib/owmap-format.mjs';
+import { encodeOwmap, decodeOwmap, mapFromJson, emptyMap } from './lib/owmap-format.mjs';
 import { bakeTerrainSpecials } from './shared/ramp-specials.js';
 import { loadEditorManifests } from './lib/editor-registry.mjs';
 import {
@@ -35,6 +35,7 @@ import {
   listMissingBoxArt,
 } from '../fetch-boxart.mjs';
 import { LIBRETRO_BASE } from '../lib/libretro-thumbnails.mjs';
+import { handleDataEditorApi } from './modules/dataeditor/server-api.mjs';
 
 loadProjectEnv();
 const root = resolve(new URL('../..', import.meta.url).pathname);
@@ -166,14 +167,14 @@ function characterEditorAlive() {
   return Boolean(characterEditorChild && characterEditorChild.exitCode === null && !characterEditorChild.killed);
 }
 
-function characterEditorHealth() {
+function characterEditorHealth(timeoutMs = 1500) {
   return new Promise((resolve) => {
     const req = httpRequest({
       hostname: CHARACTER_EDITOR_HOST,
       port: CHARACTER_EDITOR_PORT,
       path: '/api/health',
       method: 'GET',
-      timeout: 1500,
+      timeout: timeoutMs,
     }, (upstream) => {
       let body = '';
       upstream.on('data', (chunk) => { body += chunk; });
@@ -195,10 +196,10 @@ function characterEditorHealth() {
 async function getCharacterEditorStatus() {
   const settings = await readCharacterEditorSettings();
   const alive = characterEditorAlive();
-  const healthy = alive ? await characterEditorHealth() : false;
+  const healthy = alive || await characterEditorHealth(3000);
   return {
     ok: true,
-    running: alive,
+    running: healthy,
     healthy,
     port: CHARACTER_EDITOR_PORT,
     charactersDirectory: settings.charactersDirectory,
@@ -245,6 +246,9 @@ async function startCharacterEditor() {
 
     const healthy = await waitForCharacterEditorHealth();
     if (!healthy) {
+      if (await characterEditorHealth(3000)) {
+        return getCharacterEditorStatus();
+      }
       stopCharacterEditor();
       throw new Error(
         'Character editor failed to start. From tools/admin/modules/charactereditor run: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt',
@@ -325,9 +329,25 @@ function shouldProxyToCharacterEditor(pathname) {
   return prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+async function characterEditorReachable() {
+  // Trust our subprocess while it is alive — batch import can block health for seconds.
+  if (characterEditorAlive()) return true;
+  return characterEditorHealth();
+}
+
+async function ensureCharacterEditorRunning() {
+  if (await characterEditorReachable()) return true;
+  try {
+    await startCharacterEditor();
+  } catch {
+    /* fall through */
+  }
+  return characterEditorReachable();
+}
+
 async function proxyCharacterEditorIfNeeded(req, res, url) {
   if (!shouldProxyToCharacterEditor(url.pathname)) return false;
-  if (!(await characterEditorHealth())) {
+  if (!(await ensureCharacterEditorRunning())) {
     json(res, 503, { ok: false, error: 'Character editor is not running.' });
     return true;
   }
@@ -533,6 +553,97 @@ async function writeMapProject(project) {
   const path = join(mapProjectsRoot, `${normalized.id}.json`);
   await writeFile(path, JSON.stringify(normalized, null, 2) + '\n');
   return { project: normalized, path };
+}
+
+const ADJACENT_STRIP_TILES = 16;
+
+async function loadProjectMapDimensions(settings, entry) {
+  if (!entry?.file) return null;
+  try {
+    const { map } = await readMapFile(settings, entry.file);
+    const width = Number(map?.grid?.width);
+    const height = Number(map?.grid?.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1) return null;
+    return { width, height };
+  } catch {
+    return null;
+  }
+}
+
+async function resolveAnchorDimensions(settings, anchorEntry, anchorWidth, anchorHeight, anchorFile) {
+  const fileToRead = String(anchorFile || anchorEntry?.file || '').trim();
+  if (fileToRead) {
+    try {
+      const { map } = await readMapFile(settings, fileToRead);
+      const width = Number(map?.grid?.width);
+      const height = Number(map?.grid?.height);
+      if (Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0) {
+        return { width, height };
+      }
+    } catch { /* fall back to editor dimensions */ }
+  }
+  if (Number.isFinite(anchorWidth) && Number.isFinite(anchorHeight) && anchorWidth > 0 && anchorHeight > 0) {
+    return { width: anchorWidth, height: anchorHeight };
+  }
+  return { width: ADJACENT_STRIP_TILES, height: ADJACENT_STRIP_TILES };
+}
+
+async function resolveAdjacentMapDimensions(settings, project, direction, anchorEntry, anchorWidth, anchorHeight, gridX, gridY, anchorFile) {
+  const maps = project.maps || [];
+  const at = (x, y) => maps.find((map) => map.gridX === x && map.gridY === y);
+  const anchorDims = await resolveAnchorDimensions(settings, anchorEntry, anchorWidth, anchorHeight, anchorFile);
+  const anchorW = anchorDims.width;
+  const anchorH = anchorDims.height;
+  if (direction === 'west' || direction === 'east') {
+    let width = ADJACENT_STRIP_TILES;
+    const north = await loadProjectMapDimensions(settings, at(gridX, gridY - 1));
+    const south = await loadProjectMapDimensions(settings, at(gridX, gridY + 1));
+    if (north?.width) width = north.width;
+    else if (south?.width) width = south.width;
+    return { width, height: anchorH };
+  }
+  let height = ADJACENT_STRIP_TILES;
+  const west = await loadProjectMapDimensions(settings, at(gridX - 1, gridY));
+  const east = await loadProjectMapDimensions(settings, at(gridX + 1, gridY));
+  if (west?.height) height = west.height;
+  else if (east?.height) height = east.height;
+  return { width: anchorW, height };
+}
+
+async function buildAdjacentMapOwmap(settings, project, mapEntry, anchorEntry, direction, anchorWidth, anchorHeight, anchorFile) {
+  const { width, height } = await resolveAdjacentMapDimensions(
+    settings,
+    project,
+    direction,
+    anchorEntry,
+    anchorWidth,
+    anchorHeight,
+    mapEntry.gridX,
+    mapEntry.gridY,
+    anchorFile,
+  );
+  let anchorMap = null;
+  if (anchorEntry?.file) {
+    try {
+      anchorMap = (await readMapFile(settings, anchorEntry.file)).map;
+    } catch { /* anchor may only exist in the editor */ }
+  }
+  const owmap = emptyMap(width, height);
+  owmap.id = mapEntry.id;
+  owmap.name = mapEntry.name;
+  if (anchorMap?.tilePackage) owmap.tilePackage = { ...anchorMap.tilePackage };
+  return owmap;
+}
+
+async function ensureAdjacentMapFile(settings, project, mapEntry, anchorEntry, direction, anchorWidth, anchorHeight, anchorFile) {
+  const { target } = resolveMapsDirectory(settings, mapEntry.file);
+  if (existsSync(target)) {
+    const dims = await loadProjectMapDimensions(settings, mapEntry);
+    return { created: false, width: dims?.width ?? null, height: dims?.height ?? null };
+  }
+  const owmap = await buildAdjacentMapOwmap(settings, project, mapEntry, anchorEntry, direction, anchorWidth, anchorHeight, anchorFile);
+  await writeMapOwmap(settings, mapEntry.file, owmap);
+  return { created: true, width: owmap.grid.width, height: owmap.grid.height };
 }
 
 async function validateMapProjectEdges(settings, project) {
@@ -944,12 +1055,18 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, await getCharacterEditorStatus());
     }
     if (url.pathname === '/character-editor' || url.pathname.startsWith('/character-editor/')) {
-      if (!(await characterEditorHealth())) {
+      if (!(await ensureCharacterEditorRunning())) {
         return json(res, 503, { ok: false, error: 'Character editor is not running.' });
       }
       return proxyCharacterEditorRequest(req, res, url, { stripPrefix: '/character-editor' });
     }
     if (await proxyCharacterEditorIfNeeded(req, res, url)) return;
+    // DATA EDITOR PATCH START
+    if (url.pathname.startsWith('/api/data-editor/')) {
+      await handleDataEditorApi({ req, res, url, root, repoRoot, readBody, json });
+      return;
+    }
+    // DATA EDITOR PATCH END
     if (url.pathname === '/api/data') return json(res, 200, await readAllData());
     if (url.pathname === '/api/assets') return json(res, 200, { assets: await listAssets() });
     if (url.pathname === '/api/assets/upload' && req.method === 'POST') {
@@ -1405,8 +1522,12 @@ const server = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(await readBody(req));
         const project = await readMapProject(payload.projectId || 'default');
+        const settings = await readMapSettings();
         const activeId = String(payload.activeMapId || project.editor.activeMapId || '').trim();
         const direction = String(payload.direction || '').trim().toLowerCase();
+        const anchorWidth = Number(payload.anchorWidth);
+        const anchorHeight = Number(payload.anchorHeight);
+        const anchorFile = String(payload.anchorFile || '').trim();
         const deltas = { north: [0, -1], east: [1, 0], south: [0, 1], west: [-1, 0] };
         const delta = deltas[direction];
         if (!delta) throw new Error('direction must be north, east, south, or west.');
@@ -1417,23 +1538,45 @@ const server = http.createServer(async (req, res) => {
         const gridX = anchor.gridX + delta[0];
         const gridY = anchor.gridY + delta[1];
         const existing = project.maps.find((map) => map.gridX === gridX && map.gridY === gridY);
+        let map;
+        let isExisting = false;
         if (existing) {
+          map = existing;
+          isExisting = true;
           project.editor.activeMapId = existing.id;
-          const saved = await writeMapProject(project);
-          return json(res, 200, { ok: true, project: saved.project, map: existing, existing: true });
+        } else {
+          const base = sanitizeMapProjectId(`${anchor.id || 'map'}_${direction}`);
+          let id = base;
+          let n = 2;
+          while (project.maps.some((entry) => entry.id === id || entry.file === `${id}.owmap`)) {
+            id = `${base}_${n}`;
+            n += 1;
+          }
+          map = { id, name: id.replace(/_/g, ' '), file: `${id}.owmap`, gridX, gridY };
+          project.maps.push(map);
+          project.editor.activeMapId = id;
         }
-        const base = sanitizeMapProjectId(`${anchor.id || 'map'}_${direction}`);
-        let id = base;
-        let n = 2;
-        while (project.maps.some((map) => map.id === id || map.file === `${id}.owmap`)) {
-          id = `${base}_${n}`;
-          n += 1;
-        }
-        const map = { id, name: id.replace(/_/g, ' '), file: `${id}.owmap`, gridX, gridY };
-        project.maps.push(map);
-        project.editor.activeMapId = id;
+        const fileResult = await ensureAdjacentMapFile(
+          settings,
+          project,
+          map,
+          anchor,
+          direction,
+          anchorWidth,
+          anchorHeight,
+          anchorFile,
+        );
         const saved = await writeMapProject(project);
-        return json(res, 200, { ok: true, project: saved.project, map, existing: false });
+        return json(res, 200, {
+          ok: true,
+          project: saved.project,
+          map,
+          existing: isExisting,
+          fileCreated: fileResult.created,
+          dimensions: fileResult.width && fileResult.height
+            ? { width: fileResult.width, height: fileResult.height }
+            : null,
+        });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }

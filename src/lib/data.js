@@ -2,7 +2,6 @@ export const DATA_FILES = {
   site: 'data/site.json',
   homepage: 'data/homepage.json',
   theme: 'data/theme.json',
-  research: 'data/research.json',
   atlasPins: 'data/atlas-pins.json',
   compatibility: 'data/compatibility.json',
   features: 'data/features.json',

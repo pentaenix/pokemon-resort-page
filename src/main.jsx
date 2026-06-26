@@ -8,7 +8,6 @@ import Atlas from './pages/Atlas.jsx';
 import Ontology from './pages/Ontology.jsx';
 import Board from './pages/Board.jsx';
 import Plan from './pages/Plan.jsx';
-import ConciergeResearch from './pages/ConciergeResearch.jsx';
 import SourceGuide from './pages/SourceGuide.jsx';
 import Docs from './pages/Docs.jsx';
 import Ideas from './pages/Ideas.jsx';
@@ -24,8 +23,6 @@ const pages = {
   '/plan': Plan,
   '/ideas': Ideas,
   '/build': Milestones,
-  '/research': ConciergeResearch,
-  '/concierge': ConciergeResearch,
   '/docs': Docs,
   '/source': SourceGuide,
   '/legal': Legal,
@@ -38,6 +35,8 @@ function normalizeRoute(route) {
     '/gallery': '/atlas',
     '/models': '/atlas',
     '/characters': '/atlas',
+    '/research': '/atlas',
+    '/concierge': '/atlas',
   };
   return { ...route, path: aliases[route.path] || route.path };
 }

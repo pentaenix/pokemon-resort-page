@@ -1,0 +1,154 @@
+{
+  "title": "Sprite Profiles",
+  "description": "Sprite sheet frame layout, animation timing, anchors, scale, and world sprite size.",
+  "tags": [
+    "sprites",
+    "animation",
+    "profiles"
+  ],
+  "groups": [
+    {
+      "id": "sheet",
+      "label": "Sheet layout",
+      "order": 10
+    },
+    {
+      "id": "animation",
+      "label": "Animation",
+      "order": 20
+    },
+    {
+      "id": "placement",
+      "label": "Placement",
+      "order": 30
+    },
+    {
+      "id": "world",
+      "label": "World scale",
+      "order": 40
+    }
+  ],
+  "patterns": {
+    "*frames": {
+      "widget": "list",
+      "group": "animation"
+    },
+    "*frame_time*": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "ms",
+      "group": "animation"
+    },
+    "*FrameTimeMs": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "ms",
+      "group": "animation"
+    },
+    "*columns": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "group": "sheet"
+    },
+    "*rows": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "group": "sheet"
+    },
+    "*row": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "group": "sheet"
+    },
+    "*frame_width": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "sheet"
+    },
+    "*frame_height": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "sheet"
+    },
+    "*FrameWidth": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "sheet"
+    },
+    "*FrameHeight": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "sheet"
+    },
+    "*anchor": {
+      "widget": "select",
+      "options": [
+        "bottom_center",
+        "bottom_left",
+        "bottom_right",
+        "center",
+        "top_left",
+        "top_center",
+        "top_right"
+      ],
+      "group": "placement"
+    },
+    "*screen_offset*": {
+      "widget": "list",
+      "group": "placement"
+    },
+    "*ScreenOffsetPx": {
+      "widget": "list",
+      "group": "placement"
+    },
+    "*scale": {
+      "widget": "number",
+      "min": 0.01,
+      "step": 0.05,
+      "group": "world"
+    },
+    "*SpriteScale": {
+      "widget": "number",
+      "min": 0.01,
+      "step": 0.05,
+      "group": "world"
+    },
+    "*world_width": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "group": "world"
+    },
+    "*world_height": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "group": "world"
+    },
+    "*WorldWidth": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "group": "world"
+    },
+    "*WorldHeight": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "group": "world"
+    }
+  }
+}

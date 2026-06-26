@@ -29,7 +29,7 @@
   "pathSets": [],
   "editor": {
     "activeMapId": "testing-ground_west",
-    "viewMode": "3d",
+    "viewMode": "2d",
     "zoom": 1,
     "overlays": {
       "values": true,

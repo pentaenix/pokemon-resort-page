@@ -1,0 +1,67 @@
+{
+  "title": "World and Map Settings",
+  "description": "World/map dimensions, bounds, tile sizes, debug overlays, and map asset paths.",
+  "tags": [
+    "world",
+    "maps"
+  ],
+  "groups": [
+    {
+      "id": "dimensions",
+      "label": "Dimensions",
+      "order": 10
+    },
+    {
+      "id": "tiles",
+      "label": "Tiles",
+      "order": 20
+    },
+    {
+      "id": "assets",
+      "label": "Assets",
+      "order": 30
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 90
+    }
+  ],
+  "patterns": {
+    "*width*": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "group": "dimensions"
+    },
+    "*height*": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "group": "dimensions"
+    },
+    "*bounds*": {
+      "widget": "json",
+      "group": "dimensions"
+    },
+    "*tile*size*": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "group": "tiles"
+    },
+    "*map*path*": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*asset*": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*debug*": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    }
+  }
+}

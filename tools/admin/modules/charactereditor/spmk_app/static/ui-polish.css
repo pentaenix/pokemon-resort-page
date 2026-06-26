@@ -39,6 +39,12 @@
 .gen-preview-box.clickable{cursor:pointer}
 .gen-action-row{margin-top:12px;flex-wrap:wrap}
 .stale-banner{margin-bottom:12px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(255,209,102,.08);border-color:rgba(255,209,102,.25)}
+.pkg-sheet-mismatch-banner{margin:0 0 14px;padding:14px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;background:linear-gradient(180deg,rgba(255,209,102,.42),rgba(255,193,7,.32));border:1px solid rgba(255,193,7,.7);border-left:5px solid #ffc107;box-shadow:0 2px 14px rgba(255,193,7,.18)}
+.pkg-sheet-mismatch-banner p{margin:0;color:#fff8e1;font-size:14px;line-height:1.45}
+.pkg-sheet-mismatch-banner .btn.good{flex-shrink:0;background:#ffc107;color:#1a1400;border-color:#e6ac00;font-weight:700}
+.pkg-sheet-mismatch-banner .btn.good:hover{background:#ffca28}
+.pkg-sheet-mismatch-list{margin:8px 0 0;padding-left:1.2rem;color:#fff3cd}
+.pkg-sheet-mismatch-list li{margin:3px 0}
 .stale-text{color:#ffd166}
 .input.narrow{width:64px;display:inline-block}
 .brush-row{align-items:center;gap:10px}
@@ -96,6 +102,7 @@
   flex-shrink:0;padding:0;display:inline-flex;align-items:center;justify-content:center;
   transition:border-color .12s,color .12s,background .12s
 }
+.pkg-anim-group-head .pkg-anim-group-hint{color:var(--muted);font-size:11px;margin-left:auto}
 .pkg-action-info-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(125,211,252,.1)}
 .pkg-action-meta-modal .modal-section{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)}
 .pkg-action-meta-modal .modal-section h4{margin:0 0 8px;font-size:13px}
@@ -155,6 +162,9 @@
 .pkg-lib-gen-count{font-size:11px;color:var(--faint);font-weight:500}
 .pkg-form-hint{margin:0 0 12px;border-color:rgba(125,211,252,.2);background:rgba(125,211,252,.06)}
 .pkg-form-hint .tiny{margin:0;line-height:1.45}
+.pkg-batch-or{text-align:center;margin:8px 0;color:var(--faint)}
+.pkg-batch-folder-pick{margin-bottom:0}
+.pkg-batch-preview{margin:10px 0 0}
 .pkg-sprite-variant-picker{margin:0 0 14px;max-width:420px}
 .pkg-sprite-variant-picker .tiny{margin:6px 0 0}
 .pkg-lib-gen-summary .section-title.inline{margin:0}

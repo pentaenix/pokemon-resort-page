@@ -1,0 +1,55 @@
+{
+  "title": "Performance and Debug",
+  "description": "FPS caps, counters, profiling toggles, render diagnostics, and debug helpers.",
+  "tags": [
+    "performance",
+    "debug"
+  ],
+  "groups": [
+    {
+      "id": "fps",
+      "label": "Frame rate",
+      "order": 10
+    },
+    {
+      "id": "profiling",
+      "label": "Profiling",
+      "order": 20
+    },
+    {
+      "id": "debug",
+      "label": "Debug toggles",
+      "order": 30
+    }
+  ],
+  "patterns": {
+    "*fps*": {
+      "widget": "slider",
+      "min": 15,
+      "max": 240,
+      "step": 1,
+      "unit": " fps",
+      "group": "fps"
+    },
+    "*frame*counter*": {
+      "widget": "checkbox",
+      "group": "profiling"
+    },
+    "*profile*": {
+      "widget": "checkbox",
+      "group": "profiling"
+    },
+    "*diagnostic*": {
+      "widget": "checkbox",
+      "group": "debug"
+    },
+    "*debug*": {
+      "widget": "checkbox",
+      "group": "debug"
+    },
+    "*log*": {
+      "widget": "checkbox",
+      "group": "debug"
+    }
+  }
+}

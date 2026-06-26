@@ -42,7 +42,7 @@ try {
 
   assert(site.projectName && site.logo, 'site.json requires projectName and logo');
   assert(Array.isArray(site.legalFull) && site.legalFull.length >= 4, 'site.json legalFull needs the full legal notice');
-  assert(homepage.hero?.headline && homepage.navCards?.length, 'homepage.json needs hero and navCards');
+  assert(homepage.hero?.headline, 'homepage.json needs hero headline');
   assert(theme.motion, 'theme.json requires motion');
 
   const genIds = unique(compatibility.generations || [], 'generation');

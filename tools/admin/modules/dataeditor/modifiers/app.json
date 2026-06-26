@@ -1,0 +1,207 @@
+{
+  "title": "App Config",
+  "description": "Real config/app.json: window/logical size, shared input, shared audio, recording, renderer, FPS, and debug flags.",
+  "tags": [
+    "verified",
+    "app",
+    "input",
+    "audio",
+    "renderer"
+  ],
+  "groups": [
+    {
+      "id": "window",
+      "label": "Window and resolution",
+      "order": 5
+    },
+    {
+      "id": "input",
+      "label": "Input bindings",
+      "order": 15
+    },
+    {
+      "id": "audio",
+      "label": "Audio defaults",
+      "order": 25
+    },
+    {
+      "id": "renderer",
+      "label": "Renderer",
+      "order": 35
+    },
+    {
+      "id": "recording",
+      "label": "Recording",
+      "order": 45
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 90
+    }
+  ],
+  "fields": {
+    "window.width": {
+      "label": "Window Width",
+      "widget": "number",
+      "min": 320,
+      "step": 1,
+      "unit": "px",
+      "group": "window",
+      "order": 1
+    },
+    "window.height": {
+      "label": "Window Height",
+      "widget": "number",
+      "min": 240,
+      "step": 1,
+      "unit": "px",
+      "group": "window",
+      "order": 2
+    },
+    "window.virtual_width": {
+      "label": "Virtual Width",
+      "widget": "number",
+      "min": 320,
+      "step": 1,
+      "unit": "px",
+      "group": "window",
+      "order": 3
+    },
+    "window.virtual_height": {
+      "label": "Virtual Height",
+      "widget": "number",
+      "min": 240,
+      "step": 1,
+      "unit": "px",
+      "group": "window",
+      "order": 4
+    },
+    "window.design_width": {
+      "label": "Design Width",
+      "widget": "number",
+      "min": 320,
+      "step": 1,
+      "unit": "px",
+      "group": "window",
+      "advanced": true,
+      "order": 5
+    },
+    "window.design_height": {
+      "label": "Design Height",
+      "widget": "number",
+      "min": 240,
+      "step": 1,
+      "unit": "px",
+      "group": "window",
+      "advanced": true,
+      "order": 6
+    },
+    "window.title": {
+      "label": "Window Title",
+      "widget": "text",
+      "group": "window",
+      "order": 7
+    },
+    "input.accept_any_key": {
+      "widget": "checkbox",
+      "group": "input",
+      "order": 1
+    },
+    "input.accept_mouse": {
+      "widget": "checkbox",
+      "group": "input",
+      "order": 2
+    },
+    "input.accept_controller": {
+      "widget": "checkbox",
+      "group": "input",
+      "order": 3
+    },
+    "audio.music_volume": {
+      "label": "Music Volume",
+      "widget": "slider",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10",
+      "group": "audio",
+      "order": 20
+    },
+    "audio.sfx_volume": {
+      "label": "SFX Volume",
+      "widget": "slider",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10",
+      "group": "audio",
+      "order": 21
+    },
+    "recording.enabled": {
+      "widget": "checkbox",
+      "group": "recording",
+      "order": 1
+    },
+    "recording.hotkey": {
+      "widget": "text",
+      "group": "recording",
+      "order": 2
+    },
+    "renderer.world3d_backend": {
+      "label": "3D Backend",
+      "widget": "select",
+      "options": [
+        "bgfx",
+        "software",
+        "auto"
+      ],
+      "group": "renderer",
+      "order": 1
+    },
+    "renderer.bgfx_preference": {
+      "label": "BGFX Preference",
+      "widget": "select",
+      "options": [
+        "auto",
+        "metal",
+        "opengl",
+        "vulkan",
+        "direct3d11"
+      ],
+      "group": "renderer",
+      "order": 2
+    },
+    "target_fps": {
+      "label": "Target FPS",
+      "widget": "slider",
+      "min": 15,
+      "max": 240,
+      "step": 1,
+      "unit": " fps",
+      "group": "renderer",
+      "order": 3
+    },
+    "enable_frame_counter": {
+      "widget": "checkbox",
+      "group": "debug",
+      "order": 1
+    },
+    "enable_active_idle_behavior_debug": {
+      "widget": "checkbox",
+      "group": "debug",
+      "order": 2
+    }
+  },
+  "patterns": {
+    "input.*_keys": {
+      "widget": "key-list",
+      "rows": 3,
+      "group": "input"
+    },
+    "audio.*": {
+      "widget": "asset",
+      "group": "audio"
+    }
+  }
+}

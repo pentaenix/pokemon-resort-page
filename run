@@ -1,0 +1,41 @@
+#!/usr/bin/env sh
+set -eu
+
+cd "$(dirname "$0")"
+
+if [ ! -d node_modules ]; then
+  echo "Installing npm dependencies..."
+  npm install
+fi
+
+case "${1:-}" in
+  ""|dev|site|web)
+    echo "Resort site → http://127.0.0.1:5174"
+    exec npm run dev
+    ;;
+  admin)
+    echo "Resort Operations Desk → http://127.0.0.1:9477"
+    exec npm run admin
+    ;;
+  migrate-charbins|fix-charbins)
+    shift
+    CE_ROOT="$(cd "$(dirname "$0")/tools/admin/modules/charactereditor" && pwd)"
+    exec "$CE_ROOT/charactereditor" migrate-charbins "$@"
+    ;;
+  -h|--help|help)
+    cat <<'EOF'
+Usage: ./run [command]
+
+  ./run          Public resort site (Vite dev, port 5174)
+  ./run admin    Resort Operations Desk admin (port 9477)
+  ./run migrate-charbins [--write]   Repair Pokémon actions on existing .charbin files
+
+Aliases: ./run dev | site | web | fix-charbins
+EOF
+    exit 0
+    ;;
+  *)
+    echo "Unknown command: $1 (try ./run --help)" >&2
+    exit 1
+    ;;
+esac

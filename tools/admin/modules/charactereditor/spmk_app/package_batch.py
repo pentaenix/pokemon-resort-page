@@ -8,11 +8,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from spmk_app.charbin_io import load_charbin_file, save_charbin_file
 from spmk_app.character_package import (
     collect_assets_from_package,
-    default_pokemon_actions_for_sheet,
     empty_package,
     ensure_package_actions,
 )
 from spmk_app.package_image import (
+    apply_pokemon_prep_to_sheet_record,
     detect_object_play_frames,
     prepare_pokemon_sheet_bytes,
     prepare_sheet_image_bytes,
@@ -26,12 +26,29 @@ from spmk_app.pokeapi_client import (
     slug_from_filename_stem,
 )
 from spmk_app.pokemon_batch_parse import (
+    BatchUploadPath,
     ParsedPokemonImport,
+    parse_batch_behavior,
     parse_pokemon_import,
+    parse_pokemon_import_with_context,
+    split_batch_upload_path,
+)
+from spmk_app.pokemon_variant_model import (
+    DEFAULT_FORM_ID,
+    action_ids_for_sheet_import,
+    actions_for_sheet_import,
+    attach_variant_fields,
+    ensure_pokemon_variant_block,
+    migrate_package_variant_model,
+    register_pokemon_form,
+    register_pokemon_modifier_def,
+    sheet_display_name,
+    sheet_id_for_variant,
 )
 
 _BATCH_TYPES = frozenset({"player", "npc", "pokemon", "object"})
 _IMPORT_MODES = frozenset({"create", "add"})
+_FORM_KINDS = frozenset({"default", "indexed", "named", "regional", "decoration"})
 
 
 def normalize_batch_character_type(raw: str) -> str:
@@ -50,12 +67,18 @@ def normalize_import_mode(raw: str) -> str:
     return mode
 
 
+def normalize_form_kind(raw: str) -> str:
+    kind = (raw or "default").strip().lower()
+    if kind not in _FORM_KINDS:
+        raise ValueError(f"unsupported formKind {raw!r}")
+    return kind
+
+
 def _display_name_from_stem(stem: str) -> str:
     return stem.replace("_", " ").replace("-", " ").strip().title() or "Asset"
 
 
 def pokemon_package_id(parsed: ParsedPokemonImport, fill: Optional[Dict[str, Any]] = None) -> str:
-    """Stable charbin id (underscores); uses PokéAPI slug when lookup succeeded."""
     if fill:
         return slug_from_filename_stem(fill.get("id") or fill.get("internalName") or parsed.species_id)
     return parsed.species_id
@@ -70,7 +93,6 @@ def _pokemon_has_extra_walk_sheets(package: Dict[str, Any]) -> bool:
 
 
 def _register_overworld_sprite_keys(meta: Dict[str, Any], parsed: ParsedPokemonImport) -> None:
-    """Track which walk sheets exist (forms × modifiers) for large species like Alcremie."""
     custom = meta.setdefault("custom", {})
     keys: List[str] = custom.get("overworldSpriteKeys") or []
     if not isinstance(keys, list):
@@ -84,8 +106,8 @@ def _register_overworld_sprite_keys(meta: Dict[str, Any], parsed: ParsedPokemonI
         form_ids: List[str] = custom.get("overworldFormIds") or []
         if not isinstance(form_ids, list):
             form_ids = []
-        if parsed.form_key not in form_ids:
-            form_ids.append(parsed.form_key)
+        if parsed.form_id not in form_ids:
+            form_ids.append(parsed.form_id)
         form_ids.sort(key=lambda x: (not x.isdigit(), int(x) if x.isdigit() else x))
         custom["overworldFormIds"] = form_ids
 
@@ -97,6 +119,7 @@ def _apply_pokemon_metadata(
     *,
     profile_name: str,
     prep: Dict[str, Any],
+    form_kind: str = "default",
 ) -> None:
     pkg_id = pokemon_package_id(parsed, fill)
     pkg["id"] = pkg_id
@@ -108,7 +131,7 @@ def _apply_pokemon_metadata(
     meta["pokemonId"] = fill.get("pokemonId")
     meta["speciesName"] = fill.get("speciesName") or ""
     meta["forms"] = fill.get("forms") or []
-    meta["selectedFormId"] = fill.get("selectedFormId") or "default"
+    meta["selectedFormId"] = fill.get("selectedFormId") or DEFAULT_FORM_ID
     meta["originGame"] = fill.get("originGame") or ""
     meta["pokedexEntry"] = fill.get("pokedexEntry") or ""
     meta["pokemonTypes"] = fill.get("types") or []
@@ -117,6 +140,13 @@ def _apply_pokemon_metadata(
     pkg["displayName"] = fill.get("displayName") or pkg.get("displayName")
     pkg["internalName"] = pkg_id
     pkg["baseProfile"] = profile_name
+    pkg = ensure_pokemon_variant_block(pkg)
+    block = pkg["metadata"]["pokemonVariant"]
+    block["formKind"] = form_kind
+    if parsed.form_id != DEFAULT_FORM_ID:
+        pkg = register_pokemon_form(pkg, parsed.form_id, name=str(parsed.form_key or parsed.form_id))
+    for mod in parsed.modifiers:
+        pkg = register_pokemon_modifier_def(pkg, mod)
 
 
 def _apply_item_metadata(pkg: Dict[str, Any], fill: Dict[str, Any]) -> None:
@@ -131,23 +161,30 @@ def _apply_item_metadata(pkg: Dict[str, Any], fill: Dict[str, Any]) -> None:
 
 
 def _sheet_label(parsed: ParsedPokemonImport) -> str:
-    if parsed.is_base_walk:
-        return "Walk"
-    bits: List[str] = []
-    if parsed.form_key:
-        bits.append(f"form {parsed.form_key}")
-    if parsed.modifiers:
-        bits.append(" ".join(parsed.modifiers))
-    return f"Walk ({', '.join(bits)})" if bits else "Walk"
+    return sheet_display_name(parsed.form_id, parsed.modifiers, parsed.behavior)
 
 
-def _pokemon_sheet_record(sheet_id: str, asset_id: str, base_profile: str, sheet_label: str) -> Dict[str, Any]:
-    return {
+def _pokemon_sheet_record(
+    parsed: ParsedPokemonImport,
+    asset_id: str,
+    base_profile: str,
+    prep: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    sheet_id = parsed.sheet_id
+    rec: Dict[str, Any] = {
         "id": sheet_id,
-        "name": sheet_label,
+        "name": sheet_display_name(parsed.form_id, parsed.modifiers, parsed.behavior),
         "assetId": asset_id,
         "profile": base_profile,
     }
+    if prep:
+        apply_pokemon_prep_to_sheet_record(rec, prep)
+    return attach_variant_fields(
+        rec,
+        form_id=parsed.form_id,
+        modifiers=parsed.modifiers,
+        behavior=parsed.behavior,
+    )
 
 
 def _merge_pokemon_sheet(
@@ -157,23 +194,33 @@ def _merge_pokemon_sheet(
     sheet_id: str,
     new_asset_bytes: Dict[str, bytes],
     parsed: ParsedPokemonImport,
+    *,
+    form_kind: str = "default",
 ) -> Tuple[Dict[str, Any], Dict[str, bytes]]:
-    out = deepcopy(package)
+    out = migrate_package_variant_model(deepcopy(package))
     merged_assets = dict(assets)
     merged_assets.update(new_asset_bytes)
     sheets = [s for s in (out.get("spriteSheets") or []) if s.get("id") != sheet_id]
     sheets.append(sheet_rec)
     out["spriteSheets"] = sheets
-    new_actions = default_pokemon_actions_for_sheet(sheet_id)
-    replace_ids = {a["id"] for a in new_actions}
+    new_actions = actions_for_sheet_import(
+        parsed.form_id, parsed.modifiers, parsed.behavior, sheet_id
+    )
+    replace_ids = action_ids_for_sheet_import(
+        parsed.form_id, parsed.modifiers, parsed.behavior
+    )
     actions = [a for a in (out.get("actions") or []) if a.get("id") not in replace_ids]
     out["actions"] = actions + new_actions
     meta = out.setdefault("metadata", {})
     _register_overworld_sprite_keys(meta, parsed)
-    prof = sheet_rec.get("profile") or out.get("baseProfile")
-    if prof == "pokemon_large":
-        out["baseProfile"] = "pokemon_large"
-        meta["pokemonSize"] = "large"
+    out = ensure_pokemon_variant_block(out)
+    block = out["metadata"]["pokemonVariant"]
+    if form_kind:
+        block["formKind"] = form_kind
+    if parsed.form_id != DEFAULT_FORM_ID:
+        out = register_pokemon_form(out, parsed.form_id, name=str(parsed.form_key or parsed.form_id))
+    for mod in parsed.modifiers:
+        out = register_pokemon_modifier_def(out, mod)
     return out, merged_assets
 
 
@@ -181,16 +228,19 @@ def _build_pokemon_package(
     parsed: ParsedPokemonImport,
     stem: str,
     png_bytes: bytes,
+    *,
+    form_kind: str = "default",
 ) -> Tuple[Dict[str, Any], Dict[str, bytes], Dict[str, Any]]:
     sheet_id = parsed.sheet_id
     asset_id = f"{sheet_id}_png"
-    label = _sheet_label(parsed)
     lookup, api_slug_used = lookup_pokemon_for_import(parsed.species_id)
     pkg_id = pokemon_package_id(parsed)
     report: Dict[str, Any] = {
         "id": pkg_id,
+        "formId": parsed.form_id,
         "form": parsed.form_key,
         "modifiers": list(parsed.modifiers),
+        "behavior": parsed.behavior,
         "sheetSuffix": parsed.sheet_suffix,
         "sheetId": sheet_id,
         "pokeapi": None,
@@ -220,14 +270,34 @@ def _build_pokemon_package(
         )
 
     png_bytes, profile_name, prep = prepare_pokemon_sheet_bytes(png_bytes)
-    _apply_pokemon_metadata(pkg, fill or {}, parsed, profile_name=profile_name, prep=prep)
+    _apply_pokemon_metadata(
+        pkg, fill or {}, parsed, profile_name=profile_name, prep=prep, form_kind=form_kind
+    )
     report["prepare"] = prep
     report["pokemonSize"] = prep.get("pokemonSize")
     report["baseProfile"] = profile_name
-    sheet_rec = _pokemon_sheet_record(sheet_id, asset_id, profile_name, label)
+    sheet_rec = _pokemon_sheet_record(parsed, asset_id, profile_name, prep)
     pkg["spriteSheets"] = [sheet_rec]
     pkg = ensure_package_actions(pkg)
+    pkg = migrate_package_variant_model(pkg)
     return pkg, {asset_id: png_bytes}, report
+
+
+def _parse_pokemon_batch_file(
+    filename: str,
+    *,
+    animation_variant: Optional[str] = None,
+    import_behavior: Optional[str] = None,
+) -> Tuple[BatchUploadPath, ParsedPokemonImport]:
+    upload = split_batch_upload_path(filename)
+    parsed = parse_pokemon_import_with_context(
+        upload.stem,
+        animation_variant,
+        ui_behavior=import_behavior,
+        species_hint=upload.species_hint,
+        variant_folder=upload.variant_folder,
+    )
+    return upload, parsed
 
 
 def build_package_from_sprite(
@@ -236,23 +306,37 @@ def build_package_from_sprite(
     raw_bytes: bytes,
     *,
     animation_variant: Optional[str] = None,
+    import_behavior: Optional[str] = None,
+    form_kind: str = "default",
 ) -> Tuple[Dict[str, Any], Dict[str, bytes], Dict[str, Any]]:
-    """Build package + assets from one sprite file. Returns (package, assets, report)."""
     ct = normalize_batch_character_type(character_type)
-    stem = Path(filename).stem
     report: Dict[str, Any] = {"file": filename, "characterType": ct}
 
     if ct == "pokemon":
-        parsed = parse_pokemon_import(stem, animation_variant)
+        upload, parsed = _parse_pokemon_batch_file(
+            filename,
+            animation_variant=animation_variant,
+            import_behavior=import_behavior,
+        )
         report["id"] = parsed.species_id
+        report["formId"] = parsed.form_id
         report["form"] = parsed.form_key
         report["modifiers"] = list(parsed.modifiers)
+        report["behavior"] = parsed.behavior
         report["sheetSuffix"] = parsed.sheet_suffix
-        report["variant"] = parsed.sheet_suffix  # legacy UI key
-        pkg, assets, extra = _build_pokemon_package(parsed, stem, raw_bytes)
+        report["variant"] = parsed.sheet_suffix
+        report["sheetId"] = parsed.sheet_id
+        if upload.uses_folder_layout:
+            report["uploadPath"] = upload.relative_path
+            report["speciesFolder"] = upload.species_hint
+            report["variantFolder"] = upload.variant_folder
+        pkg, assets, extra = _build_pokemon_package(
+            parsed, upload.stem, raw_bytes, form_kind=form_kind
+        )
         report.update(extra)
         return pkg, assets, report
 
+    stem = Path(filename).stem
     pkg_id = slug_from_filename_stem(stem)
     report["id"] = pkg_id
 
@@ -311,8 +395,11 @@ def _persist_package(
     *,
     import_mode: str,
     parsed: Optional[ParsedPokemonImport],
+    form_kind: str = "default",
 ) -> Tuple[Path, bool]:
-    package = store._sanitize_package_metadata(ensure_package_actions(package))
+    package = migrate_package_variant_model(
+        store._sanitize_package_metadata(ensure_package_actions(package))
+    )
     pkg_id = package["id"]
     out_path = charbin_path_for_package(store.get_package_directory(), pkg_id, ct)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -333,15 +420,22 @@ def _persist_package(
     asset_id = sheet_rec.get("assetId") or f"{sheet_id}_png"
     new_bytes = {asset_id: assets[asset_id]}
 
-    # Non-base sheets (forms, shiny, swim, combos) always merge — never replace the whole charbin.
     if not parsed.is_base_walk:
         if exists:
             merged = True
             existing, existing_assets = load_charbin_file(out_path)
             pkg_out, merged_assets = _merge_pokemon_sheet(
-                existing, existing_assets, sheet_rec, sheet_id, new_bytes, parsed
+                existing,
+                existing_assets,
+                sheet_rec,
+                sheet_id,
+                new_bytes,
+                parsed,
+                form_kind=form_kind,
             )
-            pkg_out = store._sanitize_package_metadata(ensure_package_actions(pkg_out))
+            pkg_out = migrate_package_variant_model(
+                store._sanitize_package_metadata(ensure_package_actions(pkg_out))
+            )
             save_charbin_file(out_path, pkg_out, collect_assets_from_package(pkg_out, merged_assets))
         else:
             save_charbin_file(out_path, package, collect_assets_from_package(package, assets))
@@ -349,15 +443,26 @@ def _persist_package(
 
     if mode == "add" or (exists and _pokemon_has_extra_walk_sheets(load_charbin_file(out_path)[0])):
         if not exists:
+            if parsed.is_base_walk:
+                save_charbin_file(out_path, package, collect_assets_from_package(package, assets))
+                return out_path, False
             raise ValueError(
                 f"pokemon {pkg_id!r} not found — import base walk first "
                 f"(e.g. GARCHOMP.png with empty Animation field)"
             )
         existing, existing_assets = load_charbin_file(out_path)
         pkg_out, merged_assets = _merge_pokemon_sheet(
-            existing, existing_assets, sheet_rec, sheet_id, new_bytes, parsed
+            existing,
+            existing_assets,
+            sheet_rec,
+            sheet_id,
+            new_bytes,
+            parsed,
+            form_kind=form_kind,
         )
-        pkg_out = store._sanitize_package_metadata(ensure_package_actions(pkg_out))
+        pkg_out = migrate_package_variant_model(
+            store._sanitize_package_metadata(ensure_package_actions(pkg_out))
+        )
         save_charbin_file(out_path, pkg_out, collect_assets_from_package(pkg_out, merged_assets))
         return out_path, True
 
@@ -374,10 +479,13 @@ def batch_import_sprites(
     *,
     animation_variant: Optional[str] = None,
     import_mode: str = "create",
+    import_behavior: Optional[str] = None,
+    form_kind: str = "default",
 ) -> Dict[str, Any]:
-    """Import many sprites as charbins (one type per call)."""
     ct = normalize_batch_character_type(character_type)
     mode = normalize_import_mode(import_mode)
+    fkind = normalize_form_kind(form_kind) if (form_kind or "").strip() else "default"
+    behavior_opt = parse_batch_behavior(import_behavior) if (import_behavior or "").strip() else None
     results: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
 
@@ -391,11 +499,18 @@ def batch_import_sprites(
                 filename,
                 raw,
                 animation_variant=animation_variant if ct == "pokemon" else None,
+                import_behavior=behavior_opt,
+                form_kind=fkind if ct == "pokemon" else "default",
             )
             parsed: Optional[ParsedPokemonImport] = None
             if ct == "pokemon":
-                parsed = parse_pokemon_import(Path(filename).stem, animation_variant)
+                _, parsed = _parse_pokemon_batch_file(
+                    filename,
+                    animation_variant=animation_variant,
+                    import_behavior=behavior_opt,
+                )
             report["importMode"] = mode if ct == "pokemon" else "create"
+            report["formKind"] = fkind if ct == "pokemon" else None
             out_path, merged = _persist_package(
                 store,
                 ct,
@@ -403,12 +518,13 @@ def batch_import_sprites(
                 assets,
                 import_mode=mode,
                 parsed=parsed,
+                form_kind=fkind,
             )
             report["ok"] = True
             report["path"] = str(out_path)
             report["merged"] = merged
             results.append(report)
-        except Exception as exc:  # noqa: BLE001 — per-file batch errors
+        except Exception as exc:  # noqa: BLE001
             errors.append({"file": filename, "error": str(exc)})
 
     store.scan_packages()
@@ -416,6 +532,8 @@ def batch_import_sprites(
         "ok": len(errors) == 0,
         "characterType": ct,
         "importMode": mode,
+        "importBehavior": behavior_opt if ct == "pokemon" else None,
+        "formKind": fkind if ct == "pokemon" else None,
         "animationVariant": (animation_variant or "").strip() or None,
         "imported": len(results),
         "failed": len(errors),

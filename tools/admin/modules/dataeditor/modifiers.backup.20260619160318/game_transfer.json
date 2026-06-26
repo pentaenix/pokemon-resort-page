@@ -1,0 +1,195 @@
+{
+  "title": "Game Transfer",
+  "description": "Real config/game_transfer.json: transfer-system layout, box viewport, menus, info banner, tool carousel, dropdown, cursor, colors, and timing.",
+  "tags": [
+    "verified",
+    "transfer",
+    "ui",
+    "layout",
+    "colors"
+  ],
+  "preview": {
+    "enabled": true,
+    "type": "ui-layout",
+    "title": "Transfer system UI preview",
+    "description": "Approximate UI block preview for the current transfer screen tuning.",
+    "defaultWidth": 1280,
+    "defaultHeight": 800,
+    "maxElements": 18,
+    "elements": [
+      {
+        "label": "Info Banner",
+        "x": 0,
+        "bottomOffset": 0,
+        "defaultWidth": 1280,
+        "height": "info_banner.info_height"
+      },
+      {
+        "label": "Mini Preview",
+        "x": 18,
+        "y": "mini_preview.offset_y",
+        "width": "mini_preview.width",
+        "height": "mini_preview.height"
+      },
+      {
+        "label": "Pokémon Action Menu",
+        "x": 720,
+        "y": 280,
+        "width": "pokemon_action_menu.width",
+        "height": 216
+      },
+      {
+        "label": "Pill Toggle",
+        "centerX": 640,
+        "y": 600,
+        "width": "pill_toggle.track_width",
+        "height": "pill_toggle.track_height"
+      },
+      {
+        "label": "Tool Carousel",
+        "x": "tool_carousel.offset_from_left_wall",
+        "y": "tool_carousel.rest_y",
+        "width": "tool_carousel.viewport_width",
+        "height": "tool_carousel.viewport_height"
+      },
+      {
+        "label": "Box Name Dropdown",
+        "x": 460,
+        "bottomOffset": "box_name_dropdown.bottom_margin_pixels",
+        "width": "box_name_dropdown.panel_width_pixels",
+        "height": 220
+      },
+      {
+        "label": "Selection Cursor",
+        "x": 560,
+        "y": 250,
+        "width": "selection_cursor.min_width",
+        "height": "selection_cursor.min_height"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "general",
+      "label": "General",
+      "order": 1
+    },
+    {
+      "id": "exit",
+      "label": "Exit button",
+      "order": 5
+    },
+    {
+      "id": "background",
+      "label": "Background and fade",
+      "order": 10
+    },
+    {
+      "id": "box_viewport",
+      "label": "Box viewport",
+      "order": 20
+    },
+    {
+      "id": "mini_preview",
+      "label": "Mini preview",
+      "order": 30
+    },
+    {
+      "id": "pokemon_action_menu",
+      "label": "Pokémon action menu",
+      "order": 40
+    },
+    {
+      "id": "info_banner",
+      "label": "Info banner",
+      "order": 50
+    },
+    {
+      "id": "pill_toggle",
+      "label": "Pill toggle",
+      "order": 60
+    },
+    {
+      "id": "tool_carousel",
+      "label": "Tool carousel",
+      "order": 70
+    },
+    {
+      "id": "dropdown",
+      "label": "Box name dropdown",
+      "order": 80
+    },
+    {
+      "id": "cursor",
+      "label": "Selection cursor",
+      "order": 90
+    }
+  ],
+  "fields": {
+    "resort_pc_box_count": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "group": "general",
+      "order": 1
+    },
+    "info_banner.fields": {
+      "widget": "json",
+      "rows": 14,
+      "group": "info_banner",
+      "description": "Real field layout descriptors for the info banner. Use JSON Text mode for large edits."
+    },
+    "info_banner.layout": {
+      "widget": "json",
+      "rows": 12,
+      "group": "info_banner",
+      "description": "Rows and columns used by info_banner.fields."
+    },
+    "selection_cursor.speech_bubble.resort_game_title": {
+      "widget": "text",
+      "group": "cursor"
+    },
+    "selection_cursor.speech_bubble.pokemon_label_format": {
+      "widget": "text",
+      "group": "cursor"
+    }
+  },
+  "patterns": {
+    "exit_button.*": {
+      "group": "exit"
+    },
+    "background_animation.*": {
+      "group": "background"
+    },
+    "fade.*": {
+      "group": "background"
+    },
+    "box_viewport.*": {
+      "group": "box_viewport"
+    },
+    "mini_preview.*": {
+      "group": "mini_preview"
+    },
+    "box_space_long_press.*": {
+      "group": "box_viewport"
+    },
+    "pokemon_action_menu.*": {
+      "group": "pokemon_action_menu"
+    },
+    "info_banner.*": {
+      "group": "info_banner"
+    },
+    "pill_toggle.*": {
+      "group": "pill_toggle"
+    },
+    "tool_carousel.*": {
+      "group": "tool_carousel"
+    },
+    "box_name_dropdown.*": {
+      "group": "dropdown"
+    },
+    "selection_cursor.*": {
+      "group": "cursor"
+    }
+  }
+}

@@ -4,6 +4,18 @@ import { parseFrameFilename, resolveCarouselSlideDisplay } from './frame-filenam
 import { featureHasDossierContent } from './dossier-shared.js';
 import { normalizeFeatureDossierRaw } from './feature-dossier-editor.js';
 import { bindAtlasIslandPreview } from './atlas-island-preview.js';
+import {
+  atlasDotLinkerPanelHtml,
+  bindAtlasDotLinker,
+  syncAtlasDotLinker,
+} from './atlas-dot-linker.js';
+import {
+  DEFAULT_ISLAND_VIEWPORT,
+  degToRad,
+  islandViewportCacheKey,
+  normalizeIslandViewport,
+  radToDeg,
+} from '/shared/island-viewport.js';
 
 const DEFAULT_ISLAND_DISPLAY_SIZE = 6.2;
 const MIN_ISLAND_DISPLAY_SIZE = 0.5;
@@ -552,10 +564,77 @@ function islandDisplaySize(models) {
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_ISLAND_DISPLAY_SIZE;
 }
 
+function islandViewportFromModels(models) {
+  return normalizeIslandViewport(models?.mainModel?.viewport);
+}
+
+function islandViewportSliderRow(label, key, value, min, max, step, format = (n) => n.toFixed(2)) {
+  const id = `atlas-island-vp-${key}`;
+  return `<label class="atlas-island-model-slider" for="${id}">
+    <span>${label}</span>
+    <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}" data-atlas-island-vp="${key}">
+    <output data-atlas-island-vp-out="${key}">${format(Number(value))}</output>
+  </label>`;
+}
+
+function atlasIslandViewportControlsHtml(viewport) {
+  const v = normalizeIslandViewport(viewport);
+  return `<details class="atlas-island-viewport-group" open>
+    <summary>Framing</summary>
+    <div class="atlas-island-viewport-grid">
+      ${islandViewportSliderRow('Vertical framing', 'targetLift', v.targetLift, -0.1, 0.55, 0.02)}
+      ${islandViewportSliderRow('Zoom padding', 'padding', v.padding, 0.55, 1.35, 0.02)}
+      ${islandViewportSliderRow('Camera height', 'cameraHeight', v.cameraHeight, 0.05, 0.85, 0.02)}
+      ${islandViewportSliderRow('Camera distance', 'cameraDistance', v.cameraDistance, 0.35, 1.6, 0.02)}
+    </div>
+  </details>
+  <details class="atlas-island-viewport-group" open>
+    <summary>Position</summary>
+    <div class="atlas-island-viewport-grid">
+      ${islandViewportSliderRow('Move left / right', 'offsetX', v.offsetX, -5, 5, 0.1)}
+      ${islandViewportSliderRow('Move up / down', 'offsetY', v.offsetY, -3, 5, 0.1)}
+      ${islandViewportSliderRow('Move nearer / farther', 'offsetZ', v.offsetZ, -5, 5, 0.1)}
+    </div>
+  </details>
+  <details class="atlas-island-viewport-group" open>
+    <summary>Tilt and rotation</summary>
+    <div class="atlas-island-viewport-grid">
+      ${islandViewportSliderRow('Pitch (deg)', 'pitchDeg', radToDeg(v.pitch), -35, 45, 1, (n) => `${n.toFixed(0)}°`)}
+      ${islandViewportSliderRow('Start yaw (deg)', 'yawDeg', radToDeg(v.yaw), -180, 180, 2, (n) => `${n.toFixed(0)}°`)}
+    </div>
+  </details>
+  <details class="atlas-island-viewport-group" open>
+    <summary>Lighting</summary>
+    <div class="atlas-island-viewport-grid">
+      ${islandViewportSliderRow('Sky fill', 'hemiIntensity', v.hemiIntensity, 0, 4, 0.1)}
+      ${islandViewportSliderRow('Key light', 'keyIntensity', v.keyIntensity, 0, 4, 0.1)}
+      ${islandViewportSliderRow('Fill light', 'fillIntensity', v.fillIntensity, 0, 3, 0.1)}
+      ${islandViewportSliderRow('Exposure', 'exposure', v.exposure, 0.25, 2.5, 0.05)}
+      ${islandViewportSliderRow('Key X', 'keyX', v.keyX, -16, 16, 0.5)}
+      ${islandViewportSliderRow('Key Y', 'keyY', v.keyY, -2, 20, 0.5)}
+      ${islandViewportSliderRow('Key Z', 'keyZ', v.keyZ, -16, 16, 0.5)}
+    </div>
+  </details>`;
+}
+
+function readIslandViewportFromDom(panel) {
+  const viewport = { ...DEFAULT_ISLAND_VIEWPORT };
+  panel?.querySelectorAll('[data-atlas-island-vp]').forEach((input) => {
+    const key = input.dataset.atlasIslandVp;
+    const value = Number(input.value);
+    if (!Number.isFinite(value)) return;
+    if (key === 'pitchDeg') viewport.pitch = degToRad(value);
+    else if (key === 'yawDeg') viewport.yaw = degToRad(value);
+    else if (key in viewport) viewport[key] = value;
+  });
+  return normalizeIslandViewport(viewport);
+}
+
 function atlasIslandModelPanelHtml(models, esc) {
   const main = models?.mainModel || {};
   const file = main.file || '';
   const displaySize = islandDisplaySize(models);
+  const viewport = islandViewportFromModels(models);
   const fileLabel = file ? file.split('/').pop() : 'No model uploaded';
   return `<section class="panel atlas-island-model-panel" id="atlasIslandModelPanel">
     <div class="atlas-island-model-head">
@@ -565,51 +644,70 @@ function atlasIslandModelPanelHtml(models, esc) {
       </div>
       <button type="button" class="btn" id="saveAtlasIslandModel">Save island model</button>
     </div>
-    <div class="atlas-island-model-controls-block">
-      <div class="atlas-island-model-file-row">
-        <label class="btn ghost atlas-island-model-replace">
-          Replace .glb
-          <input type="file" accept=".glb,model/gltf-binary" data-atlas-island-file hidden>
-        </label>
-        <span class="atlas-island-model-file" data-atlas-island-file-label>${esc(fileLabel)}</span>
-      </div>
-      <label class="atlas-island-model-size">
-        <span>Display size</span>
-        <input type="range" min="${MIN_ISLAND_DISPLAY_SIZE}" max="${MAX_ISLAND_DISPLAY_SIZE}" step="0.5" value="${displaySize}" data-atlas-island-size>
-        <output data-atlas-island-size-val>${displaySize.toFixed(1)}</output>
+    <div class="atlas-island-model-file-row">
+      <label class="btn ghost atlas-island-model-replace">
+        Replace .glb
+        <input type="file" accept=".glb,model/gltf-binary" data-atlas-island-file hidden>
       </label>
-      <p class="hint">Scales the mesh on the public Atlas page (${MIN_ISLAND_DISPLAY_SIZE}–${MAX_ISLAND_DISPLAY_SIZE}).</p>
-      <p class="atlas-island-model-status" data-atlas-island-status role="status"></p>
+      <span class="atlas-island-model-file" data-atlas-island-file-label>${esc(fileLabel)}</span>
     </div>
-    <div class="atlas-island-model-preview-wrap">
-      <p class="hint atlas-island-model-preview-label">Public page preview</p>
-      <div class="atlas-card atlas-card--3d">
-        <div class="island-stage-wrap island-stage-wrap--atlas">
-          <div class="island-stage island-stage--atlas" data-atlas-island-viewport></div>
-          <span class="island-stage-hint soft-label" data-atlas-island-hint>Island model in progress</span>
+    <p class="atlas-island-model-status" data-atlas-island-status role="status"></p>
+    <div class="atlas-island-model-studio">
+      <div class="atlas-island-model-preview-wrap">
+        <p class="hint atlas-island-model-preview-label">Live preview</p>
+        <div class="atlas-card atlas-card--3d">
+          <div class="island-stage-wrap island-stage-wrap--atlas">
+            <div class="island-stage island-stage--atlas" data-atlas-island-viewport></div>
+            <span class="island-stage-hint soft-label" data-atlas-island-hint>Island model in progress</span>
+          </div>
         </div>
       </div>
+      <aside class="atlas-island-model-controls-block">
+        <label class="atlas-island-model-size">
+          <span>Display size</span>
+          <input type="range" min="${MIN_ISLAND_DISPLAY_SIZE}" max="${MAX_ISLAND_DISPLAY_SIZE}" step="0.5" value="${displaySize}" data-atlas-island-size>
+          <output data-atlas-island-size-val>${displaySize.toFixed(1)}</output>
+        </label>
+        <p class="hint">Sliders update the preview immediately. Save when ready to publish on the public Atlas page.</p>
+        <div class="atlas-island-viewport-controls" data-atlas-island-viewport-controls>
+          ${atlasIslandViewportControlsHtml(viewport)}
+        </div>
+      </aside>
     </div>
   </section>`;
 }
 
 function applyIslandModelFromDom(state, deps, panel = deps.$('#atlasIslandModelPanel')) {
   const models = state.data['models.json'];
-  if (!models?.mainModel) return;
-  const sizeInput = panel?.querySelector('[data-atlas-island-size]');
+  if (!models?.mainModel || !panel) return;
+  let dirty = false;
+  const sizeInput = panel.querySelector('[data-atlas-island-size]');
   const size = Number(sizeInput?.value);
-  if (!Number.isFinite(size) || size <= 0) return;
-  const before = models.mainModel.displaySize;
-  models.mainModel.displaySize = size;
-  if (before !== size) deps.markDirty('models.json');
+  if (Number.isFinite(size) && size > 0 && models.mainModel.displaySize !== size) {
+    models.mainModel.displaySize = size;
+    dirty = true;
+  }
+  const viewport = readIslandViewportFromDom(panel);
+  const beforeViewport = JSON.stringify(normalizeIslandViewport(models.mainModel.viewport));
+  const nextViewport = JSON.stringify(viewport);
+  if (beforeViewport !== nextViewport) {
+    models.mainModel.viewport = viewport;
+    dirty = true;
+  }
+  if (dirty) deps.markDirty('models.json');
+  return viewport;
 }
 
-function updateAtlasIslandDisplaySize(state, deps, size, panel) {
-  applyIslandModelFromDom(state, deps, panel);
-  if (atlasIslandPreviewBind?.setDisplaySize) {
-    atlasIslandPreviewBind.setDisplaySize(size);
-    const cacheKey = `${state.data['models.json']?.mainModel?.file || ''}|${size}`;
-    if (panel) panel.dataset.previewKey = cacheKey;
+function updateAtlasIslandPreviewLive(state, deps, panel) {
+  const viewport = applyIslandModelFromDom(state, deps, panel) || readIslandViewportFromDom(panel);
+  const models = state.data['models.json'] || {};
+  const displaySize = islandDisplaySize(models);
+  if (atlasIslandPreviewBind?.setViewport) {
+    atlasIslandPreviewBind.setDisplaySize(displaySize);
+    atlasIslandPreviewBind.setViewport(viewport);
+    if (panel) {
+      panel.dataset.previewKey = islandViewportCacheKey(models.mainModel?.file, displaySize, viewport);
+    }
     return;
   }
   refreshAtlasIslandPreview(state, deps, { force: true });
@@ -631,7 +729,8 @@ async function refreshAtlasIslandPreview(state, deps, { force = false } = {}) {
   const models = state.data['models.json'] || {};
   const file = models.mainModel?.file;
   const displaySize = islandDisplaySize(models);
-  const cacheKey = `${file || ''}|${displaySize}`;
+  const viewport = islandViewportFromModels(models);
+  const cacheKey = islandViewportCacheKey(file, displaySize, viewport);
   if (!force && panel.dataset.previewKey === cacheKey && atlasIslandPreviewBind) return;
   panel.dataset.previewKey = cacheKey;
 
@@ -649,6 +748,7 @@ async function refreshAtlasIslandPreview(state, deps, { force = false } = {}) {
     atlasIslandPreviewBind = bindAtlasIslandPreview(host, {
       url,
       displaySize,
+      viewport,
       onHint,
     });
   } catch (error) {
@@ -706,31 +806,53 @@ function bindAtlasIslandModelPanel(state, deps) {
   const panel = deps.$('#atlasIslandModelPanel');
   if (!panel) return;
 
-  if (!panel.dataset.islandBound) {
-    panel.dataset.islandBound = '1';
+  if (!state.atlasIslandPanelBound) {
+    state.atlasIslandPanelBound = true;
 
-    const sizeInput = panel.querySelector('[data-atlas-island-size]');
-    const sizeOut = panel.querySelector('[data-atlas-island-size-val]');
+    document.addEventListener('input', (event) => {
+      const livePanel = deps.$('#atlasIslandModelPanel');
+      if (!livePanel || !livePanel.contains(event.target)) return;
 
-    sizeInput?.addEventListener('input', () => {
-      const size = Number(sizeInput.value);
-      if (sizeOut) sizeOut.textContent = size.toFixed(1);
-      updateAtlasIslandDisplaySize(state, deps, size, panel);
+      const sizeInput = event.target.closest('[data-atlas-island-size]');
+      if (sizeInput) {
+        const sizeOut = livePanel.querySelector('[data-atlas-island-size-val]');
+        const size = Number(sizeInput.value);
+        if (sizeOut) sizeOut.textContent = size.toFixed(1);
+        updateAtlasIslandPreviewLive(state, deps, livePanel);
+        return;
+      }
+
+      const vpInput = event.target.closest('[data-atlas-island-vp]');
+      if (!vpInput) return;
+      const key = vpInput.dataset.atlasIslandVp;
+      const value = Number(vpInput.value);
+      const out = livePanel.querySelector(`[data-atlas-island-vp-out="${key}"]`);
+      if (out) {
+        out.textContent = key.endsWith('Deg')
+          ? `${value.toFixed(key === 'yawDeg' ? 0 : 0)}°`
+          : value.toFixed(2);
+      }
+      updateAtlasIslandPreviewLive(state, deps, livePanel);
     });
 
-    panel.addEventListener('change', (event) => {
+    document.addEventListener('change', (event) => {
+      const livePanel = deps.$('#atlasIslandModelPanel');
+      if (!livePanel || !livePanel.contains(event.target)) return;
       const input = event.target.closest('[data-atlas-island-file]');
       if (!input || !input.files?.length) return;
       const picked = input.files[0];
-      uploadAtlasIslandModel(picked, state, deps, panel).finally(() => {
+      uploadAtlasIslandModel(picked, state, deps, livePanel).finally(() => {
         input.value = '';
       });
     });
 
-    deps.$('#saveAtlasIslandModel')?.addEventListener('click', async () => {
-      applyIslandModelFromDom(state, deps);
+    document.addEventListener('click', async (event) => {
+      const btn = event.target.closest('#saveAtlasIslandModel');
+      if (!btn) return;
+      const livePanel = deps.$('#atlasIslandModelPanel');
+      applyIslandModelFromDom(state, deps, livePanel);
       await deps.saveFile('models.json', state.data['models.json']);
-      setAtlasIslandStatus(panel, 'Saved to public/data/models.json.', 'ok');
+      setAtlasIslandStatus(livePanel, 'Saved to public/data/models.json.', 'ok');
       deps.log('Written to public/data/models.json.', 'ok');
     });
   }
@@ -776,6 +898,7 @@ export function atlasMapEditorHtml(state, esc, dossierDeps) {
     <div class="atlas-map-editor-footer">
       ${atlasMapMediaPanelHtml(atlas, esc)}
       ${atlasIslandModelPanelHtml(state.data['models.json'] || {}, esc)}
+      ${atlasDotLinkerPanelHtml(state)}
     </div>
   </section>`;
 }
@@ -1053,11 +1176,13 @@ function syncAtlasMapUI(state, deps) {
   bindAtlasMapMediaPanel(state, deps);
 
   bindAtlasPinListHandlers(state, deps, handlers);
+  syncAtlasDotLinker(state, deps);
 }
 
 export function bindAtlasMapEditor(state, deps) {
   syncAtlasMapUI(state, deps);
   bindAtlasIslandModelPanel(state, deps);
+  bindAtlasDotLinker(state, deps);
 
   if (state.atlasEditorToolbarBound) return;
   state.atlasEditorToolbarBound = true;

@@ -1,0 +1,86 @@
+{
+  "title": "Pokémon Summary",
+  "description": "Real config/pokemon_summary.json: Basic-tool summary panel shell and replacement motion tuning.",
+  "tags": [
+    "verified",
+    "summary",
+    "panel",
+    "layout"
+  ],
+  "preview": {
+    "enabled": true,
+    "type": "ui-layout",
+    "title": "Summary panel preview",
+    "description": "Approximate placement and size for the Pokémon Summary panel.",
+    "defaultWidth": 1280,
+    "defaultHeight": 800,
+    "maxElements": 8,
+    "elements": [
+      {
+        "label": "Summary Panel",
+        "x": 600,
+        "y": "panel.top_y",
+        "width": "panel.width",
+        "height": "panel.height"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "panel",
+      "label": "Panel",
+      "order": 5
+    },
+    {
+      "id": "colors",
+      "label": "Colors",
+      "order": 20
+    },
+    {
+      "id": "motion",
+      "label": "Motion",
+      "order": 30
+    },
+    {
+      "id": "text",
+      "label": "Text",
+      "order": 40
+    }
+  ],
+  "fields": {
+    "panel.enabled": {
+      "widget": "checkbox",
+      "group": "panel"
+    },
+    "panel.open_when_game_box_absent": {
+      "widget": "checkbox",
+      "group": "panel"
+    },
+    "panel.fill_color": {
+      "widget": "text",
+      "group": "colors",
+      "description": "Palette token or hex color."
+    },
+    "panel.border_color": {
+      "widget": "text",
+      "group": "colors",
+      "description": "Palette token or hex color."
+    },
+    "panel.temporary_name_color": {
+      "widget": "text",
+      "group": "colors",
+      "description": "Palette token or hex color."
+    }
+  },
+  "patterns": {
+    "panel.*smoothing": {
+      "group": "motion"
+    },
+    "panel.*font*": {
+      "group": "text"
+    },
+    "panel.*": {
+      "group": "panel"
+    }
+  }
+}

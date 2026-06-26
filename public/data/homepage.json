@@ -14,13 +14,13 @@
     "featuredMedia": [
       {
         "type": "image",
-        "src": "assets/reference/compatibility-planning-map.png",
-        "caption": "Original compatibility planning map"
+        "src": "media/docs/map-editor/game-runtime-in-game.png",
+        "caption": "Overworld test scene in the game engine"
       },
       {
         "type": "image",
-        "src": "assets/reference/on-flight-planning-board.png",
-        "caption": "Original on-flight planning board"
+        "src": "media/docs/pokemon-resort/compatibility-ontology-graph.webp",
+        "caption": "Transfer route graph on the public site"
       }
     ]
   },
@@ -46,44 +46,6 @@
       "detail": "Code and original project assets reusable with credit"
     }
   ],
-  "navCards": [
-    {
-      "title": "Island Atlas",
-      "href": "#/atlas",
-      "description": "The cork-board map with pins, show frames, and traced layers. Still filling in gaps.",
-      "icon": "✦"
-    },
-    {
-      "title": "Compatibility Ontology",
-      "href": "#/ontology",
-      "description": "Generation routes, round trips, and how Pokémon travel between games.",
-      "icon": "◎"
-    },
-    {
-      "title": "Operations Board",
-      "href": "#/board",
-      "description": "Features in flight, bugs on the desk, and what's being built next.",
-      "icon": "✈"
-    },
-    {
-      "title": "Milestones",
-      "href": "#/milestones",
-      "description": "From first prototype to the current build and what comes next.",
-      "icon": "✧"
-    },
-    {
-      "title": "Resort Docs",
-      "href": "#/docs",
-      "description": "Formats, schemas, and diagrams. Reference shelf for contributors.",
-      "icon": "▤"
-    },
-    {
-      "title": "Source Guide",
-      "href": "#/source",
-      "description": "How the site, data files, and local desk fit together.",
-      "icon": "⌁"
-    }
-  ],
   "about": {
     "eyebrow": "What is this?",
     "title": "A resort between your adventures.",
@@ -98,18 +60,21 @@
       "id": "home-between-adventures",
       "title": "Home between adventures",
       "type": "image",
-      "src": "assets/home-carousel/home-between-adventures.svg",
+      "src": "media/home/carousel/home-between-adventures.png",
       "caption": "Storage lives at the resort, not in a separate box screen.",
       "tags": [
         "home",
-        "concept"
+        "screenshot"
       ]
     },
     {
       "id": "home-concierge-care",
       "title": "Concierge work",
       "type": "image",
-      "src": "assets/home-carousel/concierge-care.svg",
+      "src": "media/home/carousel/concierge-work.gif",
+      "poster": "media/home/carousel/concierge-work-poster.webp",
+      "hoverPlay": true,
+      "hoverPlayDelayMs": 300,
       "caption": "Guests, requests, minigames, and resort upgrades.",
       "tags": [
         "gameplay",
@@ -120,12 +85,19 @@
       "id": "home-transfer-interface",
       "title": "Every generation welcome",
       "type": "image",
-      "src": "assets/home-carousel/generations-connected.svg",
+      "src": "media/home/carousel/every-generation-welcome.png",
       "caption": "DS-style transfers, with a route checklist for each generation pair.",
       "tags": [
         "compatibility",
         "systems"
       ]
     }
-  ]
+  ],
+  "previewVideo": {
+    "eyebrow": "Pre-alpha trailer",
+    "title": "Work in progress",
+    "caption": "Transfer your favourite pokemon to and from the resort. UI and gameplay visuals will change as development progresses.",
+    "src": "media/home/resort-preview.mp4",
+    "poster": "media/home/resort-preview-poster.webp"
+  }
 }

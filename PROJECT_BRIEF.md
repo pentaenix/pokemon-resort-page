@@ -34,13 +34,23 @@ All public blurbs and page chrome follow **`docs/UI-COPY.md`**:
 
 ## Current public pages
 
-- Home
-- Island Atlas
-- Compatibility Ontology
-- Operations
-- Milestones
-- Source Guide
-- Legal
+Header navigation (`src/components/Layout.jsx`):
+
+- **Home** (`#/`)
+- **Island Atlas** (`#/atlas`): 2D cork-board pins, 3D viewport, gallery, models, characters
+- **Compatibility** (`#/ontology`): generation transfer route graph
+- **Operations** (`#/board`): on-flight features, internal bugs, community issue links
+- **Ideas & Milestones** (`#/milestones`): hub linking spark board and build timeline
+- **Docs** (`#/docs`): technical articles for contributors (`?article=slug`)
+- **Source Guide** (`#/source`)
+- **Legal** (`#/legal`)
+
+Sub-routes (linked from hubs, not top-level nav):
+
+- **Spark board** (`#/ideas`): uncommitted idea cards and dossiers
+- **Build timeline** (`#/build`): vertical milestone roadmap
+
+Route aliases (`src/main.jsx`): `#/issues` → Operations; `#/roadmap` → build timeline; `#/gallery`, `#/models`, `#/characters` → Island Atlas; `#/research`, `#/concierge` → Island Atlas; `#/plan` → Ideas & Milestones hub.
 
 ## Most important interaction
 
@@ -63,10 +73,10 @@ The local Operations Desk is the private staff console. It should make updates f
 - edit route statuses
 - update bugs and checklists
 - update feature progress
-- update POIs and model coordinates
+- update atlas pins and 3D POI coordinates
 - update game box-art paths
-- update milestones
-- update ideas
+- update milestones and idea cards
+- update docs hub articles
 - validate data
 - publish through local Git credentials
 

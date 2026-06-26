@@ -4,11 +4,14 @@ Schema reference (keep in sync): docs/CHARBIN_SCHEMA.md
 """
 from __future__ import annotations
 
+import io
 import json
 import re
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from PIL import Image
 
 from spmk_app.charbin_io import FORMAT_VERSION, read_charbin, write_charbin
 
@@ -115,95 +118,6 @@ def _primary_sprite_sheet(sheets: List[Dict[str, Any]]) -> Optional[Dict[str, An
     return next((s for s in sheets if s.get("assetId")), None)
 
 
-def preferred_walk_sheet(package: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Primary walk/sprite sheet used for library thumbnails and size metadata."""
-    meta = package.get("metadata") or {}
-    ct = str(meta.get("characterType") or "npc").lower()
-    sheets = package.get("spriteSheets") or []
-    if ct == "pokemon":
-        return preferred_pokemon_walk_sheet(package)
-    if ct == "object":
-        return next((s for s in sheets if s.get("assetId")), None)
-    for sid in ("walk", "sheet"):
-        hit = next((s for s in sheets if s.get("assetId") and s.get("id") == sid), None)
-        if hit:
-            return hit
-    return next((s for s in sheets if s.get("assetId")), None)
-
-
-def effective_sheet_cell_size(sheet: Dict[str, Any], package: Dict[str, Any]) -> Tuple[int, int]:
-    prof_name = sheet.get("profile") or package.get("baseProfile") or "character"
-    prof = load_sprite_profiles().get("profiles", {}).get(prof_name, {})
-    overrides = sheet.get("profileOverrides") or {}
-    fw = int(overrides.get("frameWidth") or prof.get("frameWidth") or 32)
-    fh = int(overrides.get("frameHeight") or prof.get("frameHeight") or fw)
-    return fw, fh
-
-
-def library_walk_meta(
-    package: Dict[str, Any], assets: Optional[Dict[str, bytes]] = None
-) -> Dict[str, Any]:
-    """Walk-sheet cell + raw PNG dimensions for library filters."""
-    sheet = preferred_walk_sheet(package)
-    if not sheet:
-        return {}
-    fw, fh = effective_sheet_cell_size(sheet, package)
-    out: Dict[str, Any] = {
-        "walkSheetId": sheet.get("id"),
-        "walkCellWidth": fw,
-        "walkCellHeight": fh,
-        "baseProfile": sheet.get("profile") or package.get("baseProfile"),
-    }
-    aid = sheet.get("assetId")
-    if assets and aid and aid in assets:
-        import io
-
-        from PIL import Image
-
-        img = Image.open(io.BytesIO(assets[aid]))
-        out["walkSheetWidth"] = int(img.width)
-        out["walkSheetHeight"] = int(img.height)
-    return out
-
-
-def _sheet_png_size_bucket(width: int, height: int) -> str:
-    """Bucket raw PNG size by longest edge (128 / 160 / 256 / other)."""
-    longest = max(int(width), int(height))
-    if longest == 128:
-        return "128"
-    if longest == 160:
-        return "160"
-    if longest == 256:
-        return "256"
-    return "other"
-
-
-def library_all_sheets_meta(
-    package: Dict[str, Any], assets: Optional[Dict[str, bytes]] = None
-) -> Dict[str, Any]:
-    """Every embedded sheet PNG dimension + size buckets for library filters."""
-    if not assets:
-        return {"sheetDimensions": [], "sheetSizeBuckets": []}
-    import io
-
-    from PIL import Image
-
-    dimensions: List[Dict[str, Any]] = []
-    buckets: Set[str] = set()
-    for sheet in package.get("spriteSheets") or []:
-        aid = sheet.get("assetId")
-        if not aid or aid not in assets:
-            continue
-        img = Image.open(io.BytesIO(assets[aid]))
-        w, h = int(img.width), int(img.height)
-        dimensions.append({"id": sheet.get("id"), "width": w, "height": h})
-        buckets.add(_sheet_png_size_bucket(w, h))
-    return {
-        "sheetDimensions": dimensions,
-        "sheetSizeBuckets": sorted(buckets),
-    }
-
-
 def is_pokemon_walk_sheet_id(sheet_id: str) -> bool:
     return sheet_id == "walk" or sheet_id.startswith("walk_")
 
@@ -252,6 +166,87 @@ def preferred_pokemon_walk_sheet(package: Dict[str, Any]) -> Optional[Dict[str, 
     return sort_pokemon_walk_sheets(sheets)[0]
 
 
+def preferred_walk_sheet(package: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Primary walk/sprite sheet used for library thumbnails and size metadata."""
+    meta = package.get("metadata") or {}
+    ct = str(meta.get("characterType") or "npc").lower()
+    sheets = package.get("spriteSheets") or []
+    if ct == "pokemon":
+        return preferred_pokemon_walk_sheet(package)
+    if ct == "object":
+        return next((s for s in sheets if s.get("assetId")), None)
+    for sid in ("walk", "sheet"):
+        hit = next((s for s in sheets if s.get("assetId") and s.get("id") == sid), None)
+        if hit:
+            return hit
+    return next((s for s in sheets if s.get("assetId")), None)
+
+
+def effective_sheet_cell_size(sheet: Dict[str, Any], package: Dict[str, Any]) -> Tuple[int, int]:
+    prof_name = sheet.get("profile") or package.get("baseProfile") or "character"
+    prof = load_sprite_profiles().get("profiles", {}).get(prof_name, {})
+    overrides = sheet.get("profileOverrides") or {}
+    fw = int(overrides.get("frameWidth") or prof.get("frameWidth") or 32)
+    fh = int(overrides.get("frameHeight") or prof.get("frameHeight") or fw)
+    return fw, fh
+
+
+def _sheet_png_size_bucket(width: int, height: int) -> str:
+    """Bucket raw PNG size by longest edge (128 / 160 / 256 / other)."""
+    longest = max(int(width), int(height))
+    if longest == 128:
+        return "128"
+    if longest == 160:
+        return "160"
+    if longest == 256:
+        return "256"
+    return "other"
+
+
+def library_walk_meta(
+    package: Dict[str, Any], assets: Optional[Dict[str, bytes]] = None
+) -> Dict[str, Any]:
+    """Walk-sheet cell + raw PNG dimensions for library filters."""
+    sheet = preferred_walk_sheet(package)
+    if not sheet:
+        return {}
+    fw, fh = effective_sheet_cell_size(sheet, package)
+    out: Dict[str, Any] = {
+        "walkSheetId": sheet.get("id"),
+        "walkCellWidth": fw,
+        "walkCellHeight": fh,
+        "baseProfile": sheet.get("profile") or package.get("baseProfile"),
+    }
+    aid = sheet.get("assetId")
+    if assets and aid and aid in assets:
+        img = Image.open(io.BytesIO(assets[aid]))
+        out["walkSheetWidth"] = int(img.width)
+        out["walkSheetHeight"] = int(img.height)
+    return out
+
+
+def library_all_sheets_meta(
+    package: Dict[str, Any], assets: Optional[Dict[str, bytes]] = None
+) -> Dict[str, Any]:
+    """Every embedded sheet PNG dimension + size buckets for library filters."""
+    if not assets:
+        return {"sheetDimensions": [], "sheetSizeBuckets": []}
+    dimensions: List[Dict[str, Any]] = []
+    buckets: Set[str] = set()
+    for sheet in package.get("spriteSheets") or []:
+        aid = sheet.get("assetId")
+        if not aid or aid not in assets:
+            continue
+        img = Image.open(io.BytesIO(assets[aid]))
+        w, h = int(img.width), int(img.height)
+        dimensions.append({"id": sheet.get("id"), "width": w, "height": h})
+        buckets.add(_sheet_png_size_bucket(w, h))
+    return {
+        "sheetDimensions": dimensions,
+        "sheetSizeBuckets": sorted(buckets),
+    }
+
+
 def pokemon_variant_from_sheet_id(sheet_id: str) -> Optional[str]:
     """``walk`` → base; ``walk_shiny`` → ``shiny``."""
     if sheet_id == "walk":
@@ -268,34 +263,22 @@ def pokemon_sheet_id_for_variant(variant: Optional[str]) -> str:
 
 
 def default_pokemon_actions_for_sheet(sheet_id: str) -> List[Dict[str, Any]]:
-    """Pokémon overworld: idle cycles walk frames; pause holds frame 0."""
-    variant = pokemon_variant_from_sheet_id(sheet_id)
-    if variant is None and sheet_id != "walk":
-        raise ValueError(f"not a pokemon walk sheet id: {sheet_id!r}")
-    suffix = f"_{variant}" if variant else ""
-    return [
-        {
-            "id": f"idle{suffix}",
-            "type": "idle",
-            "sheetId": sheet_id,
-            "animationName": "walk",
-            "movementDriven": False,
-        },
-        {
-            "id": f"pause{suffix}",
-            "type": "idle",
-            "sheetId": sheet_id,
-            "animationName": "pause",
-            "movementDriven": False,
-        },
-        {
-            "id": f"walk{suffix}",
-            "type": "movement",
-            "sheetId": sheet_id,
-            "animationName": "walk",
-            "movementDriven": True,
-        },
-    ]
+    """Idle + walk actions for a walk sheet (no pause — engine uses profile pause)."""
+    from spmk_app.pokemon_variant_model import (
+        DEFAULT_FORM_ID,
+        actions_for_sheet_import,
+        sync_sheet_variant_fields,
+    )
+
+    synced = sync_sheet_variant_fields({"id": sheet_id})
+    form_id = synced.get("formId") or DEFAULT_FORM_ID
+    modifiers = synced.get("modifiers") or []
+    behavior = synced.get("behavior") or "walk"
+    if behavior != "walk":
+        from spmk_app.pokemon_variant_model import actions_for_sheet_import as act_for
+
+        return act_for(form_id, modifiers, behavior, sheet_id)
+    return actions_for_sheet_import(form_id, modifiers, "walk", sheet_id)
 
 
 def default_pokemon_actions(sheet_id: str = "walk") -> List[Dict[str, Any]]:
@@ -338,48 +321,57 @@ def ensure_package_actions(package: Dict[str, Any]) -> Dict[str, Any]:
     """Fill standard actions when a sheet with an embedded asset exists."""
     out = deepcopy(package)
     sheets = out.get("spriteSheets") or []
-    existing = out.get("actions") or []
-
-    def upsert_defaults(defaults: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Ensure default actions exist; preserve user-edited fields on matching ids."""
-        by_id = {a.get("id"): a for a in existing if a.get("id")}
-        merged: List[Dict[str, Any]] = []
-        for default in defaults:
-            did = default.get("id")
-            if did in by_id:
-                merged.append(deep_merge_preserve_unknown(default, by_id[did]))
-            else:
-                merged.append(deepcopy(default))
-        default_ids = {d["id"] for d in defaults}
-        extra = [a for a in existing if a.get("id") not in default_ids]
-        return merged + extra
-
     if is_object_package(out):
         primary = _primary_sprite_sheet(sheets)
         if not primary:
             return out
         sheet_id = primary.get("id") or "sheet"
-        out["actions"] = upsert_defaults(default_object_actions(sheet_id))
+        defaults = default_object_actions(sheet_id)
     elif is_pokemon_package(out):
-        merged_defaults: List[Dict[str, Any]] = []
-        seen_sheets: Set[str] = set()
+        from spmk_app.pokemon_variant_model import (
+            actions_for_sheet_import,
+            sync_sheet_variant_fields,
+        )
+
+        merged: List[Dict[str, Any]] = []
+        seen_keys: Set[tuple] = set()
         for sheet in sheets:
-            sid = sheet.get("id") or ""
-            if not sheet.get("assetId") or sid in seen_sheets:
+            if not sheet.get("assetId"):
                 continue
-            if sid != "walk" and not sid.startswith("walk_"):
+            synced = sync_sheet_variant_fields(sheet)
+            sid = synced.get("id") or ""
+            key = (
+                sid,
+                synced.get("formId"),
+                tuple(synced.get("modifiers") or []),
+                synced.get("behavior"),
+            )
+            if key in seen_keys:
                 continue
-            seen_sheets.add(sid)
-            merged_defaults.extend(default_pokemon_actions_for_sheet(sid))
-        if not merged_defaults:
+            seen_keys.add(key)
+            merged.extend(
+                actions_for_sheet_import(
+                    synced.get("formId") or "default",
+                    synced.get("modifiers") or [],
+                    synced.get("behavior") or "walk",
+                    sid,
+                )
+            )
+        if not merged:
             return out
-        out["actions"] = upsert_defaults(merged_defaults)
+        keep_ids = {d["id"] for d in merged}
+        extra = [a for a in (out.get("actions") or []) if a.get("id") not in keep_ids]
+        out["actions"] = merged + extra
+        return out
     else:
         walk_sheet = next((s for s in sheets if s.get("id") == "walk" and s.get("assetId")), None)
         if not walk_sheet:
             return out
         sheet_id = walk_sheet.get("id") or "walk"
-        out["actions"] = upsert_defaults(default_character_actions(sheet_id))
+        defaults = default_character_actions(sheet_id)
+    keep_ids = {d["id"] for d in defaults}
+    extra = [a for a in (out.get("actions") or []) if a.get("id") not in keep_ids]
+    out["actions"] = defaults + extra
     return out
 
 
@@ -520,9 +512,6 @@ def validate_package(
     if is_pokemon_package(package):
         if not has_walk:
             warnings.append("pokemon: no walk/movement action defined")
-        pause_ids = {a.get("id") for a in package.get("actions") or [] if (a.get("id") or "").startswith("pause")}
-        if not pause_ids:
-            warnings.append("pokemon: no pause action defined (static frame 0)")
         for idle_act in [a for a in package.get("actions") or [] if (a.get("id") or "").startswith("idle")]:
             if idle_act.get("animationName") != "walk":
                 warnings.append(

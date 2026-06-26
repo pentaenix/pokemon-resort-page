@@ -1,5 +1,5 @@
 import React from 'react';
-import { assetUrl } from '../../lib/data.js';
+import { ProgressiveAtlasImage } from './ProgressiveAtlasImage.jsx';
 
 export function AtlasFramePreview({ image, label, caption, onOpen, openLabel = 'Open full frame' }) {
   if (!image?.path) return null;
@@ -14,11 +14,10 @@ export function AtlasFramePreview({ image, label, caption, onOpen, openLabel = '
         aria-label={openLabel}
       >
         <span className="atlas-show-reference-preview-frame">
-          <img
-            src={assetUrl(image.path)}
+          <ProgressiveAtlasImage
+            path={image.path}
             alt={caption || label || 'Atlas frame'}
-            loading="lazy"
-            decoding="async"
+            imgClassName="atlas-show-reference-preview-img"
           />
           {onOpen ? (
             <span className="atlas-show-reference-preview-lens" aria-hidden="true">

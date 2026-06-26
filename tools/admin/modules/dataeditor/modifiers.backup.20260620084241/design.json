@@ -1,0 +1,120 @@
+{
+  "title": "Design",
+  "description": "Design config customizations. It groups only fields that already exist in the JSON and adds a color utility; it does not invent editable fields.",
+  "tags": [
+    "design",
+    "colors",
+    "tokens",
+    "utility"
+  ],
+  "groups": [
+    {
+      "id": "tokens",
+      "label": "Tokens",
+      "order": 10,
+      "description": "Design token values already present in this JSON."
+    },
+    {
+      "id": "palette",
+      "label": "Palette",
+      "order": 20
+    },
+    {
+      "id": "surfaces",
+      "label": "Surfaces",
+      "order": 30
+    },
+    {
+      "id": "text",
+      "label": "Text",
+      "order": 40
+    },
+    {
+      "id": "layout",
+      "label": "Layout",
+      "order": 50
+    },
+    {
+      "id": "motion",
+      "label": "Motion",
+      "order": 60
+    }
+  ],
+  "utilities": [
+    {
+      "id": "design-color-workshop",
+      "utility": "color-workshop",
+      "afterGroup": "tokens",
+      "order": 1,
+      "title": "Color Utility",
+      "description": "Use the existing design colors as a starting point, generate complementary palettes, then copy a hex value into the field you want.",
+      "type": "color-tools",
+      "placement": {}
+    }
+  ],
+  "patterns": {
+    "tokens.*": {
+      "group": "tokens"
+    },
+    "colors.*": {
+      "group": "palette"
+    },
+    "palette.*": {
+      "group": "palette"
+    },
+    "surfaces.*": {
+      "group": "surfaces"
+    },
+    "surface.*": {
+      "group": "surfaces"
+    },
+    "text.*": {
+      "group": "text"
+    },
+    "typography.*": {
+      "group": "text"
+    },
+    "layout.*": {
+      "group": "layout"
+    },
+    "spacing.*": {
+      "group": "layout"
+    },
+    "motion.*": {
+      "group": "motion"
+    },
+    "animation.*": {
+      "group": "motion"
+    },
+    "*.color": {
+      "widget": "color-wheel"
+    },
+    "*.colour": {
+      "widget": "color-wheel"
+    },
+    "*.hex": {
+      "widget": "color-wheel"
+    },
+    "*.background": {
+      "widget": "color-wheel"
+    },
+    "*.foreground": {
+      "widget": "color-wheel"
+    },
+    "*.border": {
+      "widget": "color-wheel"
+    },
+    "*.fill": {
+      "widget": "color-wheel"
+    },
+    "*.stroke": {
+      "widget": "color-wheel"
+    }
+  },
+  "matches": [
+    "design.json",
+    "**/design.json",
+    "*design*.json",
+    "**/*design*.json"
+  ]
+}

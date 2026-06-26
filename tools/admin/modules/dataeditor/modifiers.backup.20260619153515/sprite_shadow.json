@@ -1,0 +1,147 @@
+{
+  "title": "Shadow Settings",
+  "description": "Sprite, blob, and contact shadow settings, including editable black/white masks.",
+  "tags": [
+    "visuals",
+    "shadow",
+    "mask"
+  ],
+  "groups": [
+    {
+      "id": "general",
+      "label": "General",
+      "order": 10
+    },
+    {
+      "id": "mask",
+      "label": "Shadow mask",
+      "description": "Paint the shadow silhouette as black/white cells.",
+      "order": 20
+    },
+    {
+      "id": "position",
+      "label": "Position",
+      "order": 30
+    },
+    {
+      "id": "colors",
+      "label": "Colors",
+      "order": 40
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 90
+    }
+  ],
+  "fields": {
+    "enabled": {
+      "widget": "checkbox",
+      "group": "general",
+      "order": 1
+    },
+    "opacity": {
+      "widget": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "group": "general",
+      "order": 2
+    },
+    "scale": {
+      "widget": "slider",
+      "min": 0.1,
+      "max": 8,
+      "step": 0.1,
+      "group": "general",
+      "order": 3
+    },
+    "color": {
+      "widget": "color-wheel",
+      "group": "colors",
+      "order": 1
+    },
+    "colour": {
+      "widget": "color-wheel",
+      "group": "colors",
+      "order": 2
+    },
+    "mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "order": 1,
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Click cells to draw the active shadow shape."
+    },
+    "shadow_mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "order": 2,
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0
+    },
+    "offset_x": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position",
+      "order": 1
+    },
+    "offset_y": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position",
+      "order": 2
+    }
+  },
+  "patterns": {
+    "*.mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0
+    },
+    "*_mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0
+    },
+    "*.opacity": {
+      "widget": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "group": "general"
+    },
+    "*_opacity": {
+      "widget": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "group": "general"
+    },
+    "*.color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*_color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    }
+  }
+}

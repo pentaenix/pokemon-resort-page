@@ -215,6 +215,8 @@ async def batch_import_sprites(
     files: list[UploadFile] = File(...),
     animationVariant: str = Form(""),
     importMode: str = Form("create"),
+    importBehavior: str = Form(""),
+    formKind: str = Form("default"),
 ):
     """Import many PNG/WebP sprites as charbins (one characterType per request)."""
     from spmk_app.package_batch import batch_import_sprites as run_batch
@@ -232,6 +234,8 @@ async def batch_import_sprites(
             pairs,
             animation_variant=animationVariant,
             import_mode=importMode,
+            import_behavior=importBehavior,
+            form_kind=formKind,
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc

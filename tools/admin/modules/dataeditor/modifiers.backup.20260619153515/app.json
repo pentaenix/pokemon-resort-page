@@ -1,0 +1,324 @@
+{
+  "title": "Application Settings",
+  "description": "Window, input, audio, renderer, recording, FPS, and debug flags.",
+  "tags": [
+    "core",
+    "confirmed",
+    "app"
+  ],
+  "groups": [
+    {
+      "id": "window",
+      "label": "Window and resolution",
+      "description": "User-facing window title and render sizes.",
+      "order": 10
+    },
+    {
+      "id": "input",
+      "label": "Input bindings",
+      "description": "Keyboard/controller acceptance and key lists.",
+      "order": 20
+    },
+    {
+      "id": "audio",
+      "label": "Audio",
+      "description": "Music, sound effect paths, and volume controls.",
+      "order": 30
+    },
+    {
+      "id": "renderer",
+      "label": "Renderer",
+      "description": "3D renderer backend preferences.",
+      "order": 40
+    },
+    {
+      "id": "recording",
+      "label": "Recording",
+      "description": "Capture and recorder hotkey controls.",
+      "order": 50
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "description": "Developer-only toggles.",
+      "order": 90
+    }
+  ],
+  "fields": {
+    "window.title": {
+      "label": "Game title",
+      "group": "window",
+      "order": 1,
+      "widget": "text"
+    },
+    "window.width": {
+      "label": "Window width",
+      "description": "Physical desktop window width. Advanced so it does not distract from virtual sizing.",
+      "group": "window",
+      "order": 2,
+      "widget": "slider",
+      "min": 320,
+      "max": 3840,
+      "step": 16,
+      "unit": "px",
+      "advanced": true
+    },
+    "window.height": {
+      "label": "Window height",
+      "group": "window",
+      "order": 3,
+      "widget": "slider",
+      "min": 240,
+      "max": 2160,
+      "step": 10,
+      "unit": "px",
+      "advanced": true
+    },
+    "window.virtual_width": {
+      "label": "Virtual width",
+      "group": "window",
+      "order": 4,
+      "widget": "number",
+      "min": 320,
+      "max": 3840,
+      "step": 16,
+      "unit": "px"
+    },
+    "window.virtual_height": {
+      "label": "Virtual height",
+      "group": "window",
+      "order": 5,
+      "widget": "number",
+      "min": 240,
+      "max": 2160,
+      "step": 10,
+      "unit": "px"
+    },
+    "window.design_width": {
+      "hidden": true
+    },
+    "window.design_height": {
+      "hidden": true
+    },
+    "input.accept_any_key": {
+      "label": "Accept any key",
+      "group": "input",
+      "widget": "checkbox",
+      "order": 1
+    },
+    "input.accept_mouse": {
+      "label": "Accept mouse",
+      "group": "input",
+      "widget": "checkbox",
+      "order": 2
+    },
+    "input.accept_controller": {
+      "label": "Accept controller",
+      "group": "input",
+      "widget": "checkbox",
+      "order": 3
+    },
+    "input.navigate_up_keys": {
+      "label": "Navigate up keys",
+      "group": "input",
+      "widget": "key-list",
+      "order": 10
+    },
+    "input.navigate_down_keys": {
+      "label": "Navigate down keys",
+      "group": "input",
+      "widget": "key-list",
+      "order": 11
+    },
+    "input.navigate_left_keys": {
+      "label": "Navigate left keys",
+      "group": "input",
+      "widget": "key-list",
+      "order": 12
+    },
+    "input.navigate_right_keys": {
+      "label": "Navigate right keys",
+      "group": "input",
+      "widget": "key-list",
+      "order": 13
+    },
+    "input.forward_keys": {
+      "label": "Confirm / forward keys",
+      "group": "input",
+      "widget": "key-list",
+      "order": 14
+    },
+    "input.back_keys": {
+      "label": "Back / cancel keys",
+      "group": "input",
+      "widget": "key-list",
+      "order": 15
+    },
+    "input.run_keys": {
+      "label": "Run keys",
+      "group": "input",
+      "widget": "key-list",
+      "order": 16
+    },
+    "input.run_toggle_keys": {
+      "label": "Run toggle keys",
+      "group": "input",
+      "widget": "key-list",
+      "advanced": true,
+      "order": 17
+    },
+    "input.record_toggle_keys": {
+      "label": "Record toggle keys",
+      "group": "input",
+      "widget": "key-list",
+      "advanced": true,
+      "order": 18
+    },
+    "input.screenshot_keys": {
+      "label": "Screenshot keys",
+      "group": "input",
+      "widget": "key-list",
+      "advanced": true,
+      "order": 19
+    },
+    "audio.menu_music": {
+      "label": "Menu music",
+      "group": "audio",
+      "widget": "asset",
+      "order": 1,
+      "placeholder": "assets/music/ui_menu_music.mp3"
+    },
+    "audio.button_sfx": {
+      "label": "Button SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 2
+    },
+    "audio.rip_sfx": {
+      "label": "Rip SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 3,
+      "advanced": true
+    },
+    "audio.ui_move_sfx": {
+      "label": "UI move SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 4
+    },
+    "audio.pickup_sfx": {
+      "label": "Pickup SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 5
+    },
+    "audio.putdown_sfx": {
+      "label": "Putdown SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 6
+    },
+    "audio.error_sfx": {
+      "label": "Error SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 7
+    },
+    "audio.save_sfx": {
+      "label": "Save SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 8
+    },
+    "audio.overworld_blocked_sfx": {
+      "label": "Blocked wall SFX",
+      "group": "audio",
+      "widget": "asset",
+      "order": 9
+    },
+    "audio.music_volume": {
+      "label": "Music volume",
+      "group": "audio",
+      "widget": "slider",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10",
+      "order": 20
+    },
+    "audio.sfx_volume": {
+      "label": "SFX volume",
+      "group": "audio",
+      "widget": "knob",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10",
+      "order": 21
+    },
+    "renderer.world3d_backend": {
+      "label": "World 3D backend",
+      "group": "renderer",
+      "widget": "select",
+      "options": [
+        "auto",
+        "bgfx",
+        "software"
+      ],
+      "order": 1
+    },
+    "renderer.bgfx_preference": {
+      "label": "BGFX preference",
+      "group": "renderer",
+      "widget": "select",
+      "options": [
+        "auto",
+        "metal",
+        "opengl",
+        "vulkan",
+        "direct3d11",
+        "direct3d12"
+      ],
+      "order": 2
+    },
+    "recording.enabled": {
+      "label": "Recording enabled",
+      "group": "recording",
+      "widget": "checkbox",
+      "order": 1
+    },
+    "recording.hotkey": {
+      "label": "Recording hotkey",
+      "group": "recording",
+      "widget": "text",
+      "order": 2
+    },
+    "target_fps": {
+      "label": "Target FPS",
+      "group": "renderer",
+      "widget": "slider",
+      "min": 15,
+      "max": 240,
+      "step": 1,
+      "unit": " fps",
+      "order": 20
+    },
+    "enable_frame_counter": {
+      "label": "Frame counter",
+      "group": "debug",
+      "widget": "checkbox",
+      "advanced": true,
+      "order": 1
+    },
+    "enable_active_idle_behavior_debug": {
+      "label": "Active idle behavior debug",
+      "group": "debug",
+      "widget": "checkbox",
+      "advanced": true,
+      "danger": true,
+      "warning": "Can add noise to normal playtesting.",
+      "order": 2
+    }
+  }
+}

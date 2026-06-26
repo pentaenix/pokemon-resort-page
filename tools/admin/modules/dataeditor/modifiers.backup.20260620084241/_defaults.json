@@ -1,0 +1,376 @@
+{
+  "title": "Verified config defaults",
+  "description": "Shared presentation rules. These only affect fields that already exist in the selected JSON; no synthetic fields are added.",
+  "groups": [
+    {
+      "id": "identity",
+      "label": "Identity / text",
+      "order": 5
+    },
+    {
+      "id": "assets",
+      "label": "Assets and paths",
+      "order": 10
+    },
+    {
+      "id": "layout",
+      "label": "Layout and position",
+      "order": 20
+    },
+    {
+      "id": "size",
+      "label": "Size",
+      "order": 25
+    },
+    {
+      "id": "colors",
+      "label": "Colors",
+      "order": 30
+    },
+    {
+      "id": "timing",
+      "label": "Timing and motion",
+      "order": 40
+    },
+    {
+      "id": "audio",
+      "label": "Audio",
+      "order": 45
+    },
+    {
+      "id": "input",
+      "label": "Input",
+      "order": 50
+    },
+    {
+      "id": "animation",
+      "label": "Animation",
+      "order": 55
+    },
+    {
+      "id": "visuals",
+      "label": "Visual tuning",
+      "order": 60
+    },
+    {
+      "id": "advanced",
+      "label": "Advanced",
+      "order": 90
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 95
+    }
+  ],
+  "patterns": {
+    "*.enabled": {
+      "widget": "checkbox",
+      "group": "advanced"
+    },
+    "enabled": {
+      "widget": "checkbox",
+      "group": "advanced"
+    },
+    "enable_*": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    },
+    "*.debug": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    },
+    "*_debug": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    },
+    "*.color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*_color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*.mod_color": {
+      "widget": "text",
+      "group": "colors",
+      "description": "Palette token or hex color."
+    },
+    "*_mod_color": {
+      "widget": "text",
+      "group": "colors",
+      "description": "Palette token or hex color."
+    },
+    "*.alpha": {
+      "widget": "slider",
+      "min": 0,
+      "max": 255,
+      "step": 1,
+      "group": "colors"
+    },
+    "*_alpha": {
+      "widget": "slider",
+      "min": 0,
+      "max": 255,
+      "step": 1,
+      "group": "colors"
+    },
+    "*.x": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "layout"
+    },
+    "*.y": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "layout"
+    },
+    "*.w": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.h": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.width": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.height": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*_width": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*_height": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.scale": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.05,
+      "group": "size"
+    },
+    "*_scale": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.05,
+      "group": "size"
+    },
+    "*.font_size": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "pt",
+      "group": "size"
+    },
+    "*_font_size": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "pt",
+      "group": "size"
+    },
+    "*.font_pt": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "pt",
+      "group": "size"
+    },
+    "*_font_pt": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "pt",
+      "group": "size"
+    },
+    "*.font_pt_size": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "pt",
+      "group": "size"
+    },
+    "*_font_pt_size": {
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "pt",
+      "group": "size"
+    },
+    "*.seconds": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*_seconds": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*.duration": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*_duration": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*.duration_seconds": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*_duration_seconds": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*.smoothing": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "group": "timing"
+    },
+    "*_smoothing": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.1,
+      "group": "timing"
+    },
+    "*.speed": {
+      "widget": "number",
+      "step": 1,
+      "group": "timing"
+    },
+    "*_speed": {
+      "widget": "number",
+      "step": 1,
+      "group": "timing"
+    },
+    "*_speed_x": {
+      "widget": "number",
+      "step": 1,
+      "group": "timing"
+    },
+    "*_speed_y": {
+      "widget": "number",
+      "step": 1,
+      "group": "timing"
+    },
+    "*.asset": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*_asset": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*.font": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*_directory": {
+      "widget": "path",
+      "group": "assets"
+    },
+    "*_texture": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "*texture_*": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "assets.*": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "audio.*": {
+      "group": "audio"
+    },
+    "*.music": {
+      "widget": "asset",
+      "group": "audio"
+    },
+    "*_sfx": {
+      "widget": "asset",
+      "group": "audio"
+    },
+    "*_music": {
+      "widget": "asset",
+      "group": "audio"
+    },
+    "*keys": {
+      "widget": "key-list",
+      "group": "input"
+    },
+    "*.items": {
+      "widget": "list",
+      "group": "identity"
+    },
+    "*.text": {
+      "widget": "textarea",
+      "rows": 2,
+      "group": "identity"
+    },
+    "*.title": {
+      "widget": "text",
+      "group": "identity"
+    },
+    "*.subtitle": {
+      "widget": "text",
+      "group": "identity"
+    },
+    "*.label": {
+      "widget": "text",
+      "group": "identity"
+    },
+    "*.message": {
+      "group": "identity"
+    }
+  }
+}

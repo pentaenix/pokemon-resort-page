@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import io
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PIL import Image
 
@@ -14,6 +14,18 @@ _OBJECT_MAX_FRAMES = 10
 
 _OVERSIZED_CELL_FACTOR = 1.85
 _MAX_HALVE_PASSES = 4
+
+_POKEMON_GRID_COLS = 4
+_POKEMON_GRID_ROWS = 4
+
+# 2× upload edges (halve once before embed): 512→256, 320→160, 256→128.
+_POKEMON_UPLOAD_LARGE_MIN = 480  # 512×512
+_POKEMON_UPLOAD_MEDIUM_MIN = 304  # 320×320
+_POKEMON_UPLOAD_SMALL_MIN = 200  # 256×256
+
+# Final embedded edges after halving.
+_POKEMON_FINAL_LARGE_MIN = 224  # 256×256 @ 64px cells
+_POKEMON_FINAL_MEDIUM_MIN = 144  # 160×160 @ 40px cells
 
 
 def _resize_nearest(img: Image.Image, factor: int) -> Image.Image:
@@ -82,54 +94,157 @@ def _sheet_needs_halving(ow: int, oh: int, cols: int, rows: int, fw: int, fh: in
     return False
 
 
-_LARGE_POKEMON_CELL_MIN = 96.0  # 512÷4 → 128px cells before halving
-_TARGET_LARGE_CELL = 64
-_TARGET_SMALL_CELL = 32
+def _layout_pokemon_small() -> Dict[str, Any]:
+    return {
+        "profile": "pokemon_small",
+        "pokemonSize": "small",
+        "cellWidth": 32,
+        "cellHeight": 32,
+        "profileOverrides": None,
+    }
+
+
+def _layout_pokemon_medium() -> Dict[str, Any]:
+    return {
+        "profile": "pokemon_small",
+        "pokemonSize": "medium",
+        "cellWidth": 40,
+        "cellHeight": 40,
+        "profileOverrides": {"frameWidth": 40, "frameHeight": 40},
+    }
+
+
+def _layout_pokemon_large() -> Dict[str, Any]:
+    return {
+        "profile": "pokemon_large",
+        "pokemonSize": "large",
+        "cellWidth": 64,
+        "cellHeight": 64,
+        "profileOverrides": None,
+    }
+
+
+def _layout_for_cell(cell_width: int) -> Dict[str, Any]:
+    if cell_width >= 60:
+        return _layout_pokemon_large()
+    if cell_width >= 36:
+        return _layout_pokemon_medium()
+    return _layout_pokemon_small()
+
+
+def infer_pokemon_sheet_layout(
+    width: int,
+    height: int,
+    *,
+    cols: int = _POKEMON_GRID_COLS,
+    rows: int = _POKEMON_GRID_ROWS,
+) -> Dict[str, Any]:
+    """
+    Infer profile + cell size from **final** embedded PNG dimensions (after 2× halving).
+
+    Finals: 128×128 (32px), 160×160 (40px), 256×256 (64px).
+    """
+    longest = max(int(width), int(height))
+    if longest >= _POKEMON_FINAL_LARGE_MIN:
+        return _layout_pokemon_large()
+    if longest >= _POKEMON_FINAL_MEDIUM_MIN:
+        return _layout_pokemon_medium()
+    return _layout_pokemon_small()
+
+
+def _halve_pokemon_2x_upload(img: Image.Image) -> Tuple[Image.Image, int]:
+    """Halve once when upload is a 2× sheet (512 / 320 / 256). Returns (image, passes)."""
+    longest = max(img.width, img.height)
+    if longest >= _POKEMON_UPLOAD_LARGE_MIN:
+        return _resize_nearest(img, 2), 1
+    if longest >= _POKEMON_UPLOAD_MEDIUM_MIN:
+        return _resize_nearest(img, 2), 1
+    if longest >= _POKEMON_UPLOAD_SMALL_MIN:
+        return _resize_nearest(img, 2), 1
+    return img, 0
 
 
 def detect_pokemon_sheet_profile(raw: bytes) -> str:
-    """``pokemon_large`` when upload cells are ~128px (512 sheet); else ``pokemon_small``."""
-    img = load_image_from_bytes(raw)
-    cols, rows = 4, 4
-    cw = img.width / cols
-    ch = img.height / rows
-    cell = max(cw, ch)
-    return "pokemon_large" if cell >= _LARGE_POKEMON_CELL_MIN else "pokemon_small"
+    """Profile for embedded Pokémon walk sheet (runs full prepare path)."""
+    _, profile, _ = prepare_pokemon_sheet_bytes(raw)
+    return profile
 
 
-def prepare_pokemon_sheet_bytes(raw: bytes) -> Tuple[bytes, str, Dict[str, Any]]:
+def _effective_cell_from_sheet(
+    sheet: Dict[str, Any], package: Optional[Dict[str, Any]]
+) -> int:
+    prof_name = sheet.get("profile") or (package or {}).get("baseProfile") or "pokemon_small"
+    prof = load_sprite_profiles().get("profiles", {}).get(prof_name, {})
+    overrides = sheet.get("profileOverrides") or {}
+    return int(overrides.get("frameWidth") or prof.get("frameWidth") or 32)
+
+
+def prepare_pokemon_sheet_bytes(
+    raw: bytes,
+    *,
+    sheet: Optional[Dict[str, Any]] = None,
+    package: Optional[Dict[str, Any]] = None,
+) -> Tuple[bytes, str, Dict[str, Any]]:
     """
-    Scale Pokémon walk sheets: small 128→64 (32px cells), large 512→256 (64px cells).
-    """
-    profile_name = detect_pokemon_sheet_profile(raw)
-    prof = load_sprite_profiles().get("profiles", {}).get(profile_name, {})
-    cols = int(prof.get("columns") or 4)
-    rows = int(prof.get("rows") or 4)
-    fw = int(prof.get("frameWidth") or 32)
-    fh = int(prof.get("frameHeight") or 32)
+    Halve 2× Pokémon walk uploads, then tag profile/cell size on the embedded sheet.
 
+    Uploads: 512→256 (large), 320→160 (medium), 256→128 (small).
+    Already-embedded finals (128 / 160 / 256 large) are left unchanged on re-save.
+    """
     img = load_image_from_bytes(raw)
     ow, oh = img.size
+    cols = _POKEMON_GRID_COLS
+    rows = _POKEMON_GRID_ROWS
     scaled = False
     passes = 0
 
-    while passes < _MAX_HALVE_PASSES and _sheet_needs_halving(img.width, img.height, cols, rows, fw, fh):
-        img = _resize_nearest(img, 2)
-        scaled = True
-        passes += 1
+    if sheet is not None and package is not None:
+        fw = _effective_cell_from_sheet(sheet, package)
+        grid = cols * fw
+        if img.width == grid and img.height == grid:
+            layout = _layout_for_cell(fw)
+            profile_name = layout["profile"]
+            fh = int(layout["cellHeight"])
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            meta: Dict[str, Any] = {
+                "scaled": False,
+                "halvePasses": 0,
+                "originalSize": [ow, oh],
+                "finalSize": [img.width, img.height],
+                "profile": profile_name,
+                "pokemonSize": layout["pokemonSize"],
+                "frameSize": [fw, fh],
+                "expectedGridSize": [grid, rows * fh],
+            }
+            overrides = layout.get("profileOverrides")
+            if overrides:
+                meta["profileOverrides"] = overrides
+            return buf.getvalue(), profile_name, meta
+
+    img, passes = _halve_pokemon_2x_upload(img)
+    scaled = passes > 0
+
+    layout = infer_pokemon_sheet_layout(img.width, img.height)
+    profile_name = layout["profile"]
+    fw = int(layout["cellWidth"])
+    fh = int(layout["cellHeight"])
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
-    meta: Dict[str, Any] = {
+    meta = {
         "scaled": scaled,
         "halvePasses": passes,
         "originalSize": [ow, oh],
         "finalSize": [img.width, img.height],
         "profile": profile_name,
-        "pokemonSize": "large" if profile_name == "pokemon_large" else "small",
+        "pokemonSize": layout["pokemonSize"],
         "frameSize": [fw, fh],
         "expectedGridSize": [cols * fw, rows * fh],
     }
+    overrides = layout.get("profileOverrides")
+    if overrides:
+        meta["profileOverrides"] = overrides
     return buf.getvalue(), profile_name, meta
 
 
@@ -170,6 +285,17 @@ def prepare_sheet_image_bytes(raw: bytes, profile_name: str = "character") -> Tu
     return out_bytes, meta
 
 
+def apply_pokemon_prep_to_sheet_record(sheet: Dict[str, Any], prep: Dict[str, Any]) -> None:
+    """Attach profile + per-sheet overrides from ``prepare_pokemon_sheet_bytes`` meta."""
+    if prep.get("profile"):
+        sheet["profile"] = prep["profile"]
+    overrides = prep.get("profileOverrides")
+    if overrides:
+        sheet["profileOverrides"] = dict(overrides)
+    elif prep.get("pokemonSize") == "small":
+        sheet.pop("profileOverrides", None)
+
+
 def normalize_package_sheet_assets(
     package: Dict[str, Any],
     assets: Dict[str, bytes],
@@ -183,8 +309,11 @@ def normalize_package_sheet_assets(
             continue
         prof = sheet.get("profile") or base
         if prof in ("pokemon_small", "pokemon_large"):
-            png, prof, prep = prepare_pokemon_sheet_bytes(out[aid])
+            png, prof, prep = prepare_pokemon_sheet_bytes(
+                out[aid], sheet=sheet, package=package
+            )
             sheet["profile"] = prof
+            apply_pokemon_prep_to_sheet_record(sheet, prep)
         else:
             png, prep = prepare_sheet_image_bytes(out[aid], prof)
         out[aid] = png

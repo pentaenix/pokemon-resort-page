@@ -1,0 +1,320 @@
+{
+  "title": "Shared config defaults",
+  "description": "Reusable presentation rules applied to every config file.",
+  "groups": [
+    {
+      "id": "general",
+      "label": "General",
+      "order": 10
+    },
+    {
+      "id": "paths",
+      "label": "Asset paths",
+      "order": 80
+    },
+    {
+      "id": "debug",
+      "label": "Debug and diagnostics",
+      "order": 90
+    },
+    {
+      "id": "identity",
+      "label": "Identity",
+      "order": 5
+    },
+    {
+      "id": "colors",
+      "label": "Colors",
+      "order": 30
+    },
+    {
+      "id": "position",
+      "label": "Position",
+      "order": 35
+    },
+    {
+      "id": "size",
+      "label": "Size",
+      "order": 36
+    },
+    {
+      "id": "timing",
+      "label": "Timing",
+      "order": 45
+    },
+    {
+      "id": "mask",
+      "label": "Mask grids",
+      "order": 38
+    }
+  ],
+  "patterns": {
+    "*.enabled": {
+      "widget": "checkbox",
+      "group": "general"
+    },
+    "enable_*": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    },
+    "*.debug": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    },
+    "*_debug": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    },
+    "*.volume": {
+      "widget": "slider",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10"
+    },
+    "*_volume": {
+      "widget": "slider",
+      "min": 0,
+      "max": 10,
+      "step": 1,
+      "unit": "/10"
+    },
+    "*.fps": {
+      "widget": "slider",
+      "min": 15,
+      "max": 240,
+      "step": 1,
+      "unit": " fps"
+    },
+    "target_fps": {
+      "widget": "slider",
+      "min": 15,
+      "max": 240,
+      "step": 1,
+      "unit": " fps"
+    },
+    "*.path": {
+      "widget": "asset",
+      "group": "paths"
+    },
+    "*_path": {
+      "widget": "asset",
+      "group": "paths"
+    },
+    "*.file": {
+      "widget": "asset",
+      "group": "paths"
+    },
+    "*_file": {
+      "widget": "asset",
+      "group": "paths"
+    },
+    "*.color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*_color": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*.id": {
+      "group": "identity",
+      "widget": "text",
+      "advanced": true
+    },
+    "*_id": {
+      "group": "identity",
+      "widget": "text",
+      "advanced": true
+    },
+    "*.name": {
+      "group": "identity",
+      "widget": "text"
+    },
+    "*.title": {
+      "group": "identity",
+      "widget": "text"
+    },
+    "*.colour": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*_colour": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*.hex": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*_hex": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "*.x": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.y": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.left": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.top": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.offset_x": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.offset_y": {
+      "widget": "number",
+      "step": 1,
+      "unit": "px",
+      "group": "position"
+    },
+    "*.width": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.height": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*_width": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*_height": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "size"
+    },
+    "*.duration": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*_duration": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "*.ms": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "ms",
+      "group": "timing"
+    },
+    "*_ms": {
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "ms",
+      "group": "timing"
+    },
+    "mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Black cells are enabled; white cells are transparent/off."
+    },
+    "*.mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Black cells are enabled; white cells are transparent/off."
+    },
+    "*_mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Black cells are enabled; white cells are transparent/off."
+    },
+    "*.shadow_mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Black cells are enabled; white cells are transparent/off."
+    },
+    "shadow_mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Black cells are enabled; white cells are transparent/off."
+    },
+    "*.bitmap": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Black cells are enabled; white cells are transparent/off."
+    },
+    "*.alpha_mask": {
+      "widget": "mask-grid",
+      "group": "mask",
+      "columns": 16,
+      "rows": 16,
+      "format": "matrix",
+      "onValue": 1,
+      "offValue": 0,
+      "legend": "Black cells are enabled; white cells are transparent/off."
+    }
+  }
+}

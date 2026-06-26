@@ -21,6 +21,7 @@ const LAYER_META = {
 };
 
 const TILE_SIZE = 16;
+const ADJACENT_STRIP_TILES = 16;
 const MAP_HISTORY_LIMIT = 80;
 const DEFAULT_TILE_LAYERS = [
   { id: 'ground', name: 'Ground' },
@@ -126,6 +127,13 @@ function tileCardSpanStyle(fp) {
 function tileTextureUrl(editor, tile) {
   if (!editor.tilePackage?.fileName || !tile?.previewTexture) return '';
   return `/api/tile-packages/texture?file=${encodeURIComponent(editor.tilePackage.fileName)}&texture=${encodeURIComponent(tile.previewTexture)}`;
+}
+
+/** Cropped per-tile preview — matches the tile palette, not the raw atlas sheet. */
+function tilePaintVisualUrl(editor, tileId) {
+  const id = Number(tileId);
+  if (!Number.isFinite(id)) return '';
+  return cachedRtpksTileThumb(editor, id) || tilePreviewSource(editor, id) || '';
 }
 
 function tilePreviewSource(editor, tileId) {
@@ -1099,6 +1107,7 @@ function buildPreviewScene(map) {
     tx,
     ty,
     floorHeight,
+    specials,
   );
   return { w, h, tileH, tileSpecial, inBounds, cornerHeights, visual, floorHeight };
 }
@@ -1910,7 +1919,7 @@ export function ensureMapEditorState(state) {
   if (!Array.isArray(state.mapEditor.undoStack)) state.mapEditor.undoStack = [];
   if (!Array.isArray(state.mapEditor.redoStack)) state.mapEditor.redoStack = [];
   if (state.mapEditor.placeModelId === undefined) state.mapEditor.placeModelId = null;
-  if (!state.mapEditor.leftTab) state.mapEditor.leftTab = 'maps';
+  if (!state.mapEditor.leftTab) state.mapEditor.leftTab = 'project';
   if (!state.mapEditor.sidebarTab || state.mapEditor.sidebarTab === 'project' || state.mapEditor.sidebarTab === 'maps') state.mapEditor.sidebarTab = 'tiles';
   if (!state.mapEditor.previewCam) {
     state.mapEditor.previewCam = { ...PREVIEW_CAM_DEFAULT };
@@ -1925,6 +1934,7 @@ export function ensureMapEditorState(state) {
   if (!state.mapEditor.previewSize) {
     state.mapEditor.previewSize = { w: 504, h: 400 };
   }
+  if (!state.mapEditor.mapDimensionsByFile) state.mapEditor.mapDimensionsByFile = {};
   if (state.mapEditor.layer && !state.mapEditor.brush) {
     const layer = state.mapEditor.layer;
     state.mapEditor.brush = layer === 'special' ? 'ramp' : layer === 'collision' ? 'collision' : 'height';
@@ -1942,11 +1952,14 @@ function syncCellButton(btn, map, x, y, editor) {
   const activeLayerIndex = map.tileLayers?.activeLayer || 0;
   btn.style.background = '';
   if (tile) {
-    const texture = tileTextureUrl(editor, tile);
-    btn.style.backgroundImage = texture ? `linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,.08)), url("${texture}")` : '';
-    btn.style.backgroundColor = texture ? '' : tileHashColor(tileId);
-    btn.style.backgroundSize = texture ? 'cover' : '';
-    btn.style.backgroundPosition = texture ? 'center' : '';
+    const preview = tilePaintVisualUrl(editor, tileId);
+    btn.style.backgroundImage = preview ? `linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,.08)), url("${preview}")` : '';
+    btn.style.backgroundColor = preview ? '#d8e0e6' : tileHashColor(tileId);
+    btn.style.backgroundSize = preview ? 'cover' : '';
+    btn.style.backgroundPosition = preview ? 'center' : '';
+    if (!preview) {
+      requestRtpksTileThumbnail(editor, tileId, { onReady: () => refreshPlacedTileVisuals(editor) });
+    }
   } else {
     const rgb = ((x + y) & 1) === 0 ? PREVIEW_TOP_A : PREVIEW_TOP_B;
     btn.style.backgroundColor = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
@@ -2004,6 +2017,34 @@ function refreshPlacedTileVisuals(editor) {
   refreshPropOverlays(editor);
 }
 
+function rememberTileCatalogScroll(editor) {
+  const catalog = document.querySelector('#mapTileCatalog');
+  if (catalog) editor._tileCatalogScrollTop = catalog.scrollTop;
+}
+
+function restoreTileCatalogScroll(editor) {
+  const top = editor._tileCatalogScrollTop;
+  if (!Number.isFinite(top)) return;
+  const catalog = document.querySelector('#mapTileCatalog');
+  if (catalog) catalog.scrollTop = top;
+}
+
+function syncPaintToolbarState(editor) {
+  const undoBtn = document.querySelector('#mapUndo');
+  const redoBtn = document.querySelector('#mapRedo');
+  if (undoBtn) undoBtn.disabled = !editor.undoStack?.length;
+  if (redoBtn) redoBtn.disabled = !editor.redoStack?.length;
+  const badges = document.querySelectorAll('.map-editor-commandbar .map-dirty-badge');
+  if (badges[0]) {
+    badges[0].textContent = editor.dirty ? 'Unsaved changes' : 'Saved';
+    badges[0].classList.toggle('clean', !editor.dirty);
+  }
+  if (badges[1]) {
+    badges[1].textContent = editor.projectDirty ? 'Project unsaved' : 'Project saved';
+    badges[1].classList.toggle('clean', !editor.projectDirty);
+  }
+}
+
 function ensurePlacedRtpksTileThumbnails(editor, onReady) {
   if (!editor.map || !editor.tilePackage?.fileName) return;
   for (const tileId of placedTileIds(editor.map)) {
@@ -2028,10 +2069,7 @@ export function mapEditorHtml(state, esc) {
     ? '<span class="map-dirty-badge">Project unsaved</span>'
     : '<span class="map-dirty-badge clean">Project saved</span>';
 
-  const fileList = (editor.files || []).map((f) => {
-    const active = editor.currentFile === f.name ? 'active' : '';
-    return `<button type="button" class="${active}" data-map-file="${esc(f.name)}"><strong>${esc(f.name)}</strong><span>${esc(f.kind)}</span></button>`;
-  }).join('') || '<p class="hint">No maps in this folder yet.</p>';
+  const fileList = mapDiskFileListHtml(editor, esc);
 
   let gridHtml = '';
   if (map) {
@@ -2082,7 +2120,7 @@ export function mapEditorHtml(state, esc) {
         const rampShort = RAMP_PRESETS.find((r) => r.id === st.special)?.short || '';
         const ramp = st.rampLabel ? `<span class="cell-ramp" title="${esc(st.rampLabel)}">${esc(rampShort)}</span>` : '';
         const prop = propCount ? `<span class="cell-prop" title="${propCount} prop${propCount > 1 ? 's' : ''}">${propCount > 1 ? propCount : ''}</span>` : '';
-        const tileTexture = tile ? tileTextureUrl(editor, tile) : '';
+        const tileTexture = tile ? tilePaintVisualUrl(editor, tileId) : '';
         const cellVars = `--height-overlay:${heightOverlayColor(st.hv)};--collision-overlay:${st.blocked ? 'rgba(220,38,38,.72)' : 'rgba(255,255,255,.035)'}`;
         const tileStyle = tile
           ? (tileTexture
@@ -2165,13 +2203,8 @@ export function mapEditorHtml(state, esc) {
         <div class="map-sidebar-panel ${editor.leftTab === 'project' ? '' : 'hidden'}" id="mapSidebarProject" role="tabpanel">
           <h3>${esc(editor.project?.name || 'Project')}</h3>
           ${mapSizePanelHtml(map, esc)}
-          <div class="map-adjacent-actions" role="group" aria-label="Create adjacent maps">
-            <button type="button" class="btn small" data-create-adjacent="north" ${map ? '' : 'disabled'}>North</button>
-            <button type="button" class="btn small" data-create-adjacent="west" ${map ? '' : 'disabled'}>West</button>
-            <button type="button" class="btn small" data-create-adjacent="east" ${map ? '' : 'disabled'}>East</button>
-            <button type="button" class="btn small" data-create-adjacent="south" ${map ? '' : 'disabled'}>South</button>
-          </div>
-          ${mapMatrixHtml(editor, esc)}
+          ${adjacentActionsHtml(map, esc)}
+          ${mapProjectRosterHtml(editor, esc)}
           <div class="map-edge-box">${edgeValidationHtml(editor, esc)}</div>
         </div>
         <div class="map-sidebar-panel ${editor.leftTab === 'maps' ? '' : 'hidden'}" id="mapSidebarMaps" role="tabpanel">
@@ -2798,7 +2831,130 @@ async function loadMapProject(editor, id = editor.projectId || 'default') {
   const validation = await fetchJsonQuiet(`/api/map-projects/validate?id=${encodeURIComponent(payload.project.id)}`);
   editor.projectValidation = validation?.validation || null;
   editor.projectDirty = false;
+  try {
+    await refreshProjectMapDimensions(editor);
+  } catch { /* keep editor usable */ }
   return payload.project;
+}
+
+function adjacentMapDimensions(direction, anchorWidth, anchorHeight) {
+  const w = Number(anchorWidth) > 0 ? Number(anchorWidth) : ADJACENT_STRIP_TILES;
+  const h = Number(anchorHeight) > 0 ? Number(anchorHeight) : ADJACENT_STRIP_TILES;
+  if (direction === 'west' || direction === 'east') {
+    return { width: ADJACENT_STRIP_TILES, height: h };
+  }
+  return { width: w, height: ADJACENT_STRIP_TILES };
+}
+
+function directionLabel(direction) {
+  return { north: 'North', east: 'East', south: 'South', west: 'West' }[direction] || direction;
+}
+
+function mapGridPositionLabel(map, maps) {
+  if (!map) return '';
+  const origin = maps.find((entry) => entry.gridX === 0 && entry.gridY === 0) || maps[0];
+  if (!origin || map.id === origin.id) return 'Origin · grid 0,0';
+  const dx = map.gridX - origin.gridX;
+  const dy = map.gridY - origin.gridY;
+  const parts = [];
+  if (dy < 0) parts.push(`${-dy} tile${-dy === 1 ? '' : 's'} north`);
+  if (dy > 0) parts.push(`${dy} tile${dy === 1 ? '' : 's'} south`);
+  if (dx < 0) parts.push(`${-dx} tile${-dx === 1 ? '' : 's'} west`);
+  if (dx > 0) parts.push(`${dx} tile${dx === 1 ? '' : 's'} east`);
+  const relation = parts.length ? parts.join(' · ') : `grid ${map.gridX},${map.gridY}`;
+  return `${relation} of ${origin.name || origin.id}`;
+}
+
+function mapCompassTag(map, origin) {
+  if (!origin || map.id === origin.id) return '★';
+  const dx = map.gridX - origin.gridX;
+  const dy = map.gridY - origin.gridY;
+  if (dx === 0 && dy === -1) return 'N';
+  if (dx === 1 && dy === 0) return 'E';
+  if (dx === 0 && dy === 1) return 'S';
+  if (dx === -1 && dy === 0) return 'W';
+  return `${map.gridX},${map.gridY}`;
+}
+
+async function refreshProjectMapDimensions(editor) {
+  editor.mapDimensionsByFile = editor.mapDimensionsByFile || {};
+  const maps = editor.project?.maps || [];
+  await Promise.all(maps.map(async (entry) => {
+    if (!entry?.file) return;
+    try {
+      const res = await fetch(`/api/maps/file?file=${encodeURIComponent(entry.file)}`);
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload.map?.grid) {
+        editor.mapDimensionsByFile[entry.file] = { missing: true };
+        return;
+      }
+      editor.mapDimensionsByFile[entry.file] = {
+        width: payload.map.grid.width,
+        height: payload.map.grid.height,
+      };
+    } catch {
+      editor.mapDimensionsByFile[entry.file] = { missing: true };
+    }
+  }));
+}
+
+function mapDiskFileListHtml(editor, esc) {
+  const projectByFile = new Map((editor.project?.maps || []).map((entry) => [entry.file, entry]));
+  const inProject = [];
+  const other = [];
+  for (const file of editor.files || []) {
+    const entry = projectByFile.get(file.name);
+    if (entry) inProject.push({ file, entry });
+    else other.push(file);
+  }
+  const renderRow = (file, entry, inProj) => {
+    const active = editor.currentFile === file.name ? 'active' : '';
+    const dims = editor.mapDimensionsByFile?.[file.name];
+    const sizeText = dims?.missing ? 'missing file' : dims ? `${dims.width}×${dims.height}` : '';
+    const subtitle = inProj
+      ? `${esc(mapGridPositionLabel(entry, editor.project?.maps || []))}${sizeText ? ` · ${esc(sizeText)}` : ''}`
+      : esc(file.kind);
+    const badge = inProj
+      ? (active ? '<span class="map-file-badge current">Current</span>' : '<span class="map-file-badge">In project</span>')
+      : '<span class="map-file-badge orphan">Not in project</span>';
+    const title = inProj ? esc(entry.name || entry.id) : esc(file.name);
+    return `<button type="button" class="map-file-row ${active}" data-map-file="${esc(file.name)}">
+      ${badge}
+      <span class="map-file-row-main">
+        <strong>${title}</strong>
+        <span>${subtitle}</span>
+        ${inProj ? `<code class="map-file-row-code">${esc(file.name)}</code>` : ''}
+      </span>
+    </button>`;
+  };
+  const projectRows = inProject.map(({ file, entry }) => renderRow(file, entry, true)).join('');
+  const otherRows = other.map((file) => renderRow(file, null, false)).join('');
+  if (!projectRows && !otherRows) return '<p class="hint">No maps in this folder yet.</p>';
+  return `${projectRows ? `<div class="map-file-group"><h4>In this project</h4>${projectRows}</div>` : ''}${otherRows ? `<div class="map-file-group"><h4>Other map files</h4>${otherRows}</div>` : ''}`;
+}
+
+function adjacentActionsHtml(map, esc) {
+  if (!map) {
+    return `<div class="map-adjacent-actions" role="group" aria-label="Create adjacent maps">
+      <button type="button" class="btn small" data-create-adjacent="north" disabled>North</button>
+      <button type="button" class="btn small" data-create-adjacent="west" disabled>West</button>
+      <button type="button" class="btn small" data-create-adjacent="east" disabled>East</button>
+      <button type="button" class="btn small" data-create-adjacent="south" disabled>South</button>
+    </div>`;
+  }
+  const w = map.grid?.width || ADJACENT_STRIP_TILES;
+  const h = map.grid?.height || ADJACENT_STRIP_TILES;
+  const dirs = ['north', 'west', 'east', 'south'];
+  return `<div class="map-adjacent-actions" role="group" aria-label="Create adjacent maps">
+    <p class="hint map-adjacent-hint">Adds a 16-tile strip. The shared edge matches this map (${w}×${h}). Save this map first if you changed its size.</p>
+    ${dirs.map((dir) => {
+      const dims = adjacentMapDimensions(dir, w, h);
+      return `<button type="button" class="btn small map-adjacent-btn" data-create-adjacent="${dir}">
+        <span class="map-adjacent-dir">${esc(directionLabel(dir))}</span>
+        <span class="map-adjacent-size">${dims.width}×${dims.height}</span>
+      </button>`;
+    }).join('')}
+  </div>`;
 }
 
 export async function loadMapEditorListing(state, api) {
@@ -2820,6 +2976,9 @@ export async function loadMapEditorListing(state, api) {
     editor.project = createDefaultProject(editor.files);
     editor.projectDirty = true;
   }
+  try {
+    await refreshProjectMapDimensions(editor);
+  } catch { /* keep editor usable */ }
 
   const settingsPayload = await fetchJsonQuiet('/api/maps/settings');
   if (settingsPayload?.ok) {
@@ -3087,6 +3246,70 @@ function mapSizePanelHtml(map, esc) {
     <label>Cells to add<input id="mapExpandAmount" type="number" min="1" max="64" value="1"></label>
     <button type="button" class="btn small" id="mapExpandSize">Increase size</button>
   </div>`;
+}
+
+function mapProjectRosterHtml(editor, esc) {
+  const maps = [...(editor.project?.maps || [])].sort((a, b) => a.gridY - b.gridY || a.gridX - b.gridX);
+  const activeId = editor.map?.id || editor.project?.editor?.activeMapId || '';
+  const origin = maps.find((entry) => entry.gridX === 0 && entry.gridY === 0) || maps[0];
+  if (!maps.length) {
+    return `<div class="map-roster-empty">
+      <p class="hint">No maps in this project yet. Save the current map or add an adjacent map.</p>
+    </div>`;
+  }
+  const cards = maps.map((map) => {
+    const active = map.id === activeId || map.file === editor.currentFile;
+    const dims = editor.mapDimensionsByFile?.[map.file];
+    const sizeText = dims?.missing ? 'file missing' : dims ? `${dims.width}×${dims.height}` : '…';
+    return `<button type="button" class="map-roster-card${active ? ' active' : ''}" data-project-map="${esc(map.id)}">
+      <div class="map-roster-card-head">
+        <span class="map-roster-badge${active ? '' : ' subtle'}">${active ? 'Current map' : mapCompassTag(map, origin)}</span>
+        <span class="map-roster-size">${esc(sizeText)} tiles</span>
+      </div>
+      <input type="text" class="map-roster-name" data-project-map-name="${esc(map.id)}" value="${esc(map.name || map.id)}" aria-label="Map display name">
+      <div class="map-roster-meta">
+        <span class="map-roster-position">${esc(mapGridPositionLabel(map, maps))}</span>
+        <code class="map-roster-file">${esc(map.file)}</code>
+      </div>
+    </button>`;
+  }).join('');
+  return `<div class="map-project-maps">
+    <h4 class="map-project-maps-title">Project maps (${maps.length})</h4>
+    <p class="hint map-roster-hint">Click a map to edit it. Rename inline — saved with the project.</p>
+    <div class="map-roster">${cards}</div>
+    ${mapCompassGridHtml(editor, esc, maps, origin)}
+  </div>`;
+}
+
+function mapCompassGridHtml(editor, esc, maps, origin) {
+  if (!maps.length) return '';
+  const activeId = editor.map?.id || editor.project?.editor?.activeMapId || '';
+  const minX = Math.min(...maps.map((map) => map.gridX), 0);
+  const maxX = Math.max(...maps.map((map) => map.gridX), 0);
+  const minY = Math.min(...maps.map((map) => map.gridY), 0);
+  const maxY = Math.max(...maps.map((map) => map.gridY), 0);
+  const byCell = new Map(maps.map((map) => [`${map.gridX},${map.gridY}`, map]));
+  const rows = [];
+  for (let y = minY; y <= maxY; y += 1) {
+    const cells = [];
+    for (let x = minX; x <= maxX; x += 1) {
+      const map = byCell.get(`${x},${y}`);
+      if (!map) {
+        cells.push('<span class="map-matrix-cell empty" aria-hidden="true"></span>');
+      } else {
+        const active = map.id === activeId || map.file === editor.currentFile ? 'active' : '';
+        const dims = editor.mapDimensionsByFile?.[map.file];
+        const sizeText = dims && !dims.missing ? `${dims.width}×${dims.height}` : '?';
+        cells.push(`<button type="button" class="map-matrix-cell ${active}" data-project-map="${esc(map.id)}" title="${esc(map.name || map.id)} · ${esc(map.file)}">
+          <span class="map-matrix-tag">${esc(mapCompassTag(map, origin))}</span>
+          <strong>${esc(map.name || map.id)}</strong>
+          <span>${esc(sizeText)}</span>
+        </button>`);
+      }
+    }
+    rows.push(`<div class="map-matrix-row">${cells.join('')}</div>`);
+  }
+  return `<div class="map-compass-wrap"><h4 class="map-project-maps-title">Layout</h4><div class="map-matrix">${rows.join('')}</div></div>`;
 }
 
 function mapMatrixHtml(editor, esc) {
@@ -3693,8 +3916,8 @@ function refreshSelectedAssetPreview(editor) {
           paintSelectedPreviewFrame(expectedFrame, cached, 'Selected tile');
           return;
         }
-        const texture = tileTextureUrl(editor, tile);
-        if (texture) paintSelectedPreviewFrame(expectedFrame, texture, 'Selected tile');
+        const preview = tilePaintVisualUrl(editor, tileId);
+        if (preview) paintSelectedPreviewFrame(expectedFrame, preview, 'Selected tile');
         else expectedFrame.innerHTML = '<p class="hint">Preview unavailable</p>';
       });
     requestRtpksTileThumbnail(editor, tileId, {
@@ -4122,6 +4345,11 @@ async function loadMapFileIntoEditor(state, deps, fileName) {
   ensurePathLayer(editor.map);
   ensureTerrainVisual(editor.map);
   editor.currentFile = payload.fileName.endsWith('.owmap') ? payload.fileName : `${payload.map.id || 'map'}.owmap`;
+  editor.mapDimensionsByFile = editor.mapDimensionsByFile || {};
+  editor.mapDimensionsByFile[editor.currentFile] = {
+    width: editor.map.grid.width,
+    height: editor.map.grid.height,
+  };
   const projectEntry = editor.project?.maps?.find((map) => map.file === editor.currentFile || map.id === editor.map.id);
   if (projectEntry) editor.project.editor.activeMapId = projectEntry.id;
   editor.activePathSetId = editor.map.pathLayer?.activeSetId || editor.activePathSetId || editor.project?.pathSets?.[0]?.id || '';
@@ -4140,8 +4368,16 @@ async function loadMapFileIntoEditor(state, deps, fileName) {
 }
 
 export function bindMapEditor(state, deps) {
-  const { api, log, esc, render } = deps;
+  const { api, log, esc } = deps;
   const editor = ensureMapEditorState(state);
+  if (!editor._wrappedRender) {
+    const parentRender = deps.render;
+    editor._wrappedRender = () => {
+      rememberTileCatalogScroll(editor);
+      return parentRender();
+    };
+  }
+  const render = editor._wrappedRender;
 
   if (!editor._workstationDelegatesReady) {
     editor._workstationDelegatesReady = true;
@@ -4334,13 +4570,33 @@ export function bindMapEditor(state, deps) {
   }
 
   document.querySelectorAll('[data-project-map]').forEach((btn) => {
-    btn.onclick = async () => {
+    btn.onclick = async (event) => {
+      if (event.target.closest('[data-project-map-name]')) return;
       const entry = editor.project?.maps?.find((map) => map.id === btn.dataset.projectMap);
       if (!entry?.file) return;
       try {
         await loadMapFileIntoEditor(state, deps, entry.file);
       } catch (e) { /* api logs */ }
     };
+  });
+
+  document.querySelectorAll('[data-project-map-name]').forEach((input) => {
+    const commitName = () => {
+      const id = input.dataset.projectMapName;
+      const entry = editor.project?.maps?.find((map) => map.id === id);
+      if (!entry) return;
+      const name = input.value.trim() || entry.id;
+      entry.name = name;
+      if (editor.map && (editor.map.id === id || editor.currentFile === entry.file)) {
+        editor.map.name = name;
+      }
+      editor.projectDirty = true;
+      render();
+    };
+    input.onchange = commitName;
+    input.onblur = commitName;
+    input.onclick = (event) => event.stopPropagation();
+    input.onkeydown = (event) => event.stopPropagation();
   });
 
   document.querySelectorAll('[data-create-adjacent]').forEach((btn) => {
@@ -4355,6 +4611,9 @@ export function bindMapEditor(state, deps) {
             projectId: editor.project?.id || 'default',
             activeMapId: editor.map.id,
             direction: btn.dataset.createAdjacent,
+            anchorWidth: editor.map?.grid?.width,
+            anchorHeight: editor.map?.grid?.height,
+            anchorFile: editor.currentFile,
           }),
         }).then((res) => res.json().then((body) => ({ status: res.status, body })));
         if (payload.status >= 400 || !payload.body.ok) throw new Error(payload.body.error || 'Could not create adjacent map.');
@@ -4363,25 +4622,17 @@ export function bindMapEditor(state, deps) {
         const validation = await fetchJsonQuiet(`/api/map-projects/validate?id=${encodeURIComponent(editor.project.id)}`);
         editor.projectValidation = validation?.validation || null;
         const entry = payload.body.map;
-        editor.map = emptyMapLocal(editor.map.grid?.width || 16, editor.map.grid?.height || 16);
-        editor.map.id = entry.id;
-        editor.map.name = entry.name;
-        if (editor.tilePackage) {
-          editor.map.tilePackage = {
-            file: editor.tilePackage.fileName,
-            packId: editor.tilePackage.packId,
-            name: editor.tilePackage.name,
-            path: editor.tilePackage.gamePath,
-          };
-        }
-        ensureTerrainVisual(editor.map);
-        ensurePathLayer(editor.map);
-        editor.currentFile = entry.file;
-        editor.dirty = true;
-        clearMapHistory(editor);
+        await refreshProjectMapDimensions(editor);
+        await loadMapFileIntoEditor(state, deps, entry.file);
         editor.projectDirty = false;
-        log(payload.body.existing ? `Opened existing ${entry.file}` : `Created ${entry.file} in project`, 'ok');
-        render();
+        const dims = payload.body.dimensions;
+        const dir = btn.dataset.createAdjacent;
+        const sizeLabel = dims ? ` (${dims.width}×${dims.height})` : '';
+        if (payload.body.existing && !payload.body.fileCreated) {
+          log(`Opened ${directionLabel(dir)} map ${entry.file}${sizeLabel}`, 'ok');
+        } else {
+          log(`Created ${directionLabel(dir)} map ${entry.file}${sizeLabel}`, 'ok');
+        }
       } catch (e) {
         log(e.message || 'Could not create adjacent map.', 'error');
       }
@@ -4533,6 +4784,7 @@ export function bindMapEditor(state, deps) {
     }
     editor.dirty = true;
     if (useLight) {
+      editor._paintUsedLightUpdates = true;
       const size = editor.brushSize;
       const half = Math.floor(size / 2);
       for (let dy = -half; dy <= half; dy += 1) {
@@ -4546,6 +4798,7 @@ export function bindMapEditor(state, deps) {
       refreshMapPreview(state);
       return;
     }
+    editor._paintUsedLightUpdates = false;
     refreshMapPreview(state);
     render();
   };
@@ -4713,7 +4966,12 @@ export function bindMapEditor(state, deps) {
       if (editor.painting) {
         commitMapHistory(editor);
         editor._paintingHistoryActive = false;
-        render();
+        if (editor._paintUsedLightUpdates) {
+          syncPaintToolbarState(editor);
+          editor._paintUsedLightUpdates = false;
+        } else {
+          render();
+        }
       }
       editor.painting = false;
     }, { once: false });
@@ -5583,6 +5841,8 @@ export function bindMapEditor(state, deps) {
 
   syncMapEditorUI(state, deps);
   refreshMapPreview(state);
+  restoreTileCatalogScroll(editor);
+  requestAnimationFrame(() => restoreTileCatalogScroll(editor));
 }
 
 export async function initMapEditorTab(state, api) {
@@ -5593,21 +5853,32 @@ export async function initMapEditorTab(state, api) {
     await loadMapEditorListing(state, api);
     const activeEditor = ensureMapEditorState(state);
     if (!activeEditor.map) {
-      const active = activeEditor.project?.maps?.find((map) => map.id === activeEditor.project.editor?.activeMapId)
-        || activeEditor.project?.maps?.[0];
-      if (active?.file) {
-        const payload = await api(`/api/maps/file?file=${encodeURIComponent(active.file)}`);
-        activeEditor.map = payload.map;
-        activeEditor.map.grid.tileSize = TILE_SIZE;
-        ensureTileLayers(activeEditor.map);
-        ensurePathLayer(activeEditor.map);
-        ensureTerrainVisual(activeEditor.map);
-        activeEditor.currentFile = payload.fileName.endsWith('.owmap') ? payload.fileName : `${payload.map.id || 'map'}.owmap`;
-        if (activeEditor.map.tilePackage?.file) {
-          try { await loadTilePackage(activeEditor, activeEditor.map.tilePackage.file); } catch { /* keep listing available */ }
+      const preferredId = activeEditor.project?.editor?.activeMapId || '';
+      const projectMaps = activeEditor.project?.maps || [];
+      const ordered = [
+        ...projectMaps.filter((map) => map.id === preferredId),
+        ...projectMaps.filter((map) => map.id !== preferredId),
+      ];
+      for (const entry of ordered) {
+        if (!entry?.file) continue;
+        try {
+          const payload = await api(`/api/maps/file?file=${encodeURIComponent(entry.file)}`);
+          activeEditor.map = payload.map;
+          activeEditor.map.grid.tileSize = TILE_SIZE;
+          ensureTileLayers(activeEditor.map);
+          ensurePathLayer(activeEditor.map);
+          ensureTerrainVisual(activeEditor.map);
+          activeEditor.currentFile = payload.fileName.endsWith('.owmap') ? payload.fileName : `${payload.map.id || 'map'}.owmap`;
+          if (activeEditor.project?.editor) activeEditor.project.editor.activeMapId = entry.id;
+          if (activeEditor.map.tilePackage?.file) {
+            try { await loadTilePackage(activeEditor, activeEditor.map.tilePackage.file); } catch { /* keep listing available */ }
+          }
+          activeEditor.dirty = false;
+          clearMapHistory(activeEditor);
+          break;
+        } catch {
+          /* try next project map */
         }
-        activeEditor.dirty = false;
-        clearMapHistory(activeEditor);
       }
     }
     activeEditor.initialized = true;

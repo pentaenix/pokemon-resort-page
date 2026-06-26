@@ -8,41 +8,40 @@ import { ImageGalleryModal } from '../components/ImageGalleryModal.jsx';
 import { assetUrl, atlasSectionHref, scrollToSection } from '../lib/data.js';
 import { normalizeAtlasPins, ATLAS_PIN_COLORS } from '../lib/atlasPins.js';
 import { resolveCarouselSlideDisplay } from '../lib/frameFilename.js';
+import { prefetchAtlasImage } from '../lib/atlasImageLoader.js';
+import {
+  FRAMING_REFERENCE,
+  applyIslandBaseRotation,
+  applyIslandLighting,
+  applyIslandStageOffset,
+  createIslandLights,
+  fitIslandModel,
+  frameCameraToGroup,
+  normalizeIslandViewport,
+} from '../../tools/admin/shared/island-viewport.js';
+import {
+  normalizeMapAlignment,
+  pickIslandPinDot,
+  syncIslandPinDots,
+} from '../../tools/admin/shared/island-map-dots.js';
 
-function fitIslandModel(model, targetSize = 6.2) {
-  const box = new THREE.Box3().setFromObject(model);
-  const center = box.getCenter(new THREE.Vector3());
-  const maxDim = Math.max(...box.getSize(new THREE.Vector3()).toArray(), 0.001);
-  const scale = targetSize / maxDim;
-  model.scale.setScalar(scale);
-  model.position.sub(center.multiplyScalar(scale));
-}
-
-function frameCameraToGroup(camera, target, group, aspect, padding = 1.18) {
-  const box = new THREE.Box3().setFromObject(group);
-  if (box.isEmpty()) return;
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z, 0.001);
-  const fovRad = camera.fov * (Math.PI / 180);
-  const fitHeightDistance = (maxDim / 2) / Math.tan(fovRad / 2);
-  const fitWidthDistance = fitHeightDistance / Math.max(aspect, 0.001);
-  const distance = Math.max(fitHeightDistance, fitWidthDistance) * padding;
-
-  target.copy(center);
-  target.y += maxDim * 0.04;
-
-  camera.position.set(
-    center.x + distance * 0.1,
-    center.y + distance * 0.36,
-    center.z + distance * 0.9,
-  );
-  camera.lookAt(target);
-}
-
-function IslandStage3D({ islandModelUrl, displaySize = 6.2 }) {
+function IslandStage3D({
+  islandModelUrl,
+  displaySize = FRAMING_REFERENCE,
+  viewport,
+  pins = [],
+  mapAlignment,
+  selectedPinId = null,
+  onSelectPin,
+}) {
   const mountRef = useRef(null);
   const [modelState, setModelState] = useState(islandModelUrl ? 'loading' : 'placeholder');
+  const islandViewport = useMemo(() => normalizeIslandViewport(viewport), [viewport]);
+  const islandAlignment = useMemo(() => normalizeMapAlignment(mapAlignment), [mapAlignment]);
+  const pinDots = useMemo(
+    () => pins.filter((pin) => pin.map3d?.enabled !== false),
+    [pins],
+  );
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -57,21 +56,21 @@ function IslandStage3D({ islandModelUrl, displaySize = 6.2 }) {
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
     mount.appendChild(renderer.domElement);
 
-    scene.add(new THREE.HemisphereLight(0xf8ffff, 0x7ec8d8, 1.35));
-    const key = new THREE.DirectionalLight(0xffffff, 1.45);
-    key.position.set(4.5, 7.5, 5.5);
-    scene.add(key);
-    const fill = new THREE.DirectionalLight(0xd8f4ff, 0.55);
-    fill.position.set(-5, 2.5, -3);
-    scene.add(fill);
+    const islandViewport = normalizeIslandViewport(viewport);
+    const lights = createIslandLights(scene);
+    applyIslandLighting(lights, renderer, islandViewport);
 
     const rootGroup = new THREE.Group();
     scene.add(rootGroup);
+    const modelHolder = new THREE.Group();
+    rootGroup.add(modelHolder);
+    const dotsGroup = new THREE.Group();
+    modelHolder.add(dotsGroup);
     const placeholderGroup = new THREE.Group();
     rootGroup.add(placeholderGroup);
+    applyIslandStageOffset(rootGroup, islandViewport);
 
     const beach = new THREE.Mesh(new THREE.CylinderGeometry(3.05, 3.28, .12, 96), new THREE.MeshStandardMaterial({ color: 0xf4d9a4, roughness: .92 }));
     beach.scale.set(1.22, 1, .87);
@@ -84,6 +83,18 @@ function IslandStage3D({ islandModelUrl, displaySize = 6.2 }) {
     placeholderGroup.add(island);
 
     let loadedModel = null;
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+
+    function refreshDots() {
+      syncIslandPinDots(dotsGroup, pinDots, {
+        alignment: islandAlignment,
+        displaySize,
+        meshRoot: loadedModel,
+        selectedPinId,
+      });
+    }
+
     if (islandModelUrl) {
       const loader = new GLTFLoader();
       loader.load(
@@ -92,9 +103,10 @@ function IslandStage3D({ islandModelUrl, displaySize = 6.2 }) {
           if (disposed) return;
           loadedModel = gltf.scene;
           fitIslandModel(loadedModel, displaySize);
-          rootGroup.add(loadedModel);
+          modelHolder.add(loadedModel);
           placeholderGroup.visible = false;
           frameCamera();
+          refreshDots();
           setModelState('loaded');
         },
         undefined,
@@ -104,41 +116,56 @@ function IslandStage3D({ islandModelUrl, displaySize = 6.2 }) {
       setModelState('placeholder');
     }
 
-    const PITCH_MIN = -.2;
-    const PITCH_MAX = .22;
-    let yaw = -.25;
-    let pitch = .06;
+    let yaw = islandViewport.yaw;
     let dragging = false;
+    let dragMoved = false;
     let lastX = 0;
-    let lastY = 0;
-    rootGroup.rotation.order = 'YXZ';
 
     function applyRotation() {
-      rootGroup.rotation.y = yaw;
-      rootGroup.rotation.x = pitch;
+      applyIslandBaseRotation(rootGroup, islandViewport, yaw);
     }
     applyRotation();
 
     function frameCamera() {
-      frameCameraToGroup(camera, cameraTarget, rootGroup, mount.clientWidth / Math.max(1, mount.clientHeight));
+      const framingSubject = loadedModel ? modelHolder : rootGroup;
+      frameCameraToGroup(
+        camera,
+        cameraTarget,
+        rootGroup,
+        mount.clientWidth / Math.max(1, mount.clientHeight),
+        displaySize,
+        islandViewport,
+        framingSubject,
+      );
     }
     frameCamera();
+    refreshDots();
+
+    function pointerToNdc(event) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
 
     function handlePointerDown(event) {
       dragging = true;
+      dragMoved = false;
       lastX = event.clientX;
-      lastY = event.clientY;
       renderer.domElement.setPointerCapture?.(event.pointerId);
     }
     function handlePointerMove(event) {
       if (!dragging) return;
+      if (Math.abs(event.clientX - lastX) > 2) dragMoved = true;
       yaw += (event.clientX - lastX) * .006;
-      pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch + (event.clientY - lastY) * .004));
       lastX = event.clientX;
-      lastY = event.clientY;
       applyRotation();
     }
     function handlePointerUp(event) {
+      if (dragging && !dragMoved && loadedModel) {
+        pointerToNdc(event);
+        const dotId = pickIslandPinDot(raycaster, pointer, camera, dotsGroup);
+        if (dotId) onSelectPin?.(dotId);
+      }
       dragging = false;
       renderer.domElement.releasePointerCapture?.(event.pointerId);
     }
@@ -182,15 +209,21 @@ function IslandStage3D({ islandModelUrl, displaySize = 6.2 }) {
           }
         });
       }
+      dotsGroup.traverse((child) => {
+        if (child.isMesh) {
+          child.geometry?.dispose();
+          child.material?.dispose();
+        }
+      });
       mount.removeChild(renderer.domElement);
       renderer.dispose();
     };
-  }, [islandModelUrl, displaySize]);
+  }, [islandModelUrl, displaySize, islandViewport, islandAlignment, pinDots, selectedPinId, onSelectPin]);
 
   const modelHint = modelState === 'loading'
     ? 'Loading island mesh…'
     : modelState === 'loaded'
-      ? 'Drag to rotate · nudge up/down for a slight tilt'
+      ? 'Drag to rotate'
       : 'Island model in progress';
 
   return (
@@ -312,6 +345,15 @@ export default function Atlas({ data, query }) {
     return () => window.clearTimeout(id);
   }, [query?.section]);
 
+  useEffect(() => {
+    prefetchAtlasImage(atlas.map.showReference?.path);
+    allPins.forEach((pin) => prefetchAtlasImage(pin.coverImage?.path));
+  }, [allPins, atlas.map.showReference?.path]);
+
+  useEffect(() => {
+    prefetchAtlasImage(selected?.coverImage?.path);
+  }, [selected?.coverImage?.path]);
+
   function toggleLayer(key, value) {
     setLayers((prev) => ({ ...prev, [key]: value }));
   }
@@ -371,6 +413,8 @@ export default function Atlas({ data, query }) {
                   type="button"
                   className={`atlas-pin-tab atlas-pin-tab--${pin.color}${selected?.id === pin.id ? ' active' : ''}`}
                   onClick={() => setSelectedId(pin.id)}
+                  onMouseEnter={() => prefetchAtlasImage(pin.coverImage?.path)}
+                  onFocus={() => prefetchAtlasImage(pin.coverImage?.path)}
                 >
                   {pin.name}
                 </button>
@@ -430,12 +474,20 @@ export default function Atlas({ data, query }) {
         <div className="section-intro compact">
           <p className="eyebrow">3D pass</p>
           <h2>Island diorama</h2>
-          <p>Rough mesh built from the cork-board layout—handy for scale, not gospel. Drag to turn it; pull up or down a little if you want a different angle.</p>
+          <p>Rough mesh built from the cork-board layout. Colored dots match cork pins — click a dot to jump to that location. Drag to turn the island.</p>
         </div>
         <div className="atlas-card atlas-card--3d">
           <IslandStage3D
             islandModelUrl={data.models?.mainModel?.file ? assetUrl(data.models.mainModel.file) : null}
-            displaySize={Number(data.models?.mainModel?.displaySize) || 6.2}
+            displaySize={Number(data.models?.mainModel?.displaySize) || FRAMING_REFERENCE}
+            viewport={data.models?.mainModel?.viewport}
+            mapAlignment={data.models?.mainModel?.mapAlignment}
+            pins={allPins}
+            selectedPinId={selected?.id}
+            onSelectPin={(pinId) => {
+              setSelectedId(pinId);
+              scrollToSection('atlas-map');
+            }}
           />
         </div>
       </section>

@@ -81,11 +81,13 @@ function buildTerrain(map, tileSize, packageInfo = null) {
 
   const cornersAt = (x, z) => {
     if (x < 0 || z < 0 || x >= w || z >= h) return [0, 0, 0, 0];
-    return cornerHeightsForTile(specials?.[z]?.[x] ?? 0, heights, w, h, x, z, floorHeight);
+    return cornerHeightsForTile(specials?.[z]?.[x] ?? 0, heights, w, h, x, z, floorHeight, specials);
   };
 
   const hasVisibleTile = (x, z) => {
     if (!tileLayers?.length) return false;
+    const special = specials?.[z]?.[x] ?? 0;
+    if (special >= SPECIAL.RAMP_N && special <= SPECIAL.CONCAVE_NW) return false;
     return tileLayers.some(({ layer }) => {
       for (let ay = 0; ay <= z; ay += 1) {
         for (let ax = 0; ax <= x; ax += 1) {

@@ -58,6 +58,22 @@ function tileHeight(heights, tx, ty) {
   return heights?.[ty]?.[tx] ?? 0;
 }
 
+function inBounds(width, height, tx, ty) {
+  return tx >= 0 && ty >= 0 && tx < width && ty < height;
+}
+
+function isCardinalRamp(special) {
+  return special >= SPECIAL.RAMP_N && special <= SPECIAL.RAMP_W;
+}
+
+function rampAxis(special) {
+  if (special === SPECIAL.RAMP_N) return { dx: 0, dy: -1 };
+  if (special === SPECIAL.RAMP_E) return { dx: 1, dy: 0 };
+  if (special === SPECIAL.RAMP_S) return { dx: 0, dy: 1 };
+  if (special === SPECIAL.RAMP_W) return { dx: -1, dy: 0 };
+  return { dx: 0, dy: 0 };
+}
+
 /** Infer cardinal ramp 2–5 from neighbor heights (same rules as game runtime). */
 export function inferCardinalRampDirection(heights, width, height, tx, ty) {
   const h = tileHeight(heights, tx, ty);
@@ -77,6 +93,10 @@ export function inferCardinalRampDirection(heights, width, height, tx, ty) {
 function applyCardinalSlope(out, dir, hv, tileSize) {
   const low = hv * tileSize;
   const high = (hv + 1) * tileSize;
+  applyCardinalSlopeEdges(out, dir, low, high);
+}
+
+function applyCardinalSlopeEdges(out, dir, low, high) {
   if (dir === SPECIAL.RAMP_N) {
     out[0] = high; out[1] = high; out[2] = low; out[3] = low;
   } else if (dir === SPECIAL.RAMP_E) {
@@ -86,6 +106,52 @@ function applyCardinalSlope(out, dir, hv, tileSize) {
   } else if (dir === SPECIAL.RAMP_W) {
     out[0] = high; out[1] = low; out[2] = low; out[3] = high;
   }
+}
+
+function solveCardinalRampRun(special, heights, specials, width, height, tx, ty) {
+  const axis = rampAxis(special);
+  let startX = tx;
+  let startY = ty;
+  let index = 0;
+  while ((specials?.[startY - axis.dy]?.[startX - axis.dx] ?? SPECIAL.FLAT) === special) {
+    startX -= axis.dx;
+    startY -= axis.dy;
+    index += 1;
+  }
+
+  let endX = startX;
+  let endY = startY;
+  let count = 1;
+  let minBase = tileHeight(heights, endX, endY);
+  let maxBase = minBase;
+  while ((specials?.[endY + axis.dy]?.[endX + axis.dx] ?? SPECIAL.FLAT) === special) {
+    endX += axis.dx;
+    endY += axis.dy;
+    count += 1;
+    const h = tileHeight(heights, endX, endY);
+    minBase = Math.min(minBase, h);
+    maxBase = Math.max(maxBase, h);
+  }
+
+  const lowX = startX - axis.dx;
+  const lowY = startY - axis.dy;
+  const highX = endX + axis.dx;
+  const highY = endY + axis.dy;
+  let lowUnits;
+  if (inBounds(width, height, lowX, lowY)) {
+    lowUnits = tileHeight(heights, lowX, lowY);
+  } else {
+    lowUnits = minBase;
+  }
+
+  let highUnits;
+  if (inBounds(width, height, highX, highY)) {
+    highUnits = tileHeight(heights, highX, highY);
+  } else {
+    highUnits = maxBase + 1;
+  }
+  if (highUnits <= lowUnits) highUnits = Math.max(lowUnits + 1, maxBase + 1);
+  return { index, count, lowUnits, highUnits };
 }
 
 /** Corner order NW, NE, SE, SW: matches TerrainSurface.cpp / OverworldMapRenderer.cpp. */
@@ -138,14 +204,24 @@ export function cornerHeightsForTile(
   tx,
   ty,
   tileSize = 16,
+  specials = null,
 ) {
   const hv = tileHeight(heights, tx, ty);
   const flat = Math.max(0, hv) * tileSize;
   const out = [flat, flat, flat, flat];
 
   const effective = effectiveSpecial(special, heights, width, height, tx, ty);
-  if (effective >= SPECIAL.RAMP_N && effective <= SPECIAL.RAMP_W) {
-    applyCardinalSlope(out, effective, hv, tileSize);
+  if (isCardinalRamp(effective)) {
+    if (specials) {
+      const run = solveCardinalRampRun(effective, heights, specials, width, height, tx, ty);
+      const t0 = run.index / Math.max(1, run.count);
+      const t1 = (run.index + 1) / Math.max(1, run.count);
+      const low = (run.lowUnits + ((run.highUnits - run.lowUnits) * t0)) * tileSize;
+      const high = (run.lowUnits + ((run.highUnits - run.lowUnits) * t1)) * tileSize;
+      applyCardinalSlopeEdges(out, effective, low, high);
+    } else {
+      applyCardinalSlope(out, effective, hv, tileSize);
+    }
     return out;
   }
 

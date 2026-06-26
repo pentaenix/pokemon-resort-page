@@ -140,7 +140,6 @@ const JSX_UI_FILES = [
   'src/pages/Atlas.jsx',
   'src/pages/Plan.jsx',
   'src/pages/Board.jsx',
-  'src/pages/ConciergeResearch.jsx',
   'src/pages/Legal.jsx',
   'src/pages/Milestones.jsx',
   'src/pages/SourceGuide.jsx',

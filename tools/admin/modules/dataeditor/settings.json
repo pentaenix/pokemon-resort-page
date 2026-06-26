@@ -1,0 +1,5 @@
+{
+  "configDirectory": "pokemon-resort/config",
+  "createBackups": true,
+  "backupDirectory": "tools/admin/modules/dataeditor/backups"
+}

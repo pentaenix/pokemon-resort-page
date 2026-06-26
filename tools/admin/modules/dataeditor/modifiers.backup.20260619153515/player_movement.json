@@ -1,0 +1,77 @@
+{
+  "title": "Movement Settings",
+  "description": "Player/NPC movement speeds, acceleration, running, and collision feel.",
+  "tags": [
+    "movement",
+    "player"
+  ],
+  "groups": [
+    {
+      "id": "speed",
+      "label": "Speed",
+      "order": 10
+    },
+    {
+      "id": "acceleration",
+      "label": "Acceleration",
+      "order": 20
+    },
+    {
+      "id": "collision",
+      "label": "Collision",
+      "order": 30
+    },
+    {
+      "id": "debug",
+      "label": "Debug",
+      "order": 90
+    }
+  ],
+  "patterns": {
+    "*speed*": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.05,
+      "group": "speed"
+    },
+    "*walk*": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.05,
+      "group": "speed"
+    },
+    "*run*": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.05,
+      "group": "speed"
+    },
+    "*accel*": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.05,
+      "group": "acceleration"
+    },
+    "*decel*": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.05,
+      "group": "acceleration"
+    },
+    "*friction*": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "group": "acceleration"
+    },
+    "*collision*": {
+      "widget": "checkbox",
+      "group": "collision"
+    },
+    "*debug*": {
+      "widget": "checkbox",
+      "group": "debug",
+      "advanced": true
+    }
+  }
+}

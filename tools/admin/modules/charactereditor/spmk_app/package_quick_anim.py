@@ -262,41 +262,56 @@ def apply_quick_anim_to_path(
         frame_pngs, profile, south_row_only=south_only
     )
     if anim_id == "sleep":
+        from spmk_app.pokemon_variant_model import (
+            attach_variant_fields,
+            pokemon_sleep_action,
+            sync_sheet_variant_fields,
+        )
+
+        walk_sheet = _resolve_walk_sheet(pkg, walk_sheet_id)
+        walk_synced = sync_sheet_variant_fields(walk_sheet)
+        form_id = walk_synced.get("formId") or "default"
+        modifiers = walk_synced.get("modifiers") or []
         sheet_id = pokemon_sleep_sheet_id_for_walk(walk_sheet_id)
-        action_id = sheet_id
         anim_key = "sleep"
     else:
         sheet_id = anim_id
-        action_id = anim_id
         anim_key = anim_id
+        form_id = "default"
+        modifiers: List[str] = []
     asset_id = f"{sheet_id}_png"
     frame_indices = list(range(min(len(frame_pngs), 4)))
     sheets = [s for s in (pkg.get("spriteSheets") or []) if (s.get("id") or "") != sheet_id]
-    sheets.append(
-        {
+    sheet_rec: Dict[str, Any] = {
+        "id": sheet_id,
+        "name": anim_key.replace("_", " ").title(),
+        "assetId": asset_id,
+        "profile": profile,
+        "animations": {
+            anim_key: {
+                "frames": frame_indices,
+                "frameTimeMs": max(50, int(frame_time_ms)),
+                "loop": True,
+            }
+        },
+    }
+    if anim_id == "sleep":
+        sheet_rec = attach_variant_fields(
+            sheet_rec, form_id=form_id, modifiers=modifiers, behavior="sleep"
+        )
+        new_action = pokemon_sleep_action(form_id, modifiers, sheet_id)
+    else:
+        new_action = {
             "id": sheet_id,
-            "name": anim_key.replace("_", " ").title(),
-            "assetId": asset_id,
-            "profile": profile,
-            "animations": {
-                anim_key: {
-                    "frames": frame_indices,
-                    "frameTimeMs": max(50, int(frame_time_ms)),
-                    "loop": True,
-                }
-            },
-        }
-    )
-    actions = [a for a in (pkg.get("actions") or []) if (a.get("id") or "") != action_id]
-    actions.append(
-        {
-            "id": action_id,
             "type": "idle",
             "sheetId": sheet_id,
             "animationName": anim_key,
             "movementDriven": False,
         }
-    )
+    sheets.append(sheet_rec)
+    action_id = new_action["id"]
+    actions = [a for a in (pkg.get("actions") or []) if (a.get("id") or "") != action_id]
+    actions.append(new_action)
     stale_assets = {
         s.get("assetId")
         for s in (pkg.get("spriteSheets") or [])

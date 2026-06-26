@@ -1,0 +1,185 @@
+{
+  "title": "Loading Screen",
+  "description": "Real config/loading_screen.json: shared Pokeball loader and Resort transfer boat/loading animation.",
+  "tags": [
+    "verified",
+    "loading",
+    "boat",
+    "colors",
+    "motion"
+  ],
+  "preview": {
+    "enabled": true,
+    "type": "ui-layout",
+    "title": "Loading screen preview",
+    "description": "Approximate placement for ball/text and Resort transfer boat scene.",
+    "defaultWidth": 1280,
+    "defaultHeight": 800,
+    "maxElements": 16,
+    "elements": [
+      {
+        "label": "Ball",
+        "centerX": "ball_center.x",
+        "centerY": "ball_center.y",
+        "defaultWidth": 96,
+        "defaultHeight": 96
+      },
+      {
+        "label": "Text",
+        "centerX": "text_center.x",
+        "centerY": "text_center.y",
+        "defaultWidth": 420,
+        "defaultHeight": 60
+      },
+      {
+        "label": "Sun",
+        "centerXRatio": "resort_transfer.sun.center_x_ratio",
+        "bottomOffset": "resort_transfer.sun.bottom_offset",
+        "width": "resort_transfer.sun.diameter",
+        "height": "resort_transfer.sun.diameter"
+      },
+      {
+        "label": "Boat",
+        "centerXRatio": "resort_transfer.boat.center_x_ratio",
+        "bottomOffset": "resort_transfer.boat.bottom_offset",
+        "defaultWidth": 360,
+        "defaultHeight": 150
+      },
+      {
+        "label": "Message",
+        "centerXRatio": "resort_transfer.message.center_x_ratio",
+        "bottomOffset": "resort_transfer.message.center_bottom_offset",
+        "defaultWidth": 360,
+        "defaultHeight": 160
+      },
+      {
+        "label": "Quick Pass Message",
+        "centerXRatio": "resort_transfer.quick_pass.message.center_x_ratio",
+        "bottomOffset": "resort_transfer.quick_pass.message.center_bottom_offset",
+        "defaultWidth": 360,
+        "defaultHeight": 130
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "basic",
+      "label": "Basic loader",
+      "order": 5
+    },
+    {
+      "id": "assets",
+      "label": "Assets",
+      "order": 10
+    },
+    {
+      "id": "colors",
+      "label": "Scene colors",
+      "order": 20
+    },
+    {
+      "id": "timing",
+      "label": "Timing",
+      "order": 30
+    },
+    {
+      "id": "layout",
+      "label": "Placement",
+      "order": 40
+    },
+    {
+      "id": "boat",
+      "label": "Boat",
+      "order": 50
+    },
+    {
+      "id": "foam",
+      "label": "Foam",
+      "order": 60
+    },
+    {
+      "id": "waves",
+      "label": "Waves",
+      "order": 70
+    },
+    {
+      "id": "messages",
+      "label": "Messages",
+      "order": 80
+    }
+  ],
+  "fields": {
+    "balls_directory": {
+      "widget": "path",
+      "group": "assets",
+      "order": 1
+    },
+    "text_color": {
+      "widget": "color-wheel",
+      "group": "colors",
+      "order": 1
+    },
+    "ball_scale": {
+      "widget": "slider",
+      "min": 0.1,
+      "max": 8,
+      "step": 0.05,
+      "group": "basic"
+    },
+    "lap_seconds": {
+      "widget": "number",
+      "min": 0,
+      "step": 0.01,
+      "unit": "s",
+      "group": "timing"
+    },
+    "resort_transfer.message.texts": {
+      "widget": "json",
+      "rows": 8,
+      "group": "messages",
+      "description": "Message catalog used by loading keys."
+    }
+  },
+  "patterns": {
+    "resort_transfer.assets.*": {
+      "widget": "asset",
+      "group": "assets"
+    },
+    "resort_transfer.colors.*": {
+      "widget": "color-wheel",
+      "group": "colors"
+    },
+    "resort_transfer.timing.*": {
+      "widget": "json",
+      "group": "timing"
+    },
+    "resort_transfer.quick_pass.*": {
+      "group": "timing"
+    },
+    "resort_transfer.quick_pass.message.*": {
+      "group": "messages"
+    },
+    "resort_transfer.message.*": {
+      "group": "messages"
+    },
+    "resort_transfer.boat.*": {
+      "group": "boat"
+    },
+    "resort_transfer.foam.*": {
+      "group": "foam"
+    },
+    "resort_transfer.waves.*": {
+      "group": "waves"
+    },
+    "resort_transfer.waves.layers": {
+      "widget": "json",
+      "rows": 12,
+      "group": "waves"
+    },
+    "resort_transfer.temporal": {
+      "widget": "json",
+      "rows": 8,
+      "group": "advanced"
+    }
+  }
+}

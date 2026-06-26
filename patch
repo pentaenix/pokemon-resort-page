@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_DIR="$(pwd)"
+if [[ ! -f "$REPO_DIR/tools/admin/server.mjs" ]]; then
+  echo "Run ./patch from the pokemon-resort-page repository root." >&2
+  exit 1
+fi
+
+ZIP="${1:-}"
+if [[ -z "$ZIP" ]]; then
+  ZIP="$(ls -t ../pokemon-resort-page-data-editor-*.zip ../pokemon-resort-page-*.zip ../data-editor-*.zip 2>/dev/null | head -n 1 || true)"
+fi
+
+if [[ -z "$ZIP" || ! -f "$ZIP" ]]; then
+  echo "Could not find a patch zip in the parent folder." >&2
+  echo "Put the newest patch zip beside pokemon-resort-page, then run ./patch again." >&2
+  echo "You can also pass one directly: ./patch ../patch-file.zip" >&2
+  exit 1
+fi
+
+TMP="$(mktemp -d)"
+cleanup() { rm -rf "$TMP"; }
+trap cleanup EXIT
+
+echo "Applying patch: $ZIP"
+unzip -q "$ZIP" -d "$TMP"
+if [[ ! -f "$TMP/install.sh" ]]; then
+  echo "Patch zip is missing install.sh" >&2
+  exit 1
+fi
+bash "$TMP/install.sh"
+rm -f "$ZIP"
+echo "Patch installed successfully. Removed $ZIP"

@@ -1,0 +1,171 @@
+{
+  "title": "Transfer Select Save",
+  "description": "Real config/transfer_select_save.json: travel desk header, ticket list, ticket art/text layout, rip animation, top wave banner, and game palette.",
+  "tags": [
+    "verified",
+    "transfer",
+    "tickets",
+    "palette",
+    "layout"
+  ],
+  "preview": {
+    "enabled": true,
+    "type": "ui-layout",
+    "title": "Transfer ticket screen preview",
+    "description": "Approximate 1280×800 mockup for the header, list viewport, ticket start, and top wave banner.",
+    "defaultWidth": 1280,
+    "defaultHeight": 800,
+    "maxElements": 16,
+    "elements": [
+      {
+        "label": "Header Title",
+        "centerX": "transfer_screen.header.title_center.x",
+        "centerY": "transfer_screen.header.title_center.y",
+        "defaultWidth": 480,
+        "defaultHeight": 58
+      },
+      {
+        "label": "Subtitle",
+        "centerX": "transfer_screen.header.subtitle_center.x",
+        "centerY": "transfer_screen.header.subtitle_center.y",
+        "defaultWidth": 560,
+        "defaultHeight": 34
+      },
+      {
+        "label": "Ticket List Viewport",
+        "x": "transfer_screen.list.viewport.x",
+        "y": "transfer_screen.list.viewport.y",
+        "width": "transfer_screen.list.viewport.w",
+        "height": "transfer_screen.list.viewport.h"
+      },
+      {
+        "label": "First Ticket",
+        "x": "transfer_screen.list.start.x",
+        "y": "transfer_screen.list.start.y",
+        "defaultWidth": 980,
+        "defaultHeight": 280
+      },
+      {
+        "label": "Top Wave Banner",
+        "x": 0,
+        "y": 0,
+        "defaultWidth": 1280,
+        "height": "transfer_screen.top_wave_banner.max_height_from_top_px"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "id": "screen",
+      "label": "Screen fade and header",
+      "order": 5
+    },
+    {
+      "id": "list",
+      "label": "Save list",
+      "order": 10
+    },
+    {
+      "id": "audio",
+      "label": "Lobby audio",
+      "order": 15
+    },
+    {
+      "id": "background",
+      "label": "Background animation",
+      "order": 20
+    },
+    {
+      "id": "wave",
+      "label": "Top wave banner",
+      "order": 25
+    },
+    {
+      "id": "ticket",
+      "label": "Ticket layout",
+      "order": 30
+    },
+    {
+      "id": "selection",
+      "label": "Selection border",
+      "order": 40
+    },
+    {
+      "id": "rip",
+      "label": "Rip animation",
+      "order": 50
+    },
+    {
+      "id": "palette",
+      "label": "Game palette",
+      "order": 60
+    }
+  ],
+  "fields": {
+    "transfer_screen.header.title_color": {
+      "widget": "color-wheel",
+      "group": "screen"
+    },
+    "transfer_screen.header.subtitle_color": {
+      "widget": "color-wheel",
+      "group": "screen"
+    },
+    "transfer_screen.top_wave_banner.color": {
+      "widget": "color-wheel",
+      "group": "wave"
+    },
+    "ticket.selection.border_color": {
+      "widget": "color-wheel",
+      "group": "selection"
+    },
+    "ticket.selection.border_alpha": {
+      "widget": "slider",
+      "min": 0,
+      "max": 255,
+      "step": 1,
+      "group": "selection"
+    },
+    "palette.game_colors": {
+      "widget": "json",
+      "rows": 18,
+      "group": "palette",
+      "description": "Game-to-color map. Each value can also be edited in JSON Text mode."
+    }
+  },
+  "patterns": {
+    "transfer_screen.fade.*": {
+      "group": "screen"
+    },
+    "transfer_screen.header.*": {
+      "group": "screen"
+    },
+    "transfer_screen.list.*": {
+      "group": "list"
+    },
+    "transfer_screen.audio.*": {
+      "group": "audio"
+    },
+    "transfer_screen.background_animation.*": {
+      "group": "background"
+    },
+    "transfer_screen.top_wave_banner.*": {
+      "group": "wave"
+    },
+    "ticket.font_sizes.*": {
+      "group": "ticket"
+    },
+    "ticket.layout.*": {
+      "group": "ticket"
+    },
+    "ticket.selection.*": {
+      "group": "selection"
+    },
+    "ticket.rip_animation.*": {
+      "group": "rip"
+    },
+    "palette.game_colors.*": {
+      "widget": "color-wheel",
+      "group": "palette"
+    }
+  }
+}
