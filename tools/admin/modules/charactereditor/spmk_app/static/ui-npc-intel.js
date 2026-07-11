@@ -360,6 +360,7 @@ function refreshNpcIntelList(listId, rowAttr, rows, builder) {
 }
 
 function bindNpcIntelRowHandlers(root = document) {
+  if (!root) return;
   $$('[data-npc-rm]', root).forEach((btn) => {
     btn.onclick = () => {
       const row = btn.closest('[data-npc-row]');

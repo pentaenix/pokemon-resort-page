@@ -2584,21 +2584,47 @@ function openCharacterCreateModal() {
   const kind = $('#pkgCreateKind', m.root); let profile = null; let legacyIntel = null; let profileDiagnostics = null; let pokemon = null; let existingPackage = null;
   const fileStem = (file) => String(file?.name || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
   const setLog = (lines) => { $('#pkgCreateGeneration', m.root).hidden = false; $('#pkgCreateGenerationLog', m.root).value = lines.filter(Boolean).join('\n'); };
-  const reviewField = (label, value, wide = false) => `<div class="field${wide ? ' pkg-review-wide' : ''}"><label>${esc(label)}</label><input class="input" value="${escAttr(String(value ?? ''))}" readonly></div>`;
+  const reviewField = (label, key, value) => {
+    if (typeof value === 'boolean') return `<div class="field"><label>${esc(label)}</label><label class="check"><input type="checkbox" data-profile-key="${escAttr(key)}"${value ? ' checked' : ''}> Enabled</label></div>`;
+    const type = typeof value === 'number' ? 'number' : 'text';
+    const nullable = value == null ? ' data-profile-nullable="true"' : '';
+    return `<div class="field"><label>${esc(label)}</label><input class="input" type="${type}" data-profile-key="${escAttr(key)}"${nullable} value="${escAttr(String(value ?? ''))}"></div>`;
+  };
   const renderProfileReview = (data) => {
     const labelFor = (key) => key.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
     const valueField = (key, value) => {
       if (key === 'dialogue') return '';
-      if (Array.isArray(value) || (value && typeof value === 'object') || key === 'description') return `<div class="field pkg-review-wide"><label>${esc(labelFor(key))}</label><textarea class="input pkg-desc-area" readonly>${esc(Array.isArray(value) ? value.join('\n') : (value && typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? '')))}</textarea></div>`;
-      return reviewField(labelFor(key), value == null ? 'None' : value);
+      if (Array.isArray(value)) return `<div class="field pkg-review-wide"><label>${esc(labelFor(key))}</label><textarea class="input pkg-desc-area" data-profile-array="${escAttr(key)}">${esc(value.join('\n'))}</textarea></div>`;
+      if (value && typeof value === 'object') return `<div class="field pkg-review-wide"><label>${esc(labelFor(key))}</label><textarea class="input pkg-desc-area" data-profile-object="${escAttr(key)}">${esc(JSON.stringify(value, null, 2))}</textarea></div>`;
+      if (key === 'description') return `<div class="field pkg-review-wide"><label>${esc(labelFor(key))}</label><textarea class="input pkg-desc-area" data-profile-key="${escAttr(key)}">${esc(String(value ?? ''))}</textarea></div>`;
+      return reviewField(labelFor(key), key, value);
     };
     const coreOrder = ['character_name', 'description', 'role', 'main_pokemon', 'additional_pokemon', 'source_game', 'source_region', 'badge_requirement', 'relationships'];
     const orderedKeys = [...coreOrder.filter((key) => Object.hasOwn(data, key)), ...Object.keys(data).filter((key) => !coreOrder.includes(key) && key !== 'dialogue')];
     const overview = `<div class="pkg-review-fields">${orderedKeys.map((key) => valueField(key, data[key])).join('')}</div>`;
-    const dialogue = `<div class="pkg-review-dialogue">${(data.dialogue || []).map((line, i) => `<div class="pkg-review-dialogue-row"><span>${i + 1}</span><input class="input" value="${escAttr(line)}" readonly></div>`).join('')}</div>`;
+    const dialogue = `<div class="pkg-review-dialogue">${(data.dialogue || []).map((line, i) => `<div class="pkg-review-dialogue-row"><span>${i + 1}</span><input class="input" data-profile-dialogue="${i}" value="${escAttr(line)}"></div>`).join('')}</div>`;
     const tabs = [['overview', 'Profile'], ['dialogue', 'Dialogue']];
     $('#pkgCreateReview', m.root).innerHTML = `<div class="pkg-review-tabs" role="tablist">${tabs.map(([id, label], i) => `<button type="button" class="btn small${i ? '' : ' active'}" data-review-tab="${id}">${label}</button>`).join('')}</div>${tabs.map(([id]) => `<div class="pkg-review-panel" data-review-panel="${id}"${id === 'overview' ? '' : ' hidden'}>${id === 'overview' ? overview : dialogue}</div>`).join('')}`;
     $$('[data-review-tab]', m.root).forEach((button) => button.onclick = () => { $$('[data-review-tab]', m.root).forEach((item) => item.classList.toggle('active', item === button)); $$('[data-review-panel]', m.root).forEach((panel) => { panel.hidden = panel.dataset.reviewPanel !== button.dataset.reviewTab; }); });
+  };
+  const collectEditedProfile = () => {
+    if (!profile) return null;
+    const next = structuredClone(profile);
+    $$('[data-profile-key]', m.root).forEach((input) => {
+      const key = input.dataset.profileKey;
+      if (!key) return;
+      if (input.type === 'checkbox') next[key] = input.checked;
+      else if (input.type === 'number') next[key] = input.value === '' && input.dataset.profileNullable ? null : Number(input.value);
+      else next[key] = input.value === '' && input.dataset.profileNullable ? null : input.value.trim();
+    });
+    $$('[data-profile-array]', m.root).forEach((input) => { next[input.dataset.profileArray] = parseLines(input.value); });
+    $$('[data-profile-object]', m.root).forEach((input) => {
+      try { next[input.dataset.profileObject] = JSON.parse(input.value || '{}'); }
+      catch (_) { throw new Error(`${input.dataset.profileObject} must contain valid JSON.`); }
+    });
+    const lines = $$('[data-profile-dialogue]', m.root).map((input) => input.value.trim()).filter(Boolean);
+    if (Object.hasOwn(next, 'dialogue')) next.dialogue = lines;
+    return next;
   };
   const syncProfileSource = () => {
     const isNpc = kind.value === 'npc';
@@ -2692,6 +2718,8 @@ function openCharacterCreateModal() {
     const value = kind.value;
     const file = $('#pkgCreateImage', m.root)?.files?.[0];
     try {
+      $('#pkgCreateDraft', m.root).disabled = true;
+      if (value === 'npc' && profile) profile = collectEditedProfile();
       const name = (value === 'npc' && profile ? (profile.character_name || profile.display_name) : $('#pkgCreateName', m.root)?.value)?.trim();
       if (value === 'pokemon' && !pokemon) { toast('Fetch Pokemon info before creating this draft'); return; }
       if (!name) { toast(value === 'npc' ? 'Enter a name or fetch NPC info from the sheet' : 'Enter a name first'); return; }
@@ -2704,8 +2732,9 @@ function openCharacterCreateModal() {
       else if (value === 'pokemon') await applyPokemonLookup(pokemon);
       else await saveDraft({ id, displayName: name, internalName: id, metadata: { ...(pkg()?.metadata || {}), characterType: value, ...(value === 'object' ? { objectCategory: DEFAULT_OBJECT_CATEGORY, objectAnimated: false } : {}) } });
       if (file) { const sheet = new FormData(); sheet.append('file', file); sheet.append('mode', 'primary'); sheet.append('walkSheetId', 'walk'); await api('/api/packages/draft/add-sheet', { method: 'POST', body: sheet }); }
+      await api('/api/packages/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
       pkgState.panel = 'detail'; cleanupNavigationGuard(); m.close(); await loadPackageContext(); renderPackages(); toast(`${value === 'pokemon' ? 'Pokemon' : 'Character'} draft created`);
-    } catch (err) { toast(String(err.message || err)); }
+    } catch (err) { $('#pkgCreateDraft', m.root).disabled = false; toast(String(err.message || err)); }
   };
 }
 
