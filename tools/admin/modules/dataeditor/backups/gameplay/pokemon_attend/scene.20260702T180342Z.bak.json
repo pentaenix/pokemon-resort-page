@@ -1,0 +1,112 @@
+{
+  "activeScene": "grass_png_no_floor",
+  "scenes": [
+    {
+      "id": "default_attend",
+      "activePokemon": "psyduck",
+      "activeFloor": "grass",
+      "activeWall": "soft_gradient",
+      "pokemon": {
+        "posePresets": [
+          {
+            "id": "stand_default",
+            "yawDegrees": 0,
+            "pitchDegrees": 0,
+            "note": "Default upright attend preview pose."
+          },
+          {
+            "id": "sleep_lie_back_saved",
+            "yawDegrees": 0,
+            "pitchDegrees": -90,
+            "note": "Saved from the first skinned-animation pass; funny lying-on-back pose for future sleep/rest interactions."
+          }
+        ],
+        "position": { "x": 0, "y": 0, "z": -0.5 },
+        "idleMotion": {
+          "enabled": false,
+          "bobAmplitude": 0.0,
+          "bobSeconds": 2.2,
+          "rockDegrees": 0.0,
+          "rockSeconds": 4.2
+        }
+      },
+      "camera": {
+        "distance": 3.135,
+        "height": 1.35,
+        "targetHeight": 0.76,
+        "fovYDegrees": 32,
+        "nearClip": 0.05,
+        "farClip": 80
+      },
+      "lighting": {
+        "brightness": 1.08,
+        "tint": [1.0, 0.985, 0.94]
+      },
+      "background": {
+        "clearColor": "#2E6F8F"
+      }
+    },
+    {
+      "id": "grass_png_with_floor",
+      "activePokemon": "psyduck",
+      "activeFloor": "grass",
+      "activeWall": "grass_png",
+      "pokemon": {
+        "position": { "x": 0, "y": 0, "z": -0.5 },
+        "idleMotion": {
+          "enabled": false,
+          "bobAmplitude": 0.0,
+          "bobSeconds": 2.2,
+          "rockDegrees": 0.0,
+          "rockSeconds": 4.2
+        }
+      },
+      "camera": {
+        "distance": 3.135,
+        "height": 1.35,
+        "targetHeight": 0.76,
+        "fovYDegrees": 32,
+        "nearClip": 0.05,
+        "farClip": 80
+      },
+      "lighting": {
+        "brightness": 1.08,
+        "tint": [1.0, 0.985, 0.94]
+      },
+      "background": {
+        "clearColor": "#2E6F8F"
+      }
+    },
+    {
+      "id": "grass_png_no_floor",
+      "activePokemon": "psyduck",
+      "activeFloor": "none",
+      "activeWall": "grass_png",
+      "pokemon": {
+        "position": { "x": 0, "y": 0, "z": -0.5 },
+        "idleMotion": {
+          "enabled": false,
+          "bobAmplitude": 0.0,
+          "bobSeconds": 2.2,
+          "rockDegrees": 0.0,
+          "rockSeconds": 4.2
+        }
+      },
+      "camera": {
+        "distance": 3.135,
+        "height": 1.35,
+        "targetHeight": 0.76,
+        "fovYDegrees": 32,
+        "nearClip": 0.05,
+        "farClip": 80
+      },
+      "lighting": {
+        "brightness": 1.08,
+        "tint": [1.0, 0.985, 0.94]
+      },
+      "background": {
+        "clearColor": "#2E6F8F"
+      }
+    }
+  ]
+}

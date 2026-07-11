@@ -240,22 +240,24 @@
 .atlas-dot-map-label { margin: 0; font-weight: 800; color: rgba(14, 70, 88, 0.72); }
 .atlas-map-dot-marker {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
   border-radius: 999px;
   border: 2px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
   padding: 0;
+  opacity: 0.55;
 }
 .atlas-map-dot-marker--blue { background: #2f7fd4; }
 .atlas-map-dot-marker--yellow { background: #e8b830; }
 .atlas-map-dot-marker--red { background: #d24a4a; }
 .atlas-map-dot-marker--selected {
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
-  box-shadow: 0 0 0 3px rgba(116, 212, 229, 0.55), 0 2px 10px rgba(0, 0, 0, 0.32);
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  opacity: 0.85;
+  box-shadow: 0 0 0 2px rgba(116, 212, 229, 0.55), 0 1px 6px rgba(0, 0, 0, 0.28);
 }
 .atlas-dot-linker-maps {
   display: grid;

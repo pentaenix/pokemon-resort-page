@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from spmk_app.character_package import (
     default_character_actions,
@@ -26,7 +26,24 @@ from spmk_app.pokemon_batch_parse import (
     pokemon_sheet_id_for_suffix,
 )
 
-_ANIM_KINDS = frozenset({"movement", "idle", "south_only"})
+_ANIM_KINDS = frozenset({"movement", "idle", "south_only", "session"})
+
+
+def parse_frame_cols(raw: str, *, default: Tuple[int, ...]) -> List[int]:
+    if not str(raw or "").strip():
+        return list(default)
+    out: List[int] = []
+    for part in str(raw).replace(";", ",").split(","):
+        token = part.strip()
+        if not token:
+            continue
+        try:
+            value = int(token)
+        except ValueError:
+            continue
+        if value >= 0:
+            out.append(value)
+    return out or list(default)
 
 
 def _primary_sheet_id(package: Dict[str, Any]) -> str:
@@ -48,6 +65,65 @@ def normalize_anim_kind(raw: str) -> str:
     if kind in _ANIM_KINDS:
         return kind
     return "movement"
+
+
+def build_object_anim_bundle(
+    anim_key: str,
+    sheet_id: str,
+    *,
+    frames: Optional[Sequence[int]] = None,
+    frame_time_ms: int = 120,
+    loop: bool = False,
+    modifiers: Optional[Sequence[str]] = None,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    from spmk_app.object_variant_model import build_object_clip_bundle, normalize_object_modifiers
+
+    frame_list = list(frames) if frames is not None else [0]
+    return build_object_clip_bundle(
+        anim_key,
+        sheet_id,
+        normalize_object_modifiers(modifiers or ()),
+        frame_list,
+        frame_time_ms=frame_time_ms,
+        loop=loop,
+    )
+
+
+def build_session_activity_bundle(
+    anim_key: str,
+    sheet_id: str,
+    *,
+    enter_frames: Sequence[int] = (0, 1, 2, 3),
+    stay_frames: Sequence[int] = (3,),
+    exit_frames: Sequence[int] = (3, 2, 1, 0),
+    frame_time_ms: int = 120,
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+    """4-dir session: enter columns → hold → exit columns (reversed)."""
+    ms = max(50, int(frame_time_ms or 120))
+    enter = [int(x) for x in enter_frames] or [0, 1, 2, 3]
+    stay = [int(x) for x in stay_frames] or [enter[-1]]
+    exit_cols = [int(x) for x in exit_frames] or list(reversed(enter))
+    anims: Dict[str, Any] = {
+        "enter": {"frames": enter, "frameTimeMs": ms, "loop": False},
+        "stay": {"frames": stay, "frameTimeMs": ms, "loop": True},
+        "exit": {"frames": exit_cols, "frameTimeMs": ms, "loop": False},
+    }
+    actions: List[Dict[str, Any]] = [
+        {
+            "id": anim_key,
+            "type": "activity",
+            "activityKind": "session",
+            "sheetId": sheet_id,
+            "movementDriven": False,
+            "facingMode": "four_direction",
+            "phases": {
+                "enter": {"animationName": "enter", "loop": False},
+                "stay": {"animationName": "stay", "loop": True},
+                "exit": {"animationName": "exit", "loop": False},
+            },
+        }
+    ]
+    return anims, actions
 
 
 def build_custom_anim_bundle(
@@ -98,6 +174,9 @@ def build_custom_anim_bundle(
             }
         )
         return anims, actions
+
+    if kind == "session":
+        return build_session_activity_bundle(anim_key, sheet_id, frame_time_ms=ms)
 
     anims[anim_key] = {"frames": frames, "frameTimeMs": ms, "loop": True}
     actions.append(
@@ -169,6 +248,38 @@ def _merge_walk_variant_pokemon(
     return out
 
 
+def _merge_object_appearance(
+    package: Dict[str, Any],
+    sheet_rec: Dict[str, Any],
+    modifier_label: str,
+) -> Dict[str, Any]:
+    from spmk_app.object_variant_model import (
+        OBJECT_BASE_SHEET_ID,
+        actions_for_object_sheet,
+        normalize_object_modifiers,
+        sync_object_sheet_fields,
+    )
+
+    mods = normalize_object_modifiers([modifier_label])
+    sheet_rec = sync_object_sheet_fields({**sheet_rec, "modifiers": list(mods)})
+    sheet_id = sheet_rec.get("id") or OBJECT_BASE_SHEET_ID
+    base = next(
+        (s for s in (package.get("spriteSheets") or []) if s.get("id") == OBJECT_BASE_SHEET_ID and s.get("assetId")),
+        None,
+    )
+    if base and base.get("animations") and not sheet_rec.get("animations"):
+        sheet_rec["animations"] = deepcopy(base.get("animations"))
+    out = deepcopy(package)
+    sheets = [s for s in (out.get("spriteSheets") or []) if s.get("id") != sheet_id]
+    sheets.append(sheet_rec)
+    out["spriteSheets"] = sheets
+    new_actions = actions_for_object_sheet(sheet_rec, out.get("baseProfile") or "object")
+    replace_ids = {a["id"] for a in new_actions}
+    actions = [a for a in (out.get("actions") or []) if (a.get("id") or "") not in replace_ids]
+    out["actions"] = actions + new_actions
+    return out
+
+
 def _merge_custom_anim_bundle(
     package: Dict[str, Any],
     sheet_rec: Dict[str, Any],
@@ -192,6 +303,10 @@ def _merge_replace_primary(
 ) -> Dict[str, Any]:
     out = deepcopy(package)
     sheets = [s for s in (out.get("spriteSheets") or []) if s.get("id") != sheet_id]
+    if is_object_package(package):
+        old = next((s for s in (package.get("spriteSheets") or []) if s.get("id") == sheet_id), None)
+        if old and old.get("animations"):
+            sheet_rec = {**sheet_rec, "animations": deepcopy(old.get("animations"))}
     sheets.append(sheet_rec)
     out["spriteSheets"] = sheets
     if is_object_package(out):
@@ -224,7 +339,7 @@ def _merge_primary_first_sheet(
         sheet_rec = {
             **sheet_rec,
             "animations": {
-                "play": {"frames": play_frames, "frameTimeMs": 120, "loop": False},
+                "play": {"frames": play_frames, "frameTimeMs": 120, "loop": True},
                 "static": {"frames": [play_frames[0]], "frameTimeMs": 0, "loop": False},
             },
         }
@@ -252,6 +367,9 @@ def resolve_add_sheet_target(
     include_idle: bool = False,
     frame_count: int = 4,
     frame_time_ms: int = 120,
+    session_enter_frames: str = "",
+    session_stay_frames: str = "",
+    session_exit_frames: str = "",
 ) -> Tuple[str, str, str, str, str, Optional[ParsedPokemonImport], Dict[str, Any], List[Dict[str, Any]]]:
     """
     Return sheet ids, anim key, parsed variant, sheet animations map, and actions list.
@@ -262,7 +380,12 @@ def resolve_add_sheet_target(
     if mode in ("primary", "replace_primary"):
         sheet_id = _primary_sheet_id(package)
         asset_id = "sheet_png" if sheet_id == "sheet" else "walk_png"
-        sheet_name = "Sprite" if sheet_id == "sheet" else "Walk"
+        if sheet_id == "sheet" and is_object_package(package):
+            from spmk_app.object_variant_model import object_appearance_label
+
+            sheet_name = object_appearance_label([])
+        else:
+            sheet_name = "Sprite" if sheet_id == "sheet" else "Walk"
         return sheet_id, asset_id, sheet_name, sheet_id, sheet_id, None, {}, []
 
     if mode == "walk_variant":
@@ -284,6 +407,19 @@ def resolve_add_sheet_target(
         )
         return sheet_id, asset_id, sheet_name, sheet_id, "walk", parsed, {}, []
 
+    if mode == "object_appearance":
+        if not is_object_package(package):
+            raise ValueError("object_appearance is only for object packages")
+        from spmk_app.object_variant_model import normalize_object_modifiers, object_sheet_id_for_modifiers
+
+        mods = normalize_object_modifiers([label])
+        if not mods:
+            raise ValueError("appearance name required (e.g. shiny, blue)")
+        sheet_id = object_sheet_id_for_modifiers(mods)
+        asset_id = f"{sheet_id}_png"
+        sheet_name = label.replace("_", " ").strip().title() or sheet_id
+        return sheet_id, asset_id, sheet_name, sheet_id, sheet_id, None, {}, []
+
     if mode == "custom_anim":
         anim_key = normalize_anim_id(label)
         kind = normalize_anim_kind(anim_kind)
@@ -298,14 +434,24 @@ def resolve_add_sheet_target(
             ft = frame_time_ms or 400
         asset_id = f"{sheet_id}_png"
         sheet_name = anim_key.replace("_", " ").title()
-        anims, actions = build_custom_anim_bundle(
-            anim_key,
-            sheet_id,
-            kind=kind,
-            frame_count=fc,
-            frame_time_ms=ft,
-            include_idle=include_idle and kind == "movement",
-        )
+        if kind == "session":
+            anims, actions = build_session_activity_bundle(
+                anim_key,
+                sheet_id,
+                enter_frames=parse_frame_cols(session_enter_frames, default=(0, 1, 2, 3)),
+                stay_frames=parse_frame_cols(session_stay_frames, default=(3,)),
+                exit_frames=parse_frame_cols(session_exit_frames, default=(3, 2, 1, 0)),
+                frame_time_ms=ft,
+            )
+        else:
+            anims, actions = build_custom_anim_bundle(
+                anim_key,
+                sheet_id,
+                kind=kind,
+                frame_count=fc,
+                frame_time_ms=ft,
+                include_idle=include_idle and kind == "movement",
+            )
         return sheet_id, asset_id, sheet_name, sheet_id, anim_key, None, anims, actions
 
     raise ValueError(f"unknown add-sheet mode {mode!r}")
@@ -322,6 +468,9 @@ def add_sheet_to_draft_package(
     include_idle: bool = False,
     frame_count: int = 4,
     frame_time_ms: int = 120,
+    session_enter_frames: str = "",
+    session_stay_frames: str = "",
+    session_exit_frames: str = "",
     profile_name: Optional[str] = None,
 ) -> Tuple[Dict[str, Any], str, Dict[str, Any], str, bytes]:
     """Merge uploaded sheet bytes into package."""
@@ -341,6 +490,9 @@ def add_sheet_to_draft_package(
             include_idle=include_idle,
             frame_count=frame_count,
             frame_time_ms=frame_time_ms,
+            session_enter_frames=session_enter_frames,
+            session_stay_frames=session_stay_frames,
+            session_exit_frames=session_exit_frames,
         )
     )
     sheet_rec: Dict[str, Any] = {
@@ -354,7 +506,9 @@ def add_sheet_to_draft_package(
     if anims:
         sheet_rec["animations"] = anims
     mode_norm = (mode or "primary").strip().lower()
-    if mode_norm == "custom_anim":
+    if mode_norm == "object_appearance":
+        merged = _merge_object_appearance(package, sheet_rec, label)
+    elif mode_norm == "custom_anim":
         merged = _merge_custom_anim_bundle(package, sheet_rec, custom_actions)
     elif mode_norm == "walk_variant":
         if parsed is None:

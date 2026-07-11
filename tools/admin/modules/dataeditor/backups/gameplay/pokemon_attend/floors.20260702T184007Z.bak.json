@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "radius": 1,
+    "segments": 128,
+    "rings": 28,
+    "position": { "x": 0, "y": -0.035, "z": -1.0 },
+    "modelPlacement": {
+      "x": 0,
+      "y": -0.035,
+      "z": -1.0,
+      "yawDegrees": 180,
+      "scale": 0.3
+    },
+    "hiddenMaterialSubstrings": ["batt_leaf23", "batt_leafb23"],
+    "y": -0.035,
+    "radialColors": [
+      { "at": 0.0, "color": "#FFF7D9" },
+      { "at": 0.22, "color": "#F4EFC7" },
+      { "at": 0.58, "color": "#B7D9C8" },
+      { "at": 1.0, "color": "#4F93AA" }
+    ]
+  },
+  "floors": {
+    "grass": {
+      "id": "grass",
+      "model": "assets/pokemon_attend/floors/grass.glb",
+      "animation": "file_0040.bin"
+    }
+  }
+}

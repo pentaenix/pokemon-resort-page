@@ -1,0 +1,167 @@
+{
+  "title": "Overworld Text Box",
+  "description": "Real config/gameplay/world3d/textbox.json: interaction text-box visibility, skin selection, sprite-sheet slicing, padding, and future text defaults.",
+  "tags": [
+    "verified",
+    "overworld",
+    "ui",
+    "textbox"
+  ],
+  "groups": [
+    {
+      "id": "behavior",
+      "label": "Behavior",
+      "order": 5
+    },
+    {
+      "id": "skin",
+      "label": "Skin selection",
+      "order": 10
+    },
+    {
+      "id": "assets",
+      "label": "Assets",
+      "order": 15
+    },
+    {
+      "id": "layout",
+      "label": "Viewport padding",
+      "order": 20
+    },
+    {
+      "id": "slicing",
+      "label": "Sprite-sheet slicing",
+      "order": 30
+    },
+    {
+      "id": "futureText",
+      "label": "Future text",
+      "order": 40
+    }
+  ],
+  "fields": {
+    "textbox.visibleMode": {
+      "label": "Visible Mode",
+      "widget": "select",
+      "options": [
+        "enabled",
+        "disabled"
+      ],
+      "group": "behavior",
+      "order": 1
+    },
+    "textbox.selectedSkinIndex": {
+      "label": "Selected Skin Index",
+      "description": "0-12. Visual order runs down the left column first, then down the right column. The bottom-right empty cell is ignored.",
+      "widget": "number",
+      "min": 0,
+      "max": 12,
+      "step": 1,
+      "group": "skin",
+      "order": 1
+    },
+    "textbox.validSkinCount": {
+      "label": "Valid Skin Count",
+      "description": "Keep at 13 so the 14th bottom-right cell remains unavailable.",
+      "widget": "number",
+      "min": 1,
+      "max": 13,
+      "step": 1,
+      "group": "skin",
+      "advanced": true,
+      "order": 2
+    },
+    "textbox.spriteSheetPath": {
+      "label": "Sprite Sheet Path",
+      "widget": "asset",
+      "group": "assets",
+      "order": 1
+    },
+    "textbox.padding.bottomPx": {
+      "label": "Bottom Padding",
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "layout",
+      "order": 1
+    },
+    "textbox.padding.sidePx": {
+      "label": "Side Padding",
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "layout",
+      "order": 2
+    },
+    "textbox.sourceSheet.cellWidthPx": {
+      "label": "Source Cell Width",
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "slicing",
+      "advanced": true,
+      "order": 1
+    },
+    "textbox.sourceSheet.cellHeightPx": {
+      "label": "Source Cell Height",
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "slicing",
+      "advanced": true,
+      "order": 2
+    },
+    "textbox.sourceSheet.columns": {
+      "label": "Sheet Columns",
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "group": "slicing",
+      "advanced": true,
+      "order": 3
+    },
+    "textbox.horizontalStretch.stripWidthPx": {
+      "label": "Stretch Strip Width",
+      "description": "Only this central strip stretches horizontally; stylized sides stay pixel-perfect.",
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "slicing",
+      "order": 4
+    },
+    "textbox.horizontalStretch.sourceCenterXPx": {
+      "label": "Stretch Strip Center X",
+      "description": "Source X center inside each 256 px skin cell.",
+      "widget": "number",
+      "min": 0,
+      "step": 1,
+      "unit": "px",
+      "group": "slicing",
+      "order": 5
+    },
+    "textbox.futureText.fontPath": {
+      "label": "Future Font Path",
+      "widget": "asset",
+      "group": "futureText",
+      "order": 1
+    },
+    "textbox.futureText.fontSizePx": {
+      "label": "Future Font Size",
+      "widget": "number",
+      "min": 1,
+      "step": 1,
+      "unit": "px",
+      "group": "futureText",
+      "order": 2
+    }
+  },
+  "matches": [
+    "textbox.json",
+    "**/textbox.json"
+  ]
+}

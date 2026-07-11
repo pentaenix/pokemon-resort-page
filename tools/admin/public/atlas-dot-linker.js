@@ -276,6 +276,7 @@ export function bindAtlasDotOverlay(mount, options = {}) {
       alignment: currentAlignment,
       displaySize: currentDisplaySize,
       meshRoot: loadedModel,
+      localSpace: modelHolder,
       selectedPinId,
     });
     if (loadedModel) applyMeshOverlayOpacity(loadedModel, currentAlignment.overlayOpacity ?? 0.55);

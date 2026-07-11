@@ -254,6 +254,14 @@ function ensureTerrainVisual(map) {
       ...(map.terrainVisual.floorColors || {}),
     },
     rampColor: map.terrainVisual.rampColor || '#f4d03f',
+    rampReadability: {
+      enabled: map.terrainVisual.rampReadability?.enabled !== false,
+      lowShade: Number.isFinite(Number(map.terrainVisual.rampReadability?.lowShade)) ? Number(map.terrainVisual.rampReadability.lowShade) : 0.88,
+      highShade: Number.isFinite(Number(map.terrainVisual.rampReadability?.highShade)) ? Number(map.terrainVisual.rampReadability.highShade) : 1.10,
+      bandCount: Number.isFinite(Number(map.terrainVisual.rampReadability?.bandCount)) ? Number(map.terrainVisual.rampReadability.bandCount) : 5,
+      bandStrength: Number.isFinite(Number(map.terrainVisual.rampReadability?.bandStrength)) ? Number(map.terrainVisual.rampReadability.bandStrength) : 0.12,
+      bandSoftness: Number.isFinite(Number(map.terrainVisual.rampReadability?.bandSoftness)) ? Number(map.terrainVisual.rampReadability.bandSoftness) : 0.32,
+    },
     lightPreset: map.terrainVisual.lightPreset || 'day',
     lightYawDeg: Number.isFinite(Number(map.terrainVisual.lightYawDeg)) ? Number(map.terrainVisual.lightYawDeg) : 38,
     lightPitchDeg: Number.isFinite(Number(map.terrainVisual.lightPitchDeg)) ? Number(map.terrainVisual.lightPitchDeg) : 58,
@@ -1096,6 +1104,7 @@ function buildPreviewScene(map) {
   const floorHeight = Number(visual?.floorHeightScale) || TILE_SIZE;
   const heights = map.terrain.height;
   const specials = map.terrain.special;
+  const collision = map.terrain.collision;
   const tileH = (tx, ty) => heights?.[ty]?.[tx] ?? 0;
   const tileSpecial = (tx, ty) => specials?.[ty]?.[tx] ?? 0;
   const inBounds = (tx, ty) => tx >= 0 && tx < w && ty >= 0 && ty < h;
@@ -1108,6 +1117,7 @@ function buildPreviewScene(map) {
     ty,
     floorHeight,
     specials,
+    collision,
   );
   return { w, h, tileH, tileSpecial, inBounds, cornerHeights, visual, floorHeight };
 }
@@ -1571,8 +1581,19 @@ function drawMapPreviewTopDown(canvas, map, cam = {}, opts = {}) {
       const special = specials?.[z]?.[x] ?? 0;
       const eff = effectiveSpecial(special, heights, w, h, x, z);
       if (eff >= SPECIAL.RAMP_N && eff <= SPECIAL.CONCAVE_NW) {
-        ctx.fillStyle = visual?.rampRecolorEnabled ? `${visual.rampColor}66` : 'rgba(251,191,36,.18)';
-        ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
+        if (tileStack.length) {
+          ctx.strokeStyle = visual?.rampRecolorEnabled ? (visual.rampColor || '#f4d03f') : '#fbbf24';
+          ctx.lineWidth = Math.max(1 / zoom, 2 / zoom);
+          ctx.strokeRect(ox + x * cell + 1 / zoom, oy + z * cell + 1 / zoom, cell - 2 / zoom, cell - 2 / zoom);
+          ctx.fillStyle = 'rgba(17,24,39,.72)';
+          ctx.fillRect(ox + x * cell + 2 / zoom, oy + z * cell + 2 / zoom, 10 / zoom, 10 / zoom);
+          ctx.fillStyle = '#fef3c7';
+          ctx.font = `${8 / zoom}px sans-serif`;
+          ctx.fillText(rampIcon(eff), ox + x * cell + 3 / zoom, oy + z * cell + 10 / zoom);
+        } else {
+          ctx.fillStyle = visual?.rampRecolorEnabled ? `${visual.rampColor}66` : 'rgba(251,191,36,.18)';
+          ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
+        }
       }
     }
   }
@@ -1833,6 +1854,92 @@ function brushHint(brush) {
   if (brush === 'ramp') return 'Ramp brush: cardinals 2–5, corner ramps 6–13. Auto (1) is baked to N/E/S/W on save. Pick a type below.';
   if (brush === 'collision') return 'Blocked brush marks unwalkable tiles (red outline on the grid).';
   return 'Spawn brush sets the player start tile (gold ring).';
+}
+
+function rampIcon(id) {
+  const icons = {
+    0: '·',
+    1: '↗',
+    2: '↑',
+    3: '→',
+    4: '↓',
+    5: '←',
+    6: '◢',
+    7: '◣',
+    8: '◤',
+    9: '◥',
+    10: '◰',
+    11: '◱',
+    12: '◲',
+    13: '◳',
+  };
+  return icons[id] || '?';
+}
+
+function rampButtonHtml(ramp, brushVal, esc) {
+  return `<button type="button" class="ramp-btn ${brushVal === ramp.id ? 'active' : ''}" data-ramp="${ramp.id}" title="${esc(ramp.label)}" aria-label="${esc(ramp.label)}">
+    ${rampMiniPreviewHtml(ramp.id, esc)}
+    <span class="ramp-btn-text">${esc(ramp.short)}</span>
+  </button>`;
+}
+
+function rampMiniPreviewHtml(id, esc) {
+  const cells = rampPreviewCells(id)
+    .map((cell) => `<span class="ramp-mini-cell ${cell.cls}">${cell.cls.includes('is-ramp') ? esc(rampMiniMark(id)) : ''}</span>`)
+    .join('');
+  return `<span class="ramp-mini-grid ramp-icon-${id}" aria-hidden="true">${cells}</span>`;
+}
+
+function rampMiniMark(id) {
+  if (id >= 2 && id <= 5) return rampIcon(id);
+  if (id === 1) return 'A';
+  if (id >= 6 && id <= 9) return 'c';
+  if (id >= 10 && id <= 13) return 'v';
+  return '';
+}
+
+function rampPreviewCells(id) {
+  const empty = () => ({ cls: '', text: '' });
+  const cells = Array.from({ length: 9 }, empty);
+  const set = (x, y, cls, text = '') => { cells[y * 3 + x] = { cls, text }; };
+  set(1, 1, 'is-ramp', rampIcon(id));
+  if (id === 2) { set(1, 0, 'is-high', 'H'); set(1, 2, 'is-low', 'L'); set(1, 1, 'is-ramp', '↑'); }
+  else if (id === 3) { set(2, 1, 'is-high', 'H'); set(0, 1, 'is-low', 'L'); set(1, 1, 'is-ramp', '→'); }
+  else if (id === 4) { set(1, 2, 'is-high', 'H'); set(1, 0, 'is-low', 'L'); set(1, 1, 'is-ramp', '↓'); }
+  else if (id === 5) { set(0, 1, 'is-high', 'H'); set(2, 1, 'is-low', 'L'); set(1, 1, 'is-ramp', '←'); }
+  else if (id === 6) { set(2, 0, 'is-high', 'H'); set(1, 1, 'is-ramp', 'cNE'); }
+  else if (id === 7) { set(2, 2, 'is-high', 'H'); set(1, 1, 'is-ramp', 'cSE'); }
+  else if (id === 8) { set(0, 2, 'is-high', 'H'); set(1, 1, 'is-ramp', 'cSW'); }
+  else if (id === 9) { set(0, 0, 'is-high', 'H'); set(1, 1, 'is-ramp', 'cNW'); }
+  else if (id === 10) { set(0, 0, 'is-high', 'H'); set(2, 2, 'is-high', 'H'); set(0, 2, 'is-high', 'H'); set(2, 0, 'is-low', 'L'); set(1, 1, 'is-ramp', 'vNE'); }
+  else if (id === 11) { set(0, 0, 'is-high', 'H'); set(2, 0, 'is-high', 'H'); set(0, 2, 'is-high', 'H'); set(2, 2, 'is-low', 'L'); set(1, 1, 'is-ramp', 'vSE'); }
+  else if (id === 12) { set(0, 0, 'is-high', 'H'); set(2, 0, 'is-high', 'H'); set(2, 2, 'is-high', 'H'); set(0, 2, 'is-low', 'L'); set(1, 1, 'is-ramp', 'vSW'); }
+  else if (id === 13) { set(2, 0, 'is-high', 'H'); set(2, 2, 'is-high', 'H'); set(0, 2, 'is-high', 'H'); set(0, 0, 'is-low', 'L'); set(1, 1, 'is-ramp', 'vNW'); }
+  else if (id === 1) { set(1, 0, 'is-high', '?'); set(1, 2, 'is-low', '?'); set(1, 1, 'is-ramp', 'A'); }
+  return cells;
+}
+
+function rampSelectionPreviewHtml(selectedId, esc) {
+  const id = Number(selectedId) || 0;
+  const preset = RAMP_PRESETS.find((r) => r.id === id) || RAMP_PRESETS[0];
+  const cells = rampPreviewCells(id)
+    .map((cell) => `<span class="ramp-preview-cell ${cell.cls}">${esc(cell.text)}</span>`)
+    .join('');
+  const hint = id >= 2 && id <= 5
+    ? 'Cardinal ramp: arrow points uphill. Side ramps can attach into perpendicular ramp spines.'
+    : id >= 6 && id <= 13
+      ? 'Corner ramp: H marks the high landing corners it tries to match.'
+      : id === 1
+        ? 'Auto ramp: baked to a cardinal direction from neighbor heights on save.'
+        : 'Flat clears ramp/slope behavior.';
+  return `<div class="map-ramp-selected-preview">
+    <div class="ramp-preview-grid" aria-hidden="true">${cells}</div>
+    <div class="ramp-preview-copy">
+      <strong>${esc(preset.label)}</strong>
+      <span>${esc(hint)}</span>
+      <small><i class="ramp-legend-low"></i>low edge <i class="ramp-legend-high"></i>high / landing edge</small>
+    </div>
+  </div>`;
 }
 
 export function ensureMapEditorState(state) {
@@ -2236,10 +2343,10 @@ export function mapEditorHtml(state, esc) {
           </div>
           <div style="margin-top:10px">
             ${brush === 'ramp' ? `<div class="map-ramp-rail" role="group" aria-label="Ramp type">
-              <div class="map-ramp-group"><span>Cardinal</span>${RAMP_PRESETS.filter((r) => r.group === 'cardinal' || r.group === 'base').map((r) => `<button type="button" class="ramp-btn ${brushVal === r.id ? 'active' : ''}" data-ramp="${r.id}" title="${esc(r.label)}">${esc(r.short)}</button>`).join('')}</div>
-              <div class="map-ramp-group"><span>Convex</span>${RAMP_PRESETS.filter((r) => r.group === 'convex').map((r) => `<button type="button" class="ramp-btn ${brushVal === r.id ? 'active' : ''}" data-ramp="${r.id}" title="${esc(r.label)}">${esc(r.short)}</button>`).join('')}</div>
-              <div class="map-ramp-group"><span>Concave</span>${RAMP_PRESETS.filter((r) => r.group === 'concave').map((r) => `<button type="button" class="ramp-btn ${brushVal === r.id ? 'active' : ''}" data-ramp="${r.id}" title="${esc(r.label)}">${esc(r.short)}</button>`).join('')}</div>
-            </div>` : ''}
+              <div class="map-ramp-group"><span>Cardinal</span>${RAMP_PRESETS.filter((r) => r.group === 'cardinal' || r.group === 'base').map((r) => rampButtonHtml(r, brushVal, esc)).join('')}</div>
+              <div class="map-ramp-group"><span>Convex</span>${RAMP_PRESETS.filter((r) => r.group === 'convex').map((r) => rampButtonHtml(r, brushVal, esc)).join('')}</div>
+              <div class="map-ramp-group"><span>Concave</span>${RAMP_PRESETS.filter((r) => r.group === 'concave').map((r) => rampButtonHtml(r, brushVal, esc)).join('')}</div>
+            </div>${rampSelectionPreviewHtml(brushVal, esc)}` : ''}
             <p class="hint" style="margin:8px 0">${esc(brushHint(brush))}</p>
             ${brush === 'tile'
               ? `<div class="map-tile-active-strip">${editor.tileBrushId == null
@@ -2479,6 +2586,14 @@ function emptyMapLocal(width, height) {
       floorColors: { 1: '#d84f5f' },
       rampRecolorEnabled: true,
       rampColor: '#f4d03f',
+      rampReadability: {
+        enabled: true,
+        lowShade: 0.88,
+        highShade: 1.10,
+        bandCount: 5,
+        bandStrength: 0.12,
+        bandSoftness: 0.32,
+      },
     },
   };
 }
@@ -3433,6 +3548,16 @@ function terrainVisualHtml(editor, esc) {
     <label>Ramp color
       <input id="mapRampColor" type="color" value="${esc(visual.rampColor || '#f4d03f')}">
     </label>
+    <label class="map-inline-check"><input id="mapRampReadabilityEnabled" type="checkbox" ${visual.rampReadability?.enabled !== false ? 'checked' : ''}> Textured ramp readability</label>
+    <div class="map-visual-row">
+      <label>Low shade <input id="mapRampReadabilityLow" type="number" min="0" max="4" step="0.01" value="${esc(visual.rampReadability?.lowShade ?? 0.88)}"></label>
+      <label>High shade <input id="mapRampReadabilityHigh" type="number" min="0" max="4" step="0.01" value="${esc(visual.rampReadability?.highShade ?? 1.10)}"></label>
+    </div>
+    <div class="map-visual-row">
+      <label>Bands <input id="mapRampReadabilityBands" type="number" min="0" max="64" step="0.5" value="${esc(visual.rampReadability?.bandCount ?? 5)}"></label>
+      <label>Band strength <input id="mapRampReadabilityBandStrength" type="number" min="0" max="1" step="0.01" value="${esc(visual.rampReadability?.bandStrength ?? 0.12)}"></label>
+      <label>Softness <input id="mapRampReadabilityBandSoftness" type="number" min="0.03" max="0.49" step="0.01" value="${esc(visual.rampReadability?.bandSoftness ?? 0.32)}"></label>
+    </div>
     <label>3D light preset
       <select id="mapLightPreset">
         <option value="day" ${visual.lightPreset === 'day' ? 'selected' : ''}>Day</option>
@@ -4740,6 +4865,19 @@ export function bindMapEditor(state, deps) {
   bindVisual('#mapFloorColor1', (el, visual) => { visual.floorColors[1] = el.value || '#d84f5f'; });
   bindVisual('#mapRampRecolorEnabled', (el, visual) => { visual.rampRecolorEnabled = el.checked; });
   bindVisual('#mapRampColor', (el, visual) => { visual.rampColor = el.value || '#f4d03f'; });
+  const clampNumber = (value, fallback, min, max) => Math.max(min, Math.min(max, Number(value) || fallback));
+  const ensureRampReadability = (visual) => {
+    if (!visual.rampReadability || typeof visual.rampReadability !== 'object') {
+      visual.rampReadability = { enabled: true, lowShade: 0.88, highShade: 1.10, bandCount: 5, bandStrength: 0.12, bandSoftness: 0.32 };
+    }
+    return visual.rampReadability;
+  };
+  bindVisual('#mapRampReadabilityEnabled', (el, visual) => { ensureRampReadability(visual).enabled = el.checked; });
+  bindVisual('#mapRampReadabilityLow', (el, visual) => { ensureRampReadability(visual).lowShade = clampNumber(el.value, 0.88, 0, 4); });
+  bindVisual('#mapRampReadabilityHigh', (el, visual) => { ensureRampReadability(visual).highShade = clampNumber(el.value, 1.10, 0, 4); });
+  bindVisual('#mapRampReadabilityBands', (el, visual) => { ensureRampReadability(visual).bandCount = clampNumber(el.value, 5, 0, 64); });
+  bindVisual('#mapRampReadabilityBandStrength', (el, visual) => { ensureRampReadability(visual).bandStrength = clampNumber(el.value, 0.12, 0, 1); });
+  bindVisual('#mapRampReadabilityBandSoftness', (el, visual) => { ensureRampReadability(visual).bandSoftness = clampNumber(el.value, 0.32, 0.03, 0.49); });
   bindVisual('#mapLightPreset', (el, visual) => {
     visual.lightPreset = el.value || 'day';
     const presets = {

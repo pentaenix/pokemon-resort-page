@@ -45,9 +45,27 @@ async function main() {
   await page.locator('.app').screenshot({ path: join(outDir, 'characters.png'), type: 'png' });
   spawnSync('sips', ['-z', String(card.height), String(card.width), join(outDir, 'characters.png'), '--out', join(outDir, 'characters.png')], { stdio: 'inherit' });
 
+  // Data Editor — config browser + command bar
+  await page.goto(`${base}/#/game-engine/data`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForSelector('body.workbench-open', { timeout: 60000 });
+  await page.waitForSelector('.data-editor-page .data-browser', { timeout: 60000 });
+  await page.waitForTimeout(2500);
+  await page.locator('.data-editor-page').screenshot({ path: join(outDir, 'data.png'), type: 'png' });
+  spawnSync('sips', ['-z', String(card.height), String(card.width), join(outDir, 'data.png'), '--out', join(outDir, 'data.png')], { stdio: 'inherit' });
+
+  // Script Engine — condition rail and linear action workbench.
+  await page.goto(`${base}/#/game-engine/scripts`, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForSelector('body.workbench-open', { timeout: 60000 });
+  await page.waitForSelector('.script-engine-page', { timeout: 60000 });
+  await page.waitForTimeout(1200);
+  await page.locator('.script-engine-page').screenshot({ path: join(outDir, 'scripts.png'), type: 'png' });
+  spawnSync('sips', ['-z', String(card.height), String(card.width), join(outDir, 'scripts.png'), '--out', join(outDir, 'scripts.png')], { stdio: 'inherit' });
+
   await browser.close();
   console.log('Wrote', join(outDir, 'maps.png'));
   console.log('Wrote', join(outDir, 'characters.png'));
+  console.log('Wrote', join(outDir, 'data.png'));
+  console.log('Wrote', join(outDir, 'scripts.png'));
 }
 
 main().catch((err) => {

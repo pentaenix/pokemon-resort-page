@@ -22,11 +22,22 @@ export const ISLAND_DOT_COLORS = {
   red: 0xd24a4a,
 };
 
+const _rayOrigin = new THREE.Vector3();
+const _rayEnd = new THREE.Vector3();
+const _rayDir = new THREE.Vector3();
+const _worldNormal = new THREE.Vector3();
+const _localNormal = new THREE.Vector3();
+
 /** @param {number} value */
 export function clamp01(value) {
   const n = Number(value);
   if (!Number.isFinite(n)) return 0;
   return Math.min(1, Math.max(0, n));
+}
+
+/** @param {number} displaySize */
+export function islandDotScale(displaySize = 10) {
+  return Math.max(Number(displaySize) || 10, 6.2) / 10;
 }
 
 /** @param {unknown} raw */
@@ -108,21 +119,45 @@ export function collectVisibleMeshes(root) {
 }
 
 /**
- * Raycast straight down in model-local space.
+ * Raycast through the mesh column at local XZ; returns local-space ground point + normal.
  * @param {import('three').Object3D} meshRoot
  * @param {number} x
  * @param {number} z
  * @param {import('three').Raycaster} [raycaster]
+ * @param {import('three').Object3D} [localSpace]
  */
-export function raycastTerrainPoint(meshRoot, x, z, raycaster = new THREE.Raycaster()) {
-  if (!meshRoot) return null;
+export function raycastTerrainPoint(meshRoot, x, z, raycaster = new THREE.Raycaster(), localSpace = meshRoot) {
+  if (!meshRoot || !localSpace) return null;
   const meshes = collectVisibleMeshes(meshRoot);
   if (!meshes.length) return null;
-  const origin = new THREE.Vector3(x, 500, z);
-  raycaster.set(origin, new THREE.Vector3(0, -1, 0));
+
+  _rayOrigin.set(x, 500, z);
+  _rayEnd.set(x, -500, z);
+  localSpace.localToWorld(_rayOrigin);
+  localSpace.localToWorld(_rayEnd);
+  _rayDir.copy(_rayEnd).sub(_rayOrigin).normalize();
+  raycaster.set(_rayOrigin, _rayDir);
+
   const hits = raycaster.intersectObjects(meshes, false);
   if (!hits.length) return null;
-  return hits[0].point.clone();
+
+  let best = null;
+  for (const hit of hits) {
+    _worldNormal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+    if (_worldNormal.y < 0.2) continue;
+    if (!best || hit.point.y > best.point.y) best = hit;
+  }
+  const chosen = best || hits[0];
+  _worldNormal.copy(chosen.face.normal).transformDirection(chosen.object.matrixWorld).normalize();
+
+  const localPoint = localSpace.worldToLocal(chosen.point.clone());
+  const invWorld = new THREE.Matrix4().copy(localSpace.matrixWorld).invert();
+  _localNormal.copy(_worldNormal).transformDirection(invWorld).normalize();
+
+  return {
+    point: localPoint,
+    normal: _localNormal.lengthSq() > 0.01 ? _localNormal : new THREE.Vector3(0, 1, 0),
+  };
 }
 
 /**
@@ -130,62 +165,123 @@ export function raycastTerrainPoint(meshRoot, x, z, raycaster = new THREE.Raycas
  * @param {unknown} alignment
  * @param {number} displaySize
  * @param {import('three').Object3D|null} meshRoot
+ * @param {import('three').Object3D|null} [localSpace]
  */
-export function resolvePinModelPosition(pin, alignment, displaySize, meshRoot) {
+export function resolvePinModelPosition(pin, alignment, displaySize, meshRoot, localSpace = meshRoot) {
   if (pin?.map3d?.enabled === false) return null;
   const xz = uvToModelXZ(pin.x, pin.y, alignment, displaySize);
-  const hit = meshRoot ? raycastTerrainPoint(meshRoot, xz.x, xz.z) : null;
+  const surface = meshRoot ? raycastTerrainPoint(meshRoot, xz.x, xz.z, undefined, localSpace) : null;
+  const scale = islandDotScale(displaySize);
   const yOffset = Number(pin?.map3d?.yOffset);
-  const offset = Number.isFinite(yOffset) ? yOffset : 0.08;
-  if (hit) {
-    return { x: hit.x, y: hit.y + offset, z: hit.z, hit: true };
+  const lift = Number.isFinite(yOffset) ? yOffset : 0.012 * scale;
+  if (surface) {
+    return {
+      x: surface.point.x,
+      y: surface.point.y + lift,
+      z: surface.point.z,
+      normal: surface.normal,
+      hit: true,
+    };
   }
-  return { x: xz.x, y: offset, z: xz.z, hit: false };
+  return {
+    x: xz.x,
+    y: lift,
+    z: xz.z,
+    normal: new THREE.Vector3(0, 1, 0),
+    hit: false,
+  };
 }
 
-/** @param {string} color @param {boolean} [selected] */
-export function createPinDotMesh(color, selected = false) {
+function disposeDotObject(object) {
+  object.traverse((child) => {
+    if (child.isMesh) {
+      child.geometry?.dispose();
+      child.material?.dispose();
+    }
+  });
+}
+
+/**
+ * Flat map marker hugging the terrain surface (not a floating sphere).
+ * @param {string} color
+ * @param {boolean} [selected]
+ * @param {number} [displaySize]
+ * @param {import('three').Vector3|null} [normal]
+ */
+export function createPinDotMesh(color, selected = false, displaySize = 10, normal = null) {
   const tint = ISLAND_DOT_COLORS[color] || 0xffffff;
-  const radius = selected ? 0.2 : 0.14;
-  const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(radius, 18, 14),
-    new THREE.MeshStandardMaterial({
-      color: tint,
-      emissive: tint,
-      emissiveIntensity: selected ? 0.9 : 0.5,
-      roughness: 0.35,
-      metalness: 0.05,
-    }),
+  const scale = islandDotScale(displaySize);
+  const outer = (selected ? 0.055 : 0.04) * scale;
+  const inner = outer * 0.52;
+
+  const group = new THREE.Group();
+  group.add(
+    new THREE.Mesh(
+      new THREE.RingGeometry(inner * 0.92, outer, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.92,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
+      }),
+    ),
+    new THREE.Mesh(
+      new THREE.CircleGeometry(inner * 0.92, 20),
+      new THREE.MeshBasicMaterial({
+        color: tint,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+        polygonOffsetUnits: -3,
+      }),
+    ),
   );
-  mesh.userData.isPinDot = true;
-  mesh.userData.pinColor = color;
-  return mesh;
+
+  const up = normal && normal.lengthSq() > 0.01
+    ? normal.clone().normalize()
+    : new THREE.Vector3(0, 1, 0);
+  group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
+  group.userData.isPinDot = true;
+  group.userData.pinColor = color;
+  return group;
 }
 
 /**
  * @param {import('three').Group} dotsGroup
  * @param {Array<{ id: string, name?: string, color?: string, x: number, y: number, map3d?: object }>} pins
- * @param {{ alignment?: unknown, displaySize?: number, meshRoot?: import('three').Object3D|null, selectedPinId?: string|null, onDotMeshes?: (map: Map<string, import('three').Mesh>) => void }} options
+ * @param {{ alignment?: unknown, displaySize?: number, meshRoot?: import('three').Object3D|null, localSpace?: import('three').Object3D|null, selectedPinId?: string|null, onDotMeshes?: (map: Map<string, import('three').Object3D>) => void }} options
  */
 export function syncIslandPinDots(dotsGroup, pins, options = {}) {
   const alignment = options.alignment;
   const displaySize = Number(options.displaySize) > 0 ? Number(options.displaySize) : 10;
   const meshRoot = options.meshRoot || null;
+  const localSpace = options.localSpace || meshRoot;
   const selectedPinId = options.selectedPinId || null;
 
   while (dotsGroup.children.length) {
     const child = dotsGroup.children[0];
     dotsGroup.remove(child);
-    child.geometry?.dispose();
-    child.material?.dispose();
+    disposeDotObject(child);
   }
 
-  /** @type {Map<string, import('three').Mesh>} */
+  /** @type {Map<string, import('three').Object3D>} */
   const meshMap = new Map();
   for (const pin of pins || []) {
-    const pos = resolvePinModelPosition(pin, alignment, displaySize, meshRoot);
+    const pos = resolvePinModelPosition(pin, alignment, displaySize, meshRoot, localSpace);
     if (!pos) continue;
-    const dot = createPinDotMesh(pin.color || 'yellow', pin.id === selectedPinId);
+    const dot = createPinDotMesh(
+      pin.color || 'yellow',
+      pin.id === selectedPinId,
+      displaySize,
+      pos.normal,
+    );
     dot.position.set(pos.x, pos.y, pos.z);
     dot.userData.pinId = pin.id;
     dot.userData.pinName = pin.name || pin.id;
@@ -198,6 +294,39 @@ export function syncIslandPinDots(dotsGroup, pins, options = {}) {
 }
 
 /**
+ * Screen-space hit test for small flat dots (more reliable than mesh raycast).
+ * @param {import('three').Group} dotsGroup
+ * @param {PointerEvent} event
+ * @param {import('three').Camera} camera
+ * @param {HTMLElement} mountEl
+ * @param {number} [thresholdPx]
+ */
+export function pickIslandPinDotScreen(dotsGroup, event, camera, mountEl, thresholdPx = 16) {
+  if (!mountEl || !dotsGroup?.children?.length) return null;
+  const rect = mountEl.getBoundingClientRect();
+  const px = event.clientX - rect.left;
+  const py = event.clientY - rect.top;
+  let bestId = null;
+  let bestDist = thresholdPx;
+  const projected = new THREE.Vector3();
+
+  dotsGroup.children.forEach((dot) => {
+    if (!dot.userData?.isPinDot || !dot.userData.pinId) return;
+    dot.getWorldPosition(projected);
+    projected.project(camera);
+    if (projected.z > 1) return;
+    const sx = (projected.x * 0.5 + 0.5) * rect.width;
+    const sy = (-projected.y * 0.5 + 0.5) * rect.height;
+    const dist = Math.hypot(px - sx, py - sy);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestId = dot.userData.pinId;
+    }
+  });
+  return bestId;
+}
+
+/**
  * @param {import('three').Raycaster} raycaster
  * @param {import('three').Vector2} pointer
  * @param {import('three').Camera} camera
@@ -205,9 +334,19 @@ export function syncIslandPinDots(dotsGroup, pins, options = {}) {
  */
 export function pickIslandPinDot(raycaster, pointer, camera, dotsGroup) {
   raycaster.setFromCamera(pointer, camera);
-  const dots = dotsGroup.children.filter((child) => child.userData?.isPinDot);
-  const hits = raycaster.intersectObjects(dots, false);
-  return hits[0]?.object?.userData?.pinId || null;
+  /** @type {import('three').Mesh[]} */
+  const meshes = [];
+  dotsGroup.children.forEach((child) => {
+    if (!child.userData?.isPinDot) return;
+    child.traverse((node) => {
+      if (node.isMesh) meshes.push(node);
+    });
+  });
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (!hits.length) return null;
+  let node = hits[0].object;
+  while (node && !node.userData?.pinId) node = node.parent;
+  return node?.userData?.pinId || null;
 }
 
 /**

@@ -21,9 +21,22 @@ import {
 } from '../../tools/admin/shared/island-viewport.js';
 import {
   normalizeMapAlignment,
-  pickIslandPinDot,
+  pickIslandPinDotScreen,
   syncIslandPinDots,
 } from '../../tools/admin/shared/island-map-dots.js';
+
+function IslandDotHoverTip({ tip, visible }) {
+  if (!tip) return null;
+  return (
+    <div
+      className={`island-dot-hover-tip island-dot-hover-tip--${tip.color || 'yellow'}${visible ? ' is-visible' : ''}`}
+      style={{ left: tip.x, top: tip.y }}
+      role="tooltip"
+    >
+      <strong>{tip.name}</strong>
+    </div>
+  );
+}
 
 function IslandStage3D({
   islandModelUrl,
@@ -35,13 +48,36 @@ function IslandStage3D({
   onSelectPin,
 }) {
   const mountRef = useRef(null);
+  const wrapRef = useRef(null);
   const [modelState, setModelState] = useState(islandModelUrl ? 'loading' : 'placeholder');
+  const [hoverTarget, setHoverTarget] = useState(null);
+  const [renderTip, setRenderTip] = useState(null);
+  const [tipVisible, setTipVisible] = useState(false);
+  const setHoverTargetRef = useRef(setHoverTarget);
+  setHoverTargetRef.current = setHoverTarget;
   const islandViewport = useMemo(() => normalizeIslandViewport(viewport), [viewport]);
   const islandAlignment = useMemo(() => normalizeMapAlignment(mapAlignment), [mapAlignment]);
   const pinDots = useMemo(
     () => pins.filter((pin) => pin.map3d?.enabled !== false),
     [pins],
   );
+  const pinById = useMemo(() => new Map(pinDots.map((pin) => [pin.id, pin])), [pinDots]);
+
+  useEffect(() => {
+    if (!hoverTarget) return;
+    setRenderTip(hoverTarget);
+  }, [hoverTarget]);
+
+  useEffect(() => {
+    if (!hoverTarget) {
+      setTipVisible(false);
+      const timer = window.setTimeout(() => setRenderTip(null), 220);
+      return () => window.clearTimeout(timer);
+    }
+    setRenderTip(hoverTarget);
+    const frame = requestAnimationFrame(() => setTipVisible(true));
+    return () => cancelAnimationFrame(frame);
+  }, [hoverTarget?.id]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -83,14 +119,13 @@ function IslandStage3D({
     placeholderGroup.add(island);
 
     let loadedModel = null;
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
 
     function refreshDots() {
       syncIslandPinDots(dotsGroup, pinDots, {
         alignment: islandAlignment,
         displaySize,
         meshRoot: loadedModel,
+        localSpace: modelHolder,
         selectedPinId,
       });
     }
@@ -141,39 +176,78 @@ function IslandStage3D({
     frameCamera();
     refreshDots();
 
-    function pointerToNdc(event) {
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    function updateDotHover(event) {
+      if (!loadedModel || pinDots.length === 0) {
+        setHoverTargetRef.current(null);
+        return;
+      }
+      const pinId = pickIslandPinDotScreen(dotsGroup, event, camera, renderer.domElement, 18);
+      if (!pinId) {
+        setHoverTargetRef.current(null);
+        renderer.domElement.style.cursor = 'grab';
+        return;
+      }
+      const pin = pinById.get(pinId);
+      const wrap = wrapRef.current;
+      const dot = dotsGroup.children.find((child) => child.userData?.pinId === pinId);
+      if (!wrap || !pin || !dot) return;
+
+      const projected = new THREE.Vector3();
+      dot.getWorldPosition(projected);
+      projected.project(camera);
+      const canvasRect = renderer.domElement.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      const sx = (projected.x * 0.5 + 0.5) * canvasRect.width + (canvasRect.left - wrapRect.left);
+      const sy = (-projected.y * 0.5 + 0.5) * canvasRect.height + (canvasRect.top - wrapRect.top);
+
+      setHoverTargetRef.current({
+        id: pinId,
+        name: pin.name || pinId,
+        color: pin.color || 'yellow',
+        x: sx,
+        y: sy,
+      });
+      renderer.domElement.style.cursor = 'pointer';
     }
 
     function handlePointerDown(event) {
       dragging = true;
       dragMoved = false;
       lastX = event.clientX;
+      setHoverTargetRef.current(null);
+      renderer.domElement.style.cursor = 'grabbing';
       renderer.domElement.setPointerCapture?.(event.pointerId);
     }
     function handlePointerMove(event) {
-      if (!dragging) return;
-      if (Math.abs(event.clientX - lastX) > 2) dragMoved = true;
-      yaw += (event.clientX - lastX) * .006;
-      lastX = event.clientX;
-      applyRotation();
+      if (dragging) {
+        if (Math.abs(event.clientX - lastX) > 2) dragMoved = true;
+        yaw += (event.clientX - lastX) * .006;
+        lastX = event.clientX;
+        applyRotation();
+        return;
+      }
+      updateDotHover(event);
     }
     function handlePointerUp(event) {
       if (dragging && !dragMoved && loadedModel) {
-        pointerToNdc(event);
-        const dotId = pickIslandPinDot(raycaster, pointer, camera, dotsGroup);
-        if (dotId) onSelectPin?.(dotId);
+        const pinId = pickIslandPinDotScreen(dotsGroup, event, camera, renderer.domElement, 18);
+        if (pinId) onSelectPin?.(pinId);
       }
       dragging = false;
+      renderer.domElement.style.cursor = 'grab';
       renderer.domElement.releasePointerCapture?.(event.pointerId);
+      updateDotHover(event);
+    }
+    function handlePointerLeave() {
+      if (!dragging) setHoverTargetRef.current(null);
+      renderer.domElement.style.cursor = 'grab';
     }
 
     renderer.domElement.addEventListener('pointerdown', handlePointerDown);
     renderer.domElement.addEventListener('pointermove', handlePointerMove);
     renderer.domElement.addEventListener('pointerup', handlePointerUp);
     renderer.domElement.addEventListener('pointercancel', handlePointerUp);
+    renderer.domElement.addEventListener('pointerleave', handlePointerLeave);
 
     function resize() {
       const w = mount.clientWidth;
@@ -199,6 +273,7 @@ function IslandStage3D({
       renderer.domElement.removeEventListener('pointermove', handlePointerMove);
       renderer.domElement.removeEventListener('pointerup', handlePointerUp);
       renderer.domElement.removeEventListener('pointercancel', handlePointerUp);
+      renderer.domElement.removeEventListener('pointerleave', handlePointerLeave);
       window.removeEventListener('resize', resize);
       if (loadedModel) {
         loadedModel.traverse((child) => {
@@ -218,7 +293,7 @@ function IslandStage3D({
       mount.removeChild(renderer.domElement);
       renderer.dispose();
     };
-  }, [islandModelUrl, displaySize, islandViewport, islandAlignment, pinDots, selectedPinId, onSelectPin]);
+  }, [islandModelUrl, displaySize, islandViewport, islandAlignment, pinDots, pinById, selectedPinId, onSelectPin]);
 
   const modelHint = modelState === 'loading'
     ? 'Loading island mesh…'
@@ -227,8 +302,9 @@ function IslandStage3D({
       : 'Island model in progress';
 
   return (
-    <div className="island-stage-wrap island-stage-wrap--atlas">
+    <div className="island-stage-wrap island-stage-wrap--atlas" ref={wrapRef}>
       <div className="island-stage island-stage--atlas" ref={mountRef} />
+      <IslandDotHoverTip tip={renderTip} visible={tipVisible} />
       <span className="island-stage-hint soft-label">{modelHint}</span>
     </div>
   );

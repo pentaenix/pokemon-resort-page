@@ -1,0 +1,120 @@
+{
+  "dossier": {
+    "overview": "Overworld interactions turn a player greeting into a small sequence of actions: face the player, run a Pokemon interaction pose when available, choose fitting text, show the textbox, then clean up before movement resumes.\n\nThe first implementation keeps the player-facing behavior simple while establishing reusable behavior scripts and text selection for future map, species, tile, companion, and database-driven lines.",
+    "sections": [
+      {
+        "id": "guide",
+        "title": "Interaction guide",
+        "layout": "tabs-primary",
+        "summary": "How behavior scripts, text matching, and Pokemon interaction animations fit together.",
+        "blocks": [
+          {
+            "type": "tabs",
+            "tabs": [
+              {
+                "id": "runtime",
+                "label": "Runtime",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Pressing Accept while facing an interactable NPC or Pokemon starts an interaction sequence. The sequence locks the target, turns it toward the player, runs any Pokemon interaction pose, opens the textbox when text is requested, and only releases the target after the final text and exit pose are finished.\n\nDefault Pokemon sequence: facePlayer, pokemonInteractionSession, textFree.\n\nDefault character sequence: facePlayer, textFree.\n\nAccept closes the current textbox and advances the sequence. Back cancels the sequence and still runs cleanup so actors do not stay locked."
+                  },
+                  {
+                    "type": "text",
+                    "body": "Temporary roster rule: config/gameplay/world3d/pokemon_spawns.json selects the Resort profile, zero-based box id, and total Pokemon cap. The first valid Pokemon becomes the follower. Later selected Pokemon spawn at random valid points as roaming overworld Pokemon. The cap includes the follower, so 0 spawns nobody and 1 creates only the follower. An empty box also creates neither. Resort slot form and shiny data select matching charbin appearance sheets when they exist, with a base-sprite fallback. This will be replaced later by the real spawn system and companion-selection UI."
+                  },
+                  {
+                    "type": "text",
+                    "body": "The Script Engine catalog under config/gameplay/world3d/scripts now provides reusable linear idle, interaction, and NPC scripts. It chooses eligible scripts from target and environment tags, priority, weight, cooldowns, and close-to checks. The Operations Desk Script Engine tool authors these files."
+                  },
+                  {
+                    "type": "diagram",
+                    "title": "Interaction lifecycle",
+                    "caption": "Screen adapters apply world effects while shared modules own action order and text selection.",
+                    "source": "flowchart LR\n    INPUT[Accept] --> TARGET[Find target]\n    TARGET --> LOCK[Lock actor]\n    LOCK --> SEQ[InteractionSequenceController]\n    SEQ --> FACE[Face player]\n    SEQ --> POSE[Player activity session]\n    SEQ --> TEXT[InteractionText selector]\n    TEXT --> BOX[Textbox]\n    BOX --> EXIT[Exit pose and unlock]"
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/world3d/interactions.json",
+                    "lines": "1-20",
+                    "language": "json",
+                    "caption": "Default behavior scripts",
+                    "body": "{\n  \"behaviors\": [\n    {\n      \"id\": \"pokemon_default\",\n      \"gates\": [\"POKEMON\"],\n      \"actions\": [\n        { \"action\": \"facePlayer\" },\n        { \"action\": \"pokemonInteractionSession\" },\n        { \"action\": \"textFree\" }\n      ]\n    },\n    {\n      \"id\": \"character_default\",\n      \"gates\": [\"CHARACTER\"],\n      \"actions\": [\n        { \"action\": \"facePlayer\" },\n        { \"action\": \"textFree\" }\n      ]\n    }\n  ]\n}"
+                  }
+                ]
+              },
+              {
+                "id": "text",
+                "label": "Text",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Pokemon free text is selected from config/gameplay/world3d/interaction_text.json. A text entry matches only when all requiredTags are present in the current interaction context. The selector then chooses the group with the most required tags, picks by weight inside that group, and starts a global cooldown for the selected text id.\n\nGlobal cooldowns are shared across Pokemon. If one water Pokemon uses a pool-specific line, another water Pokemon cannot immediately repeat that same text while it cools down. Human NPC dialogue is intentionally separate: their lines live in dialogue.lines inside their own charbin.\n\nThe Script Engine Text database inserts template variables directly into the composer: {NAME}, {SPECIES}, {ROLE}, {TILE}, {PLAYER_NAME}, {TYPE_PRIMARY}, {TYPE_SECONDARY}, {NATURE}, {FORM}, {COMPANION_NAME}, and {NEARBY_POKEMON_NAME}. Values that are not available yet render as an empty string."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "config/gameplay/world3d/interaction_text.json",
+                    "lines": "1-18",
+                    "language": "json",
+                    "caption": "Conditioned Pokemon free text",
+                    "body": "{\n  \"texts\": [\n    {\n      \"id\": \"pokemon_water_listening\",\n      \"body\": \"{NAME} listens for water nearby.\",\n      \"requiredTags\": [\"POKEMON\", \"TYPE_WATER\"],\n      \"weight\": 2,\n      \"globalCooldownSeconds\": 45\n    }\n  ]\n}"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Example authoring direction: a line with requiredTags [POKEMON, TYPE_WATER, POOL, GRASS_TILE] beats a general [POKEMON, TYPE_WATER] line whenever all four tags are present. Later systems can feed tile, nearby terrain, relationship, companion, mood, charbin, or database tags into the same selector without changing textbox rendering."
+                  }
+                ]
+              },
+              {
+                "id": "animations",
+                "label": "Animations",
+                "blocks": [
+                  {
+                    "type": "text",
+                    "body": "Pokemon targets currently drive Haru's player-side charbin activity session while the textbox is active. The target Pokemon faces the player and stays locked; characters do not use these poses.\n\nThe runtime maps the target metadata.pokemonSize to a player activity action id:\n\nsmall or missing: small_interact\nmedium: medium_interact\nlarge: large_interact\n\nEach action is a session activity with enter, stay, and exit phases. The enter phase plays first, stay loops while text is open, and exit plays after the final Accept or Back before the target unlocks. If Haru's package is missing the action, the target still faces the player and the interaction continues."
+                  },
+                  {
+                    "type": "code",
+                    "repo": "pokemon-resort",
+                    "path": "assets/characters/CHARBIN_SCHEMA.md",
+                    "lines": "288-316",
+                    "language": "json",
+                    "caption": "Session activity shape used by interaction poses",
+                    "body": "{\n  \"id\": \"small_interact\",\n  \"type\": \"activity\",\n  \"activityKind\": \"session\",\n  \"sheetId\": \"small_interact\",\n  \"movementDriven\": false,\n  \"phases\": {\n    \"enter\": { \"animationName\": \"enter\", \"loop\": false },\n    \"stay\": { \"animationName\": \"stay\", \"loop\": true },\n    \"exit\": { \"animationName\": \"exit\", \"loop\": false }\n  }\n}"
+                  }
+                ]
+              },
+              {
+                "id": "code-map",
+                "label": "Code map",
+                "blocks": [
+                  {
+                    "type": "html",
+                    "html": "<table><thead><tr><th>Module</th><th>Role</th></tr></thead><tbody><tr><td><code>InteractionSequence</code></td><td>Pure behavior action order and target gates.</td></tr><tr><td><code>InteractionText</code></td><td>Tag filtering, specificity, weighted selection, template rendering, global cooldowns.</td></tr><tr><td><code>ResortPokemonSpawnConfig</code></td><td>Temporary Resort box, profile, and total roster-cap contract.</td></tr><tr><td><code>Overworld3DTestScreen</code></td><td>Scene adapter for input, locking, player interaction animation, textbox lifetime, cleanup, and follower availability.</td></tr><tr><td><code>NpcActorDriver</code></td><td>NPC/Pokemon target facing and random roaming spawns for selected roster entries after the follower.</td></tr><tr><td><code>FollowerController</code></td><td>Follower Pokemon target facing and companion state.</td></tr><tr><td><code>SpriteSheetAnimator</code></td><td>Idle/walk plus session activity enter, stay, exit playback.</td></tr></tbody></table>"
+                  },
+                  {
+                    "type": "text",
+                    "body": "Keep new reusable rules in gameplay/world3d/interactions. Keep target-specific world changes in thin adapters. Textbox renderers should draw selected text, not decide which line is chosen."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "related",
+        "title": "Related",
+        "summary": "Source docs and adjacent systems.",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Game repo docs:\n\n- docs/gameplay/overworld_interactions.md\n- docs/gameplay/world3d_poc_gen4_overworld.md\n- docs/ARCHITECTURE.md\n\nRelated docs on this site:\n\n- Overworld follower Pokemon\n- What is a .charbin file?\n- What is an .owmap file?"
+          }
+        ]
+      }
+    ]
+  }
+}

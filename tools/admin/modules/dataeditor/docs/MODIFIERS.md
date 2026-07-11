@@ -54,6 +54,66 @@ These metadata fields remain in the saved JSON unchanged unless the user explici
 - `json`
 - `mask-grid` / `pixel-grid` for real matrix/string/boolean mask fields only
 
+## Dynamic dropdown options
+
+`select` and `dropdown` widgets can populate their `options` from the currently opened JSON file or from another config file. The server resolves these before the modal renders, so the frontend still receives normal static `options`.
+
+From the current file:
+
+```json
+{
+  "fields": {
+    "activeScene": {
+      "widget": "select",
+      "optionsFrom": {
+        "path": "scenes",
+        "value": "id",
+        "label": "id"
+      }
+    }
+  }
+}
+```
+
+From another config file:
+
+```json
+{
+  "patterns": {
+    "scenes.*.activeFloor": {
+      "widget": "select",
+      "optionsFromFile": {
+        "file": "gameplay/pokemon_attend/floors.json",
+        "path": "floors",
+        "keys": true,
+        "include": [{ "value": "none", "label": "None" }]
+      }
+    }
+  }
+}
+```
+
+For arrays, use `value` and `label` paths inside each item. For objects, `keys: true` turns object keys into option values. Use `include` or `append` for fixed choices such as `none`.
+
+From an asset folder:
+
+```json
+{
+  "patterns": {
+    "walls.*.texture": {
+      "widget": "select",
+      "optionsFromAssets": {
+        "directory": "assets/pokemon_attend/wall_textures",
+        "extensions": [".png", ".jpg", ".webp"],
+        "recursive": true
+      }
+    }
+  }
+}
+```
+
+Asset directories resolve from the game project root inferred from the configured `pokemon-resort/config` directory. Option values are written as game-relative asset paths such as `assets/pokemon_attend/wall_textures/grass.png`.
+
 ## Safe mask-grid usage
 
 Only use `mask-grid` when the JSON field itself is an array, string rows, or matrix that represents a real black/white mask. Example:
@@ -97,6 +157,24 @@ Supported element inputs: `x`, `y`, `centerX`, `centerY`, `xRatio`, `yRatio`, `c
 ## Inline tools
 
 Modifier files can place helper blocks after a field group. These blocks are not editable JSON fields and they do not save anything by themselves. They are meant for utilities like choosing colors, previewing layouts, or generating values that the user can copy and paste into real fields.
+
+## Collapsed groups
+
+Groups may opt into being collapsed when the editor opens:
+
+```json
+{
+  "groups": [
+    {
+      "id": "advanced",
+      "label": "Advanced camera",
+      "collapsedDefault": true
+    }
+  ]
+}
+```
+
+The section still opens automatically while the user searches. Use this for rare/debug-heavy controls such as manual camera fallback, clipping, raw button styling, or exporter dictionaries.
 
 Tools still live in the `utilities/` folder for backwards compatibility with older patches, but the UI should call them **inline tools**.
 

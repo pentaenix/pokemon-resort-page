@@ -12,6 +12,7 @@ import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { loadGlbScene } from '/shared/model-glb-viewer.js';
 import { tuneGltfTexture } from '/shared/model-texture-alpha.js';
 import { cornerHeightsForTile, SPECIAL } from '/shared/ramp-specials.js';
+import { cardinalRampProgress, rampProgressColor } from './ramp-visual-hints.js';
 
 const TOP_A = [116, 156, 190];
 const TOP_B = [125, 166, 200];
@@ -78,16 +79,13 @@ function buildTerrain(map, tileSize, packageInfo = null) {
     pushVertex(...pts[2], color, shade);
     pushVertex(...pts[3], color, shade);
   };
-
   const cornersAt = (x, z) => {
     if (x < 0 || z < 0 || x >= w || z >= h) return [0, 0, 0, 0];
-    return cornerHeightsForTile(specials?.[z]?.[x] ?? 0, heights, w, h, x, z, floorHeight, specials);
+    return cornerHeightsForTile(specials?.[z]?.[x] ?? 0, heights, w, h, x, z, floorHeight, specials, collision);
   };
 
   const hasVisibleTile = (x, z) => {
     if (!tileLayers?.length) return false;
-    const special = specials?.[z]?.[x] ?? 0;
-    if (special >= SPECIAL.RAMP_N && special <= SPECIAL.CONCAVE_NW) return false;
     return tileLayers.some(({ layer }) => {
       for (let ay = 0; ay <= z; ay += 1) {
         for (let ax = 0; ax <= x; ax += 1) {
@@ -116,7 +114,9 @@ function buildTerrain(map, tileSize, packageInfo = null) {
 
       // RTPKS mesh tiles are the visible top surface for painted cells. Keeping the
       // fallback terrain top under them causes z-fighting in the editor preview.
-      if (!hasVisibleTile(x, z)) pushQuad([sw, se, ne, nw], color, 1);
+      if (!hasVisibleTile(x, z)) {
+        pushQuad([sw, se, ne, nw], color, 1);
+      }
 
       const n = cornersAt(x, z - 1);
       if (edgeAbove(c[0], c[1], n[3], n[2])) {
@@ -221,20 +221,95 @@ function materialForRtpks(fileName, packageInfo, materialId) {
   });
 }
 
-function appendVertex(out, mesh, source, uvSource, colorSource, vertexIndex, tileSize) {
+function meshVerticalRange(mesh) {
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  const scan = (values = []) => {
+    for (let i = 2; i < values.length; i += 3) {
+      minZ = Math.min(minZ, Number(values[i]) || 0);
+      maxZ = Math.max(maxZ, Number(values[i]) || 0);
+    }
+  };
+  scan(mesh.triangles);
+  scan(mesh.quads);
+  return Number.isFinite(minZ) ? maxZ - minZ : 0;
+}
+
+function terrainHeightAtWorld(map, worldX, worldZ, tileSize, sampleTx = null, sampleTy = null) {
+  const heights = map.terrain?.height || [];
+  const specials = map.terrain?.special || [];
+  const collision = map.terrain?.collision || [];
+  const floorHeight = Number(map.terrainVisual?.floorHeightScale) || tileSize;
+  const w = map.grid?.width || 1;
+  const h = map.grid?.height || 1;
+  const tx = Math.min(w - 1, Math.max(0, Number.isFinite(sampleTx) ? sampleTx : Math.floor(worldX / tileSize)));
+  const ty = Math.min(h - 1, Math.max(0, Number.isFinite(sampleTy) ? sampleTy : Math.floor(worldZ / tileSize)));
+  const u = Math.min(1, Math.max(0, (worldX - tx * tileSize) / tileSize));
+  const v = Math.min(1, Math.max(0, (worldZ - ty * tileSize) / tileSize));
+  const c = cornerHeightsForTile(specials?.[ty]?.[tx] ?? 0, heights, w, h, tx, ty, floorHeight, specials, collision);
+  const north = c[0] + (c[1] - c[0]) * u;
+  const south = c[3] + (c[2] - c[3]) * u;
+  return north + (south - north) * v;
+}
+
+function terrainFloorBaseAtTile(map, tx, ty, tileSize) {
+  const heights = map.terrain?.height || [];
+  const specials = map.terrain?.special || [];
+  const collision = map.terrain?.collision || [];
+  const floorHeight = Number(map.terrainVisual?.floorHeightScale) || tileSize;
+  const w = map.grid?.width || 1;
+  const h = map.grid?.height || 1;
+  const c = cornerHeightsForTile(specials?.[ty]?.[tx] ?? 0, heights, w, h, tx, ty, floorHeight, specials, collision);
+  return Math.min(c[0], c[1], c[2], c[3]);
+}
+
+function appendVertex(out, mesh, source, uvSource, colorSource, vertexIndex, tileSize, placement = null) {
   const vi = vertexIndex * 3;
   const ui = vertexIndex * 2;
-  out.positions.push(
-    (source[vi] || 0) * tileSize,
-    (source[vi + 2] || 0) * tileSize,
-    ((mesh.height || 1) - (source[vi + 1] || 0)) * tileSize,
-  );
+  const localX = ((source[vi] || 0) + (mesh.xOffset || mesh.x_offset || 0)) * tileSize;
+  const localY = (((mesh.height || 1) - ((source[vi + 1] || 0) + (mesh.yOffset || mesh.y_offset || 0)))) * tileSize;
+  const localZ = (source[vi + 2] || 0) * tileSize;
+  let worldX = localX;
+  let worldZ = localY;
+  if (placement) {
+    worldX = placement.x * tileSize + localX;
+    worldZ = placement.z * tileSize + localY;
+    const sampleTx = placement.x + Math.min(
+      Math.max(0, Math.floor(localX / tileSize)),
+      Math.max(0, (mesh.width || 1) - 1),
+    );
+    const sampleTy = placement.z + Math.min(
+      Math.max(0, Math.floor(localY / tileSize)),
+      Math.max(0, (mesh.height || 1) - 1),
+    );
+    const worldY = placement.conformToTerrain
+      ? terrainHeightAtWorld(placement.map, worldX, worldZ, tileSize, sampleTx, sampleTy) + localZ + placement.layerLift
+      : placement.baseY + localZ + placement.layerLift;
+    out.positions.push(worldX, worldY, worldZ);
+  } else {
+    out.positions.push(localX, localZ, localY);
+  }
   out.uvs.push(uvSource?.[ui] ?? 0, uvSource?.[ui + 1] ?? 0);
-  out.colors.push(
+  let color = new THREE.Color(
     colorSource?.[vi] ?? 1,
     colorSource?.[vi + 1] ?? 1,
     colorSource?.[vi + 2] ?? 1,
   );
+  if (placement?.conformToTerrain) {
+    const sampleTx = placement.x + Math.min(
+      Math.max(0, Math.floor(localX / tileSize)),
+      Math.max(0, (mesh.width || 1) - 1),
+    );
+    const sampleTy = placement.z + Math.min(
+      Math.max(0, Math.floor(localY / tileSize)),
+      Math.max(0, (mesh.height || 1) - 1),
+    );
+    const u = Math.min(1, Math.max(0, (worldX - sampleTx * tileSize) / tileSize));
+    const v = Math.min(1, Math.max(0, (worldZ - sampleTy * tileSize) / tileSize));
+    const progress = cardinalRampProgress(placement.map.terrain?.special || [], sampleTx, sampleTy, u, v);
+    if (progress != null) color = rampProgressColor(color, progress, placement.map.terrainVisual?.rampReadability || {});
+  }
+  out.colors.push(color.r, color.g, color.b);
 }
 
 export async function renderRtpksTileThumbnail(fileName, packageInfo, resortTileId, options = {}) {
@@ -287,27 +362,27 @@ function lightingPresetConfig(visual = {}) {
   return presets[preset] || presets.day;
 }
 
-function appendTri(out, mesh, triIndex, tileSize) {
+function appendTri(out, mesh, triIndex, tileSize, placement = null) {
   const base = triIndex * 3;
-  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base, tileSize);
-  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 1, tileSize);
-  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 2, tileSize);
+  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base, tileSize, placement);
+  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 1, tileSize, placement);
+  appendVertex(out, mesh, mesh.triangles, mesh.texCoordsTri, mesh.colorsTri, base + 2, tileSize, placement);
 }
 
-function appendQuad(out, mesh, quadIndex, tileSize) {
+function appendQuad(out, mesh, quadIndex, tileSize, placement = null) {
   const base = quadIndex * 4;
-  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base, tileSize);
-  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 1, tileSize);
-  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 2, tileSize);
-  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base, tileSize);
-  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 2, tileSize);
-  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 3, tileSize);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base, tileSize, placement);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 1, tileSize, placement);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 2, tileSize, placement);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base, tileSize, placement);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 2, tileSize, placement);
+  appendVertex(out, mesh, mesh.quads, mesh.texCoordsQuad, mesh.colorsQuad, base + 3, tileSize, placement);
 }
 
-function buildRangeGeometry(mesh, range, tileSize) {
+function buildRangeGeometry(mesh, range, tileSize, placement = null) {
   const out = { positions: [], uvs: [], colors: [] };
-  for (let i = 0; i < (range.triCount || 0); i += 1) appendTri(out, mesh, (range.triStart || 0) + i, tileSize);
-  for (let i = 0; i < (range.quadCount || 0); i += 1) appendQuad(out, mesh, (range.quadStart || 0) + i, tileSize);
+  for (let i = 0; i < (range.triCount || 0); i += 1) appendTri(out, mesh, (range.triStart || 0) + i, tileSize, placement);
+  for (let i = 0; i < (range.quadCount || 0); i += 1) appendQuad(out, mesh, (range.quadStart || 0) + i, tileSize, placement);
   if (!out.positions.length) return null;
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(out.positions, 3));
@@ -319,15 +394,22 @@ function buildRangeGeometry(mesh, range, tileSize) {
   return geometry;
 }
 
-async function buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize) {
+async function buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize, placement = null) {
   const meshPayload = await loadRtpksMesh(fileName, resortTileId);
+  const effectivePlacement = placement
+    ? {
+        ...placement,
+        conformToTerrain: meshVerticalRange(meshPayload) <= 0.02,
+        baseY: terrainFloorBaseAtTile(placement.map, placement.x, placement.z, tileSize),
+      }
+    : null;
   const group = new THREE.Group();
   group.name = `rtpks_tile_${resortTileId}`;
   const ranges = Array.isArray(meshPayload.materialRanges) && meshPayload.materialRanges.length
     ? meshPayload.materialRanges
     : [{ materialId: meshPayload.textureIds?.[0] ?? 0, triStart: 0, triCount: (meshPayload.triangles || []).length / 9, quadStart: 0, quadCount: (meshPayload.quads || []).length / 12 }];
   for (const range of ranges) {
-    const geometry = buildRangeGeometry(meshPayload, range, tileSize);
+    const geometry = buildRangeGeometry(meshPayload, range, tileSize, effectivePlacement);
     if (!geometry) continue;
     const mat = materialForRtpks(fileName, packageInfo, range.materialId);
     const part = new THREE.Mesh(geometry, mat);
@@ -535,9 +617,6 @@ async function addRtpksTiles(scene, map, tileSize, packageInfo, fileName, dispos
   const group = new THREE.Group();
   group.name = 'rtpks_tile_layer';
   scene.add(group);
-  const templates = new Map();
-  const heights = map.terrain?.height || [];
-  const floorHeight = Number(map.terrainVisual?.floorHeightScale) || tileSize;
   for (const { layer, index } of layers) {
     if (!layer?.cells?.length) continue;
     for (let z = 0; z < map.grid.height; z += 1) {
@@ -546,17 +625,13 @@ async function addRtpksTiles(scene, map, tileSize, packageInfo, fileName, dispos
         if (id == null || id === '') continue;
         const resortTileId = Number(id);
         if (!Number.isFinite(resortTileId)) continue;
-        if (!templates.has(resortTileId)) {
-          templates.set(resortTileId, buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize));
-        }
-        const template = await templates.get(resortTileId);
+        const instance = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize, {
+          map,
+          x,
+          z,
+          layerLift: index * DECORATION_LAYER_Y_EPSILON,
+        });
         if (disposedRef.disposed) return;
-        const instance = template.clone(true);
-        instance.position.set(
-          x * tileSize,
-          Math.max(0, heights?.[z]?.[x] ?? 0) * floorHeight + index * DECORATION_LAYER_Y_EPSILON,
-          z * tileSize,
-        );
         group.add(instance);
       }
     }

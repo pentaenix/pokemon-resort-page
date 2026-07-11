@@ -270,6 +270,9 @@ class PackageStore:
                 poke_types = meta.get("pokemonTypes") or []
                 if not isinstance(poke_types, list):
                     poke_types = [str(poke_types)] if poke_types else []
+                from spmk_app.object_categories import normalize_object_category
+
+                object_category = normalize_object_category(meta.get("objectCategory"))
                 found.append(
                     {
                         "path": str(p),
@@ -280,6 +283,7 @@ class PackageStore:
                         "characterType": char_type,
                         "pokemonId": meta.get("pokemonId"),
                         "pokemonTypes": poke_types,
+                        "objectCategory": object_category,
                         "tags": [str(t).strip() for t in tags if str(t).strip()],
                         "schemaVersion": pkg.get("schemaVersion"),
                         "sheetCount": len(sheets),
@@ -375,6 +379,7 @@ class PackageStore:
         *,
         character_type: str = "npc",
         base_profile: str | None = None,
+        replace_existing: bool = False,
     ) -> Dict[str, Any]:
         pkg = empty_package(char_id, display_name)
         pkg["metadata"]["characterType"] = character_type
@@ -386,15 +391,18 @@ class PackageStore:
         elif character_type == "object":
             pkg["baseProfile"] = base_profile or "object"
             pkg["metadata"]["objectAnimated"] = False
+            pkg["metadata"]["objectCategory"] = "others"
         elif character_type == "player":
             pkg["baseProfile"] = base_profile or "character"
         else:
             pkg["baseProfile"] = base_profile or "character"
         target = str(self._canonical_charbin_path(pkg))
-        self.save_draft(pkg, {}, source_path="")
+        existing_path = Path(target)
+        source_path = str(existing_path) if replace_existing and existing_path.is_file() else ""
+        self.save_draft(pkg, {}, source_path=source_path)
         return {
             "package": pkg,
-            "meta": {"sourcePath": "", "targetPath": target},
+            "meta": {"sourcePath": source_path, "targetPath": target, "replacingExisting": bool(source_path)},
             "assetIds": [],
         }
 
@@ -417,9 +425,38 @@ class PackageStore:
             raise ValueError("no draft open")
         pkg = cur.get("package") or empty_package()
         merged = self._sanitize_package_metadata(deep_merge_preserve_unknown(pkg, patch))
+        from spmk_app.character_package import apply_pokemon_size_to_package, is_pokemon_package
+
+        if is_pokemon_package(merged):
+            size = (merged.get("metadata") or {}).get("pokemonSize")
+            if size:
+                merged = apply_pokemon_size_to_package(merged, str(size))
         assets = cur.get("_assets") or self._load_draft_assets()
         meta = cur.get("meta") or {}
         self.save_draft(merged, assets, source_path=meta.get("sourcePath", ""))
+        return self.load_draft() or {}
+
+    def apply_npc_intel_draft(
+        self,
+        intel: Dict[str, Any],
+        *,
+        replace_id: bool = False,
+    ) -> Dict[str, Any]:
+        from spmk_app.character_package import ensure_package_actions
+        from spmk_app.npc_intel import apply_intel_to_package
+
+        cur = self.load_draft()
+        if not cur:
+            raise ValueError("no draft open")
+        pkg = apply_intel_to_package(
+            cur.get("package") or empty_package(),
+            intel,
+            replace_id=replace_id,
+        )
+        pkg = ensure_package_actions(pkg)
+        assets = cur.get("_assets") or self._load_draft_assets()
+        meta = cur.get("meta") or {}
+        self.save_draft(pkg, assets, source_path=meta.get("sourcePath", ""))
         return self.load_draft() or {}
 
     def put_draft_asset(
@@ -452,6 +489,9 @@ class PackageStore:
         include_idle: bool = False,
         frame_count: int = 4,
         frame_time_ms: int = 120,
+        session_enter_frames: str = "",
+        session_stay_frames: str = "",
+        session_exit_frames: str = "",
     ) -> Dict[str, Any]:
         from spmk_app.character_package import ensure_package_actions
         from spmk_app.package_draft_sheet import add_sheet_to_draft_package
@@ -471,6 +511,9 @@ class PackageStore:
             include_idle=include_idle,
             frame_count=frame_count,
             frame_time_ms=frame_time_ms,
+            session_enter_frames=session_enter_frames,
+            session_stay_frames=session_stay_frames,
+            session_exit_frames=session_exit_frames,
             profile_name=profile,
         )
         merged = self._sanitize_package_metadata(ensure_package_actions(merged))

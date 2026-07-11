@@ -42,11 +42,38 @@ function numberAt(root, path, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function normalizeHexColor(value, fallback = '#ffffff') {
+function parseHexColor(value) {
   const raw = String(value ?? '').trim();
-  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw;
-  if (/^#[0-9a-f]{3}$/i.test(raw)) return `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`;
-  return fallback;
+  if (/^#[0-9a-f]{8}$/i.test(raw)) {
+    return { rgb: `#${raw.slice(1, 7)}`, alpha: raw.slice(7, 9).toUpperCase(), full: raw.toUpperCase() };
+  }
+  if (/^#[0-9a-f]{6}$/i.test(raw)) {
+    const rgb = raw.toUpperCase();
+    return { rgb, alpha: null, full: rgb };
+  }
+  if (/^#[0-9a-f]{3}$/i.test(raw)) {
+    const rgb = `#${raw[1]}${raw[1]}${raw[2]}${raw[2]}${raw[3]}${raw[3]}`.toUpperCase();
+    return { rgb, alpha: null, full: rgb };
+  }
+  return null;
+}
+function normalizeHexColor(value, fallback = '#ffffff') {
+  const parsed = parseHexColor(value);
+  if (parsed) return parsed.rgb;
+  const fallbackParsed = parseHexColor(fallback);
+  return fallbackParsed?.rgb || fallback;
+}
+function hexColorPreview(value, fallback = '#ffffff') {
+  const parsed = parseHexColor(value) || parseHexColor(fallback);
+  if (!parsed) return fallback;
+  return parsed.full;
+}
+function mergePickerHex(pickerValue, previousValue) {
+  const picked = normalizeHexColor(pickerValue, '');
+  if (!picked) return String(previousValue ?? pickerValue ?? '').trim();
+  const prev = parseHexColor(previousValue);
+  if (prev?.alpha) return `${picked}${prev.alpha}`.toUpperCase();
+  return picked.toUpperCase();
 }
 
 
@@ -108,7 +135,7 @@ function extractHexColors(value, prefix = '') {
   const out = [];
   if (typeof value === 'string') {
     const matches = value.match(/#[0-9a-f]{3,8}\b/gi) || [];
-    matches.forEach((hex) => out.push({ path: prefix, value: normalizeHexColor(hex) }));
+    matches.forEach((hex) => out.push({ path: prefix, value: hexColorPreview(hex, normalizeHexColor(hex)) }));
     return out;
   }
   if (Array.isArray(value)) {
@@ -140,6 +167,9 @@ function setAtPath(root, path, value) {
 
 function flattenLeaves(value, prefix = '') {
   if (Array.isArray(value)) {
+    if (value.some((item) => item && typeof item === 'object' && !Array.isArray(item))) {
+      return value.flatMap((item, index) => flattenLeaves(item, prefix ? `${prefix}.${index}` : String(index)));
+    }
     return [{
       path: prefix,
       value,
@@ -446,8 +476,11 @@ function fieldInputHtml(field, current, esc) {
   }
   if (widget === 'json') return `<textarea rows="${mod.rows || 8}" ${common} data-json-editor>${esc(JSON.stringify(value, null, 2))}</textarea>`;
   if (['color', 'color-wheel', 'colour', 'colour-wheel'].includes(widget)) {
-    const colorValue = normalizeHexColor(value);
-    return `<div class="data-color-row"><input class="data-color-picker" type="color" value="${esc(colorValue)}" ${common} data-color-picker><input class="data-color-text" value="${esc(value ?? colorValue)}" ${common} data-color-text placeholder="#RRGGBB"><span class="data-color-swatch" style="background:${esc(colorValue)}"></span></div>`;
+    const parsed = parseHexColor(value);
+    const colorValue = parsed?.rgb ?? normalizeHexColor(value);
+    const displayValue = value ?? colorValue;
+    const swatchValue = hexColorPreview(value, colorValue);
+    return `<div class="data-color-row"><input class="data-color-picker" type="color" value="${esc(colorValue)}" ${common} data-color-picker><input class="data-color-text" value="${esc(displayValue)}" ${common} data-color-text placeholder="#RRGGBB or #RRGGBBAA"><span class="data-color-swatch" style="background-color:${esc(swatchValue)}"></span></div>`;
   }
   if (widget === 'asset' || widget === 'path') return `<div class="data-path-row"><input value="${esc(value ?? '')}" ${common}${placeholder}><button type="button" class="btn ghost small" data-copy-value="${esc(value ?? '')}">Copy</button></div>`;
   if (widget === 'number') {
@@ -696,6 +729,47 @@ function colorSwatchButtonHtml(item, esc, extraClass = '') {
   return `<button type="button" class="data-color-copy ${esc(extraClass)}" data-copy-value="${esc(value)}" title="Copy ${esc(value)}"><span class="data-color-copy-swatch" style="background:${esc(value)}"></span><b>${esc(label)}</b><code>${esc(value)}</code><em aria-hidden="true">Copy</em></button>`;
 }
 
+function columnLayoutPaths(meta) {
+  const layout = meta?.columnLayout;
+  if (!layout?.columns?.length || !layout?.rows?.length) return new Set();
+  const paths = new Set();
+  for (const col of layout.columns) {
+    const prefix = String(col.pathPrefix || '').replace(/\.$/, '');
+    for (const row of layout.rows) {
+      const key = row.key || row.suffix || row.path;
+      if (prefix && key) paths.add(`${prefix}.${key}`);
+    }
+  }
+  return paths;
+}
+function fieldMatrixCellHtml(field, current, esc) {
+  const mod = modifierForField(current, field.path);
+  const autoDescription = field.comment || commentDescriptionForPath(current?.data, field.path);
+  const descriptions = uniqueNotes([autoDescription, mod.description]);
+  const descriptionHtml = descriptions.length ? `<small class="data-field-description">${descriptions.map((d) => esc(d)).join('<br>')}</small>` : '';
+  return `<label class="data-field is-matrix-cell${mod.advanced ? ' is-advanced' : ''}" data-field-row="${esc(field.path)}" title="${esc(field.path)}">${descriptionHtml}${fieldInputHtml(field, current, esc)}</label>`;
+}
+function columnLayoutHtml(meta, fieldsByPath, current, esc) {
+  const layout = meta.columnLayout;
+  if (!layout?.columns?.length || !layout?.rows?.length) return '';
+  const columns = layout.columns;
+  const rows = layout.rows;
+  const header = `<div class="data-column-matrix-head"><span class="data-column-matrix-corner"></span>${columns.map((col) => `<strong>${esc(col.label || prettyLabel(String(col.pathPrefix || '').split('.').pop() || 'Column'))}</strong>`).join('')}</div>`;
+  const body = rows.map((row) => {
+    const rowLabel = row.label || prettyLabel(row.key || row.suffix || row.path || '');
+    const cells = columns.map((col) => {
+      const prefix = String(col.pathPrefix || '').replace(/\.$/, '');
+      const key = row.key || row.suffix || row.path;
+      const path = `${prefix}.${key}`;
+      const field = fieldsByPath.get(path);
+      if (!field) return '<div class="data-column-matrix-cell is-empty" aria-hidden="true"></div>';
+      return `<div class="data-column-matrix-cell">${fieldMatrixCellHtml(field, current, esc)}</div>`;
+    }).join('');
+    return `<div class="data-column-matrix-row"><span class="data-column-matrix-row-label">${esc(rowLabel)}</span>${cells}</div>`;
+  }).join('');
+  return `<div class="data-column-matrix" style="--matrix-cols:${columns.length}"><div class="data-column-matrix-table">${header}${body}</div></div>`;
+}
+
 function formHtml(de, esc) {
   const current = de.current;
   if (!current) return '';
@@ -730,7 +804,15 @@ function formHtml(de, esc) {
   const rootNote = rootComment ? `<section class="data-comment-note"><strong>Config note</strong><p>${esc(rootComment)}</p></section>` : '';
   return preview + rootNote + sections.map(({ meta, fields }) => {
     fields.sort((a, b) => (a.mod.order ?? 1000) - (b.mod.order ?? 1000) || a.path.localeCompare(b.path));
-    const sectionHtml = `<details class="data-section" open><summary><span><strong>${esc(meta.label || meta.id)}</strong>${meta.description ? `<small>${esc(meta.description)}</small>` : ''}</span><b>${fields.length}</b></summary><div class="data-field-grid">${fields.map((f) => fieldHtml(f, current, esc)).join('')}</div></details>`;
+    const collapsed = Boolean(meta.collapsed || meta.collapsedDefault || meta.defaultCollapsed);
+    const open = q || !collapsed ? ' open' : '';
+    const matrixPaths = columnLayoutPaths(meta);
+    const matrixFieldsByPath = new Map(fields.filter((f) => matrixPaths.has(f.path)).map((f) => [f.path, f]));
+    const gridFields = fields.filter((f) => !matrixPaths.has(f.path));
+    const matrixHtml = matrixPaths.size ? columnLayoutHtml(meta, matrixFieldsByPath, current, esc) : '';
+    const gridHtml = gridFields.length ? `<div class="data-field-grid">${gridFields.map((f) => fieldHtml(f, current, esc)).join('')}</div>` : '';
+    const sectionBody = matrixHtml || gridHtml ? `${matrixHtml}${gridHtml}` : '<p class="hint">No visible fields in this section.</p>';
+    const sectionHtml = `<details class="data-section"${open}><summary><span><strong>${esc(meta.label || meta.id)}</strong>${meta.description ? `<small>${esc(meta.description)}</small>` : ''}</span><b>${fields.length}</b></summary>${sectionBody}</details>`;
     return sectionHtml + utilityBlocksAfterGroupHtml(current, meta.id, esc);
   }).join('');
 }
@@ -762,6 +844,19 @@ function countFolderFiles(node) {
   for (const child of node.children.values()) count += countFolderFiles(child);
   return count;
 }
+function shouldFlattenChildFolders(node) {
+  if (!node.children.size) return false;
+  return [...node.children.values()].every((child) => child.children.size === 0 && child.files.length > 0);
+}
+function flattenLeafCategoryFolders(node) {
+  if (shouldFlattenChildFolders(node)) {
+    for (const child of [...node.children.values()]) {
+      node.files.push(...child.files);
+      node.children.delete(child.name);
+    }
+  }
+  for (const child of node.children.values()) flattenLeafCategoryFolders(child);
+}
 function buildFolderTree(files) {
   const root = { name: '', path: '', files: [], children: new Map() };
   for (const file of files) {
@@ -775,6 +870,7 @@ function buildFolderTree(files) {
     }
     node.files.push(file);
   }
+  flattenLeafCategoryFolders(root);
   return root;
 }
 function folderNodeHtml(node, de, esc, depth = 0) {
@@ -851,14 +947,21 @@ function bindFieldInputs(state) {
   document.querySelectorAll('[data-data-field]').forEach((field) => {
     field.oninput = () => {
       try {
-        const value = parseFieldValue(field);
+        let value;
+        if (field.dataset.colorPicker != null) {
+          value = mergePickerHex(field.value, getAtPath(c.data, field.dataset.dataField));
+        } else if (field.dataset.colorText != null) {
+          value = String(field.value ?? '').trim();
+        } else {
+          value = parseFieldValue(field);
+        }
         setAtPath(c.data, field.dataset.dataField, value);
         c.dirty = stable(c.data) !== stable(c.original);
         document.querySelectorAll(`[data-data-field="${CSS.escape(field.dataset.dataField)}"]`).forEach((peer) => {
           if (peer !== field && (peer.type === 'range' || peer.type === 'number' || peer.tagName === 'INPUT')) peer.value = field.value;
         });
         if (field.dataset.colorPicker != null) {
-          document.querySelectorAll(`[data-data-field="${CSS.escape(field.dataset.dataField)}"][data-color-text]`).forEach((peer) => { if (peer !== field) peer.value = field.value; });
+          document.querySelectorAll(`[data-data-field="${CSS.escape(field.dataset.dataField)}"][data-color-text]`).forEach((peer) => { peer.value = value; });
         }
         if (field.dataset.colorText != null) {
           const hex = normalizeHexColor(field.value, '');
@@ -866,7 +969,7 @@ function bindFieldInputs(state) {
         }
         document.querySelectorAll(`[data-data-field="${CSS.escape(field.dataset.dataField)}"]`).forEach((peer) => {
           const swatch = peer.closest('.data-color-row')?.querySelector('.data-color-swatch');
-          if (swatch) swatch.style.background = normalizeHexColor(field.value);
+          if (swatch) swatch.style.backgroundColor = hexColorPreview(value);
         });
         refreshDataPreview(c);
         const rev = document.getElementById('dataRevert');

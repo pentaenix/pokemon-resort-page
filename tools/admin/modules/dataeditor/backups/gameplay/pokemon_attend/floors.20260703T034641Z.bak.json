@@ -1,0 +1,99 @@
+{
+  "defaults": {
+    "radius": 1,
+    "segments": 128,
+    "rings": 28,
+    "position": {
+      "x": 0,
+      "y": -0.035,
+      "z": -1
+    },
+    "type": "platform",
+    "placementAnchor": "pokemon_feet",
+    "modelPlacement": {
+      "y": -0.035,
+      "yawDegrees": 180,
+      "scale": 0.25,
+      "offset": {
+        "x": 0,
+        "z": 0
+      }
+    },
+    "hiddenMaterialSubstrings": [
+      "batt_leaf23",
+      "batt_leafb23"
+    ],
+    "y": -0.035,
+    "radialColors": [
+      {
+        "at": 0,
+        "color": "#FFF7D9"
+      },
+      {
+        "at": 0.22,
+        "color": "#F4EFC7"
+      },
+      {
+        "at": 0.58,
+        "color": "#B7D9C8"
+      },
+      {
+        "at": 1,
+        "color": "#4F93AA"
+      }
+    ]
+  },
+  "environmentDefaults": {
+    "type": "environment",
+    "placementAnchor": "world",
+    "modelPlacement": {
+      "x": 0,
+      "y": -0.032,
+      "z": -0.5,
+      "yawDegrees": 90,
+      "scale": 0.006
+    },
+    "hiddenMaterialSubstrings": [],
+    "weatherMaterialSubstrings": [
+      "btl_G_all_rain",
+      "btl_G_all_rain0m",
+      "btl_G_all_snow0m"
+    ],
+    "activeWeather": 0,
+    "weatherModes": [
+      {
+        "id": "clear",
+        "label": "Clear",
+        "visibleMaterialSubstrings": []
+      },
+      {
+        "id": "rain",
+        "label": "Rain",
+        "visibleMaterialSubstrings": [
+          "btl_G_all_rain",
+          "btl_G_all_rain0m"
+        ]
+      },
+      {
+        "id": "snow",
+        "label": "Snow",
+        "visibleMaterialSubstrings": [
+          "btl_G_all_snow0m"
+        ]
+      }
+    ]
+  },
+  "floors": {
+    "grass": {
+      "id": "grass",
+      "type": "platform",
+      "model": "assets/pokemon_attend/floors/beach.glb",
+      "animation": "file_0040.bin"
+    },
+    "grass_field": {
+      "id": "grass_field",
+      "type": "environment",
+      "model": "assets/pokemon_attend/floors/grass_field.glb"
+    }
+  }
+}

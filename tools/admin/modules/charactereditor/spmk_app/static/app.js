@@ -10,7 +10,13 @@ const api = async (url, opts={}) => {
   if(!r.ok){
     const errText=await r.text();
     termLog(`HTTP ${r.status}: ${errText.slice(0,240)}`,'error');
-    throw new Error(errText);
+    let detail=errText;
+    try { detail=JSON.parse(errText).detail ?? errText; } catch (_) { /* keep text */ }
+    const message=typeof detail==='object' ? (detail.message||'Request failed') : String(detail);
+    const error=new Error(message);
+    error.detail=detail;
+    error.status=r.status;
+    throw error;
   }
   const out=r.headers.get('content-type')?.includes('application/json') ? await r.json() : await r.text();
   if(loud) termLog(`HTTP ${r.status} OK`,'ok');
@@ -18,7 +24,7 @@ const api = async (url, opts={}) => {
 };
 let state = {project:null, view:'packages', libraryPanel:'list', sheetPanel:'families', sheetFamilyId:null, selectedCharacter:null, selectedSheet:null, selectedSprite:null, selectedGenerated:null, sheetZoom:1, sheetFit:true};
 let lastProjectUpdatedAt=null, projectSyncTimer=null;
-const navItems = [['packages','◈','Characters'], ['sheets','▦','Sheets'], ['actions','✦','Actions'], ['generate','⧉','Generate'], ['editor','✎','Editor'], ['export','⇩','Export'], ['library','◇','Sprite workspace']];
+const navItems = [['packages','◈','Characters'], ['sheets','▦','Sheets'], ['actions','✦','Actions'], ['generate','⧉','Generate'], ['editor','✎','Editor'], ['library','◇','Sprite workspace'], ['settings','⚙','Settings']];
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600); termLog(String(msg).replace(/\n/g,' | '));}
 function termLog(message, tone=''){
   if(EMBED && window.parent !== window){
@@ -67,6 +73,8 @@ async function load(){
   renderNav();
   await renderPackagesView();
   if(typeof bindQuickAnimEntrypoints==='function') bindQuickAnimEntrypoints(document);
+  const genBtn = $('#sidebarOpenGenerate');
+  if (genBtn) genBtn.onclick = () => { state.view = 'generate'; state.generateBackend = 'charbin'; renderNav(); renderGenerate(); };
   startProjectSync();
 }
 async function refresh(){ const keep={...state}; state.project=await api('/api/project'); lastProjectUpdatedAt=state.project.updatedAt||null; Object.assign(state, keep, {project:state.project}); renderNav(); syncView(); }
@@ -82,7 +90,7 @@ async function syncProjectFromServer(opts={}){
   const keep={...state}; const p=await api('/api/project'); const changed=lastProjectUpdatedAt!==null && p.updatedAt!==lastProjectUpdatedAt;
   lastProjectUpdatedAt=p.updatedAt||null; state.project=p; Object.assign(state, keep, {project:p}); $('#projectName').textContent=p.projectName; renderNav();
   /* Characters (.charbin) must not re-render on background sync — that steals input focus */
-  if(state.view!=='packages') await syncView();
+  if(state.view!=='packages' && state.view!=='settings') await syncView();
   if(changed && opts.toast) toast('Project updated');
 }
 function startProjectSync(){
@@ -100,6 +108,7 @@ function allSprites(){ return state.project.characters.flatMap(c=>(c.sprites||[]
 function render(){
   if(state.view==='packages'){ renderPackagesView(); return; }
   if(state.view==='library') renderLibrary();
+  if(state.view==='settings') renderCharacterSettings();
   if(state.view==='sheets') renderSheets();
   if(state.view==='actions') renderActions();
   if(state.view==='generate') renderGenerate();

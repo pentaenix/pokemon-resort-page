@@ -1,0 +1,57 @@
+{
+  "title": "Pokemon Attend Manifest",
+  "description": "Small routing file for TEST ATTEND. Pick the active debug scene and the purpose-built config files it uses.",
+  "browseFolder": "gameplay/pokemon_attend",
+  "matches": [
+    "gameplay/pokemon_attend.json"
+  ],
+  "tags": [
+    "attend",
+    "manifest"
+  ],
+  "groups": [
+    {
+      "id": "scene",
+      "label": "Scene selection",
+      "order": 1
+    },
+    {
+      "id": "files",
+      "label": "Linked config files",
+      "description": "Each file owns one concern: debug selection, interaction defaults, Pokemon provider, or environment catalog.",
+      "order": 10
+    }
+  ],
+  "fields": {
+    "activeDebug": {
+      "label": "Active attend debug scene",
+      "widget": "text",
+      "group": "scene",
+      "order": 1
+    },
+    "files.debug": {
+      "label": "Debug scene file",
+      "widget": "path",
+      "group": "files",
+      "order": 1
+    },
+    "files.interaction": {
+      "label": "Interaction defaults file",
+      "widget": "path",
+      "group": "files",
+      "order": 2
+    },
+    "files.pokemonProvider": {
+      "label": "Pokemon provider file",
+      "widget": "path",
+      "group": "files",
+      "order": 3
+    },
+    "files.environment": {
+      "label": "Environment catalog file",
+      "widget": "path",
+      "group": "files",
+      "order": 4
+    }
+  }
+}

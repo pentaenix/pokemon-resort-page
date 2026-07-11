@@ -8,10 +8,107 @@
   ],
   "features": [
     {
+      "id": "FEAT-NEW-70933",
+      "title": "Interactions -> attend",
+      "area": "Overworld",
+      "stage": "On-Flight",
+      "priority": "Medium",
+      "progress": 33,
+      "summary": "The ability to talk to your pokemon and open pokemon attend",
+      "linkedBugs": [],
+      "linkedRoutes": [],
+      "tasks": [
+        {
+          "done": false,
+          "label": "Extract models pokemon ultra moon"
+        },
+        {
+          "done": false,
+          "label": "connect the overworld to pokemon attend"
+        },
+        {
+          "done": false,
+          "label": "be able to start an interaction with NPC"
+        }
+      ],
+      "images": [],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "pinId": "",
+          "label": "",
+          "note": "",
+          "position": [
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": []
+      }
+    },
+    {
+      "id": "FEAT-NEW-18547",
+      "title": "Adding river tubes to the hill to test the feature",
+      "area": "General",
+      "stage": "On-Flight",
+      "priority": "Medium",
+      "progress": 0,
+      "summary": "Describe the feature.",
+      "linkedBugs": [],
+      "linkedRoutes": [],
+      "tasks": [],
+      "images": [],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "pinId": "",
+          "label": "",
+          "note": "",
+          "position": [
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": []
+      }
+    },
+    {
+      "id": "FEAT-NEW-92474",
+      "title": "Pokemon Attend",
+      "area": "Attend 3D",
+      "stage": "On-Flight",
+      "priority": "Medium",
+      "progress": 0,
+      "summary": "Pokemon Amie for Pokemon Resort, here you can interact, pet and feed your pokemon",
+      "linkedBugs": [],
+      "linkedRoutes": [],
+      "tasks": [],
+      "images": [],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "pinId": "",
+          "label": "",
+          "note": "",
+          "position": [
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": []
+      }
+    },
+    {
       "id": "FEAT-NEW-02126",
       "title": "Pokemon Sleep  sprite editor",
       "area": "Art",
-      "stage": "On-Flight",
+      "stage": "Boarding Soon",
       "priority": "Low",
       "progress": 0,
       "summary": "There are over 1000 pokemon now and multiple forms, around 1300, not including shiny pokemon, and we need to have a quick way to generate this sprite once and then repeat it automatically for all other forms",
@@ -22,7 +119,7 @@
       "dossier": {
         "overview": "",
         "map": {
-          "poiId": "",
+          "pinId": "",
           "label": "",
           "note": "",
           "position": [
@@ -81,7 +178,7 @@
       "dossier": {
         "overview": "",
         "map": {
-          "poiId": "",
+          "pinId": "",
           "label": "",
           "note": "",
           "position": [
@@ -95,35 +192,6 @@
       }
     },
     {
-      "id": "feature-model-library",
-      "title": "3D model and submodel library",
-      "stage": "Boarding Soon",
-      "priority": "High",
-      "progress": 40,
-      "summary": "A place to track the master island model and submodels for dock, paths, buildings, props, and vegetation.",
-      "linkedBugs": [],
-      "tasks": [
-        {
-          "label": "Add Model Library page",
-          "done": true
-        },
-        {
-          "label": "Define main island model path",
-          "done": true
-        },
-        {
-          "label": "Add real island GLB model",
-          "done": false
-        },
-        {
-          "label": "Add first submodel records",
-          "done": false
-        }
-      ],
-      "area": "Models",
-      "linkedRoutes": []
-    },
-    {
       "id": "feature-characters",
       "title": "Characters and animated visitors",
       "stage": "Boarding Soon",
@@ -133,53 +201,85 @@
       "linkedBugs": [],
       "tasks": [
         {
-          "label": "Add Characters & Visitors page",
-          "done": true
+          "done": true,
+          "label": "Add Characters & Visitors page"
         },
         {
-          "label": "Define sprite resource contract",
-          "done": true
+          "done": true,
+          "label": "Define sprite resource contract"
         },
         {
-          "label": "Add real character entries",
-          "done": false
+          "done": false,
+          "label": "Add real character entries"
         },
         {
-          "label": "Add animated visitor previews",
-          "done": false
+          "done": false,
+          "label": "Add animated visitor previews"
         }
       ],
       "area": "Characters",
-      "linkedRoutes": []
+      "linkedRoutes": [],
+      "images": [],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "pinId": "",
+          "label": "",
+          "note": "",
+          "position": [
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": []
+      }
     },
     {
       "id": "feature-admin",
       "title": "Local Operations Desk",
-      "stage": "On-Flight",
+      "stage": "Landed",
       "priority": "High",
       "progress": 62,
       "summary": "Local-only admin tool for editing data, validating relationships, previewing changes, and publishing through Git.",
       "linkedBugs": [],
       "tasks": [
         {
-          "label": "Keep public site static",
-          "done": true
+          "done": true,
+          "label": "Keep public site static"
         },
         {
-          "label": "Validate data before publishing",
-          "done": true
+          "done": true,
+          "label": "Validate data before publishing"
         },
         {
-          "label": "Add editors for new data files",
-          "done": false
+          "done": false,
+          "label": "Add editors for new data files"
         },
         {
-          "label": "Add media usage warnings",
-          "done": false
+          "done": false,
+          "label": "Add media usage warnings"
         }
       ],
       "area": "Admin",
-      "linkedRoutes": []
+      "linkedRoutes": [],
+      "images": [],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "pinId": "",
+          "label": "",
+          "note": "",
+          "position": [
+            "0",
+            "0",
+            "0"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": []
+      }
     },
     {
       "id": "feature-contest-hall",
@@ -208,7 +308,7 @@
       "dossier": {
         "overview": "Contest halls are a cross-generation research target. This dossier holds generation notes, UI references, comparisons, and map placement, separate from the quick task checklist on the card.",
         "map": {
-          "poiId": "",
+          "pinId": "",
           "label": "Lilycove Contest Hall (placeholder)",
           "note": "Link to a real POI when the atlas entry exists.",
           "position": [

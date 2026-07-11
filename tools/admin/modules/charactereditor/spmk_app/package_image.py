@@ -104,6 +104,17 @@ def _layout_pokemon_small() -> Dict[str, Any]:
     }
 
 
+def _layout_pokemon_human() -> Dict[str, Any]:
+    """Human-scale overworld Pokémon (32px cells, trainer-style profile)."""
+    return {
+        "profile": "character",
+        "pokemonSize": "human",
+        "cellWidth": 32,
+        "cellHeight": 32,
+        "profileOverrides": None,
+    }
+
+
 def _layout_pokemon_medium() -> Dict[str, Any]:
     return {
         "profile": "pokemon_small",
@@ -122,6 +133,21 @@ def _layout_pokemon_large() -> Dict[str, Any]:
         "cellHeight": 64,
         "profileOverrides": None,
     }
+
+
+POKEMON_SIZE_VALUES = ("small", "human", "medium", "large")
+
+
+def layout_for_pokemon_size(size: str) -> Dict[str, Any]:
+    """Map ``metadata.pokemonSize`` to profile + cell layout."""
+    key = (size or "small").strip().lower()
+    if key == "large":
+        return _layout_pokemon_large()
+    if key == "medium":
+        return _layout_pokemon_medium()
+    if key == "human":
+        return _layout_pokemon_human()
+    return _layout_pokemon_small()
 
 
 def _layout_for_cell(cell_width: int) -> Dict[str, Any]:

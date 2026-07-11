@@ -1,0 +1,201 @@
+{
+  "activeScene": "grass_field_environment",
+  "scenes": [
+    {
+      "id": "grass_field_environment",
+      "activePokemon": "psyduck",
+      "activeFloor": "grass_field",
+      "activeWall": "midday_sky",
+      "pokemon": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -0.5
+        },
+        "idleMotion": {
+          "enabled": false,
+          "bobAmplitude": 0,
+          "bobSeconds": 2.2,
+          "rockDegrees": 0,
+          "rockSeconds": 4.2
+        }
+      },
+      "camera": {
+        "targetX": 0,
+        "targetZ": -0.5,
+        "distance": 5.2,
+        "height": 1.7,
+        "targetHeight": 0.78,
+        "fovYDegrees": 42,
+        "nearClip": 0.05,
+        "farClip": 220
+      },
+      "viewportLook": {
+        "enabled": true,
+        "maxX": 0.75,
+        "maxY": 0.32,
+        "step": 0.16
+      },
+      "lighting": {
+        "brightness": 1.08,
+        "tint": [
+          1,
+          0.99,
+          0.95
+        ]
+      },
+      "background": {
+        "clearColor": "#8FD3F6"
+      },
+      "ui": {
+        "weatherButton": {
+          "enabled": true,
+          "anchor": "top_right",
+          "labelPrefix": "WEATHER: ",
+          "width": 196,
+          "height": 44,
+          "marginX": 24,
+          "marginY": 22,
+          "paddingX": 16,
+          "cornerRadius": 12,
+          "strokeWidth": 2,
+          "fontSize": 18,
+          "fill": "#123A56E8",
+          "stroke": "#E6F8FFEE",
+          "text": "#FFFFFFFF"
+        }
+      }
+    },
+    {
+      "id": "default_attend",
+      "activePokemon": "psyduck",
+      "activeFloor": "grass",
+      "activeWall": "soft_gradient",
+      "pokemon": {
+        "posePresets": [
+          {
+            "id": "stand_default",
+            "yawDegrees": 0,
+            "pitchDegrees": 0,
+            "note": "Default upright attend preview pose."
+          },
+          {
+            "id": "sleep_lie_back_saved",
+            "yawDegrees": 0,
+            "pitchDegrees": -90,
+            "note": "Saved from the first skinned-animation pass; funny lying-on-back pose for future sleep/rest interactions."
+          }
+        ],
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -0.5
+        },
+        "idleMotion": {
+          "enabled": false,
+          "bobAmplitude": 0,
+          "bobSeconds": 2.2,
+          "rockDegrees": 0,
+          "rockSeconds": 4.2
+        }
+      },
+      "camera": {
+        "distance": 3.135,
+        "height": 1.35,
+        "targetHeight": 0.76,
+        "fovYDegrees": 32,
+        "nearClip": 0.05,
+        "farClip": 80
+      },
+      "lighting": {
+        "brightness": 1.08,
+        "tint": [
+          1,
+          0.985,
+          0.94
+        ]
+      },
+      "background": {
+        "clearColor": "#2E6F8F"
+      }
+    },
+    {
+      "id": "grass_png_with_floor",
+      "activePokemon": "psyduck",
+      "activeFloor": "grass",
+      "activeWall": "grass_png",
+      "pokemon": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -0.5
+        },
+        "idleMotion": {
+          "enabled": false,
+          "bobAmplitude": 0,
+          "bobSeconds": 2.2,
+          "rockDegrees": 0,
+          "rockSeconds": 4.2
+        }
+      },
+      "camera": {
+        "distance": 3.135,
+        "height": 1.35,
+        "targetHeight": 0.76,
+        "fovYDegrees": 32,
+        "nearClip": 0.05,
+        "farClip": 80
+      },
+      "lighting": {
+        "brightness": 1.08,
+        "tint": [
+          1,
+          0.985,
+          0.94
+        ]
+      },
+      "background": {
+        "clearColor": "#2E6F8F"
+      }
+    },
+    {
+      "id": "grass_png_no_floor",
+      "activePokemon": "psyduck",
+      "activeFloor": "none",
+      "activeWall": "grass_png",
+      "pokemon": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -0.5
+        },
+        "idleMotion": {
+          "enabled": false,
+          "bobAmplitude": 0,
+          "bobSeconds": 2.2,
+          "rockDegrees": 0,
+          "rockSeconds": 4.2
+        }
+      },
+      "camera": {
+        "distance": 3.135,
+        "height": 1.35,
+        "targetHeight": 0.76,
+        "fovYDegrees": 32,
+        "nearClip": 0.05,
+        "farClip": 80
+      },
+      "lighting": {
+        "brightness": 1.08,
+        "tint": [
+          1,
+          0.985,
+          0.94
+        ]
+      },
+      "background": {
+        "clearColor": "#2E6F8F"
+      }
+    }
+  ]
+}

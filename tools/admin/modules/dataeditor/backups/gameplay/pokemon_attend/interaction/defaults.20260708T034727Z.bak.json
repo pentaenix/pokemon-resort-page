@@ -1,0 +1,149 @@
+{
+  "_comment": "Shared Attend interaction/runtime defaults. Debug scenes should only override these for temporary tests.",
+  "camera": {
+    "_comment": "Auto-focus is the normal path. Tune distanceMultiplier first when Pokemon feel too close or far.",
+    "autoFocus": true,
+    "fullBodyFraming": {
+      "pokemonScreenHeight": 0.58,
+      "distanceMultiplier": 0.63,
+      "minimumDistance": 1,
+      "maximumDistance": 14,
+      "targetHeightRatio": 0.46,
+      "verticalOffset": 0.72,
+      "depthPadding": 0.36
+    },
+    "faceFraming": {
+      "faceScreenHeight": 0.86,
+      "distanceMultiplier": 0.38,
+      "headTargetHeightRatio": 0.82,
+      "verticalOffset": 0.08,
+      "minimumPokemonHeight": 1.45,
+      "depthPadding": 0.12
+    },
+    "advanced": {
+      "_comment": "Fallback and debugging controls. These are hidden/collapsed in the admin tool by default.",
+      "manualCameraFallback": {
+        "targetX": 0,
+        "targetZ": 0,
+        "distance": 4.2,
+        "height": 1.55,
+        "targetHeight": 0.68
+      },
+      "lens": {
+        "fovYDegrees": 42,
+        "nearClip": 0.05,
+        "farClip": 220
+      },
+      "freeCamera": {
+        "moveSpeed": 4,
+        "mouseSensitivity": 0.12,
+        "initialOffset": [
+          0,
+          0,
+          0
+        ],
+        "initialYawDegrees": 180,
+        "initialPitchDegrees": -12,
+        "pitchClampMinDegrees": -75,
+        "pitchClampMaxDegrees": 75
+      }
+    }
+  },
+  "viewportLook": {
+    "enabled": true,
+    "maxX": 0.231,
+    "maxY": 0.105,
+    "edgeMarginRatio": 0.12,
+    "smoothSeconds": 0.32
+  },
+  "ui": {
+    "pixelatedOverlay": true,
+    "handCursor": {
+      "scale": 1.5,
+      "hotspotXRatio": 0.5,
+      "hotspotYRatio": 0.5,
+      "petAnimationSpeed": 1.5
+    },
+    "profilePlate": {
+      "enabled": true,
+      "width": 360,
+      "height": 158,
+      "marginX": 0,
+      "marginY": 22,
+      "paddingX": 16,
+      "paddingY": 10,
+      "cornerRadius": 8,
+      "outerStrokeWidth": 0,
+      "innerStrokeWidth": 0,
+      "showSprite": false,
+      "spriteSize": 68,
+      "spriteScale": 2,
+      "spriteGap": 10,
+      "nameFontSize": 44,
+      "detailFontSize": 36,
+      "nameRowHeight": 54,
+      "detailRowHeight": 36,
+      "nameRowWidth": 272,
+      "characteristicRowWidth": 255,
+      "natureRowWidth": 236,
+      "rowGap": 10,
+      "leftFadeWidth": 46,
+      "slideOutX": 72,
+      "characteristic": "Loves to eat",
+      "nature": "Hardy",
+      "font": "assets/fonts/power clear.ttf",
+      "outerBorder": "#FFFFFFF5",
+      "innerBorder": "#70BCEEEB",
+      "fillTop": "#53B7FFF0",
+      "fillBottom": "#1A66B3F0",
+      "divider": "#FFFFFF7A",
+      "nameText": "#FFFFFFFF",
+      "detailText": "#DBF5FFF5"
+    },
+    "actionButton": {
+      "enabled": true,
+      "icon": "assets/pokemon_attend/ui/actions.png",
+      "scale": 0.99,
+      "iconScale": 0.7,
+      "iconOffsetX": -0.09,
+      "iconOffsetY": 0.06,
+      "sideExtensionRatio": 0.28,
+      "outerBorder": "#FFFFFFFF",
+      "innerBorder": "#70BCEEFF",
+      "fillTop": "#A0DCFFFF",
+      "fillBottom": "#53B7FFFF"
+    },
+    "itemsButton": {
+      "enabled": true,
+      "icon": "assets/pokemon_attend/ui/items.png",
+      "scale": 0.99,
+      "iconScale": 0.7,
+      "iconOffsetX": 0.09,
+      "iconOffsetY": 0.025,
+      "sideExtensionRatio": 0.28,
+      "outerBorder": "#FFFFFFFF",
+      "innerBorder": "#70BCEEFF",
+      "fillTop": "#A0DCFFFF",
+      "fillBottom": "#53B7FFFF"
+    },
+    "returnButton": {
+      "enabled": true,
+      "icon": "assets/pokemon_attend/ui/return.png",
+      "scale": 0.99,
+      "iconScale": 0.6,
+      "iconOffsetX": -0.15,
+      "iconOffsetY": -0.05,
+      "sideExtensionRatio": 0.28,
+      "outerBorder": "#FFFFFFFF",
+      "innerBorder": "#70BCEEFF",
+      "fillTop": "#A0DCFFFF",
+      "fillBottom": "#53B7FFFF"
+    },
+    "cornerButtons": {
+      "hideAfterPetSeconds": 0.5,
+      "returnDelaySeconds": 1,
+      "slideInSeconds": 0.5,
+      "slideOutSeconds": 0.5
+    }
+  }
+}

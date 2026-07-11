@@ -34,5 +34,6 @@ Legacy one-offs (also run inside `./spmk test quick`):
 ```bash
 python3 -m py_compile spmk_app/server.py
 node --check spmk_app/static/app.js
+node scripts/check_library_filters.js
 node scripts/check_app_js_duplicates.js
 ```

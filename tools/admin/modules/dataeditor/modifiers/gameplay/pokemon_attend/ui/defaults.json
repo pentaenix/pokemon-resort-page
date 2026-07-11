@@ -1,0 +1,508 @@
+{
+  "title": "Attend UI Defaults",
+  "description": "Shared Attend UI wrapper: hand cursor, corner buttons, and the top-right Pokemon profile plate.",
+  "matches": [
+    "gameplay/pokemon_attend/ui/*.json"
+  ],
+  "tags": [
+    "attend",
+    "ui"
+  ],
+  "groups": [
+    {
+      "id": "global",
+      "label": "Global UI",
+      "order": 1
+    },
+    {
+      "id": "profilePlate",
+      "label": "Profile plate",
+      "description": "Top-right Pokemon name, form sprite, characteristic, and nature rows.",
+      "order": 10
+    },
+    {
+      "id": "profilePlateAdvanced",
+      "label": "Profile plate advanced",
+      "description": "Fine offsets and color details for polishing the plate.",
+      "order": 11,
+      "collapsedDefault": true
+    },
+    {
+      "id": "cornerButtons",
+      "label": "Corner buttons",
+      "description": "Action, Items, and Return buttons in one comparison grid. Shared slide timing is below the grid.",
+      "order": 20,
+      "columnLayout": {
+        "columns": [
+          {
+            "label": "Action",
+            "pathPrefix": "ui.actionButton"
+          },
+          {
+            "label": "Items",
+            "pathPrefix": "ui.itemsButton"
+          },
+          {
+            "label": "Return",
+            "pathPrefix": "ui.returnButton"
+          }
+        ],
+        "rows": [
+          {
+            "key": "enabled",
+            "label": "Visible"
+          },
+          {
+            "key": "scale",
+            "label": "Button scale"
+          },
+          {
+            "key": "iconScale",
+            "label": "Icon scale"
+          },
+          {
+            "key": "iconOffsetX",
+            "label": "Icon X offset"
+          },
+          {
+            "key": "iconOffsetY",
+            "label": "Icon Y offset"
+          },
+          {
+            "key": "icon",
+            "label": "Icon"
+          },
+          {
+            "key": "sideExtensionRatio",
+            "label": "Side extension"
+          },
+          {
+            "key": "outerBorder",
+            "label": "Outer border"
+          },
+          {
+            "key": "innerBorder",
+            "label": "Inner border"
+          },
+          {
+            "key": "fillTop",
+            "label": "Fill top"
+          },
+          {
+            "key": "fillBottom",
+            "label": "Fill bottom"
+          }
+        ]
+      }
+    },
+    {
+      "id": "hand",
+      "label": "Hand cursor",
+      "order": 30
+    }
+  ],
+  "fields": {
+    "ui.pixelatedOverlay": {
+      "label": "Pixelated Attend UI",
+      "description": "Keeps the 3D Attend scene at the shared low-resolution pixel density. UI screens default to HD below.",
+      "widget": "checkbox",
+      "group": "global",
+      "order": 1
+    },
+    "ui.rendering.normalUi": {
+      "label": "Normal Attend UI render mode",
+      "description": "Profile plate and corner buttons. hd draws after upscaling; sd bakes the whole normal UI into the pixelated scene.",
+      "widget": "select",
+      "options": [
+        "hd",
+        "sd"
+      ],
+      "group": "global",
+      "order": 90,
+      "advanced": true
+    },
+    "ui.rendering.debugUi": {
+      "label": "Debug menu render mode",
+      "description": "D-menu/debug buttons. hd draws after upscaling; sd bakes the whole debug UI into the pixelated scene.",
+      "widget": "select",
+      "options": [
+        "hd",
+        "sd"
+      ],
+      "group": "global",
+      "order": 91,
+      "advanced": true
+    },
+    "ui.profilePlate.enabled": {
+      "label": "Show profile plate",
+      "widget": "checkbox",
+      "group": "profilePlate",
+      "order": 1
+    },
+    "ui.profilePlate.width": {
+      "label": "Plate width",
+      "widget": "number",
+      "min": 120,
+      "max": 520,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 2
+    },
+    "ui.profilePlate.height": {
+      "label": "Plate height",
+      "widget": "number",
+      "min": 48,
+      "max": 220,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 3
+    },
+    "ui.profilePlate.marginX": {
+      "label": "Right margin",
+      "widget": "number",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 4
+    },
+    "ui.profilePlate.marginY": {
+      "label": "Top margin",
+      "widget": "number",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 5
+    },
+    "ui.profilePlate.nameFontSize": {
+      "label": "Name font size",
+      "widget": "number",
+      "min": 8,
+      "max": 64,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 10
+    },
+    "ui.profilePlate.detailFontSize": {
+      "label": "Detail font size",
+      "widget": "number",
+      "min": 8,
+      "max": 48,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 11
+    },
+    "ui.profilePlate.nameRowHeight": {
+      "label": "Name row height",
+      "widget": "number",
+      "min": 20,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 12
+    },
+    "ui.profilePlate.detailRowHeight": {
+      "label": "Detail row height",
+      "widget": "number",
+      "min": 20,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 13
+    },
+    "ui.profilePlate.nameRowWidth": {
+      "label": "Name row width",
+      "widget": "number",
+      "min": 120,
+      "max": 520,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 14
+    },
+    "ui.profilePlate.characteristicRowWidth": {
+      "label": "Characteristic row width",
+      "widget": "number",
+      "min": 120,
+      "max": 520,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 15
+    },
+    "ui.profilePlate.natureRowWidth": {
+      "label": "Nature row width",
+      "widget": "number",
+      "min": 120,
+      "max": 520,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 16
+    },
+    "ui.profilePlate.rowGap": {
+      "label": "Row spacing",
+      "widget": "number",
+      "min": 0,
+      "max": 32,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 17
+    },
+    "ui.profilePlate.showSprite": {
+      "label": "Show Pokemon icon",
+      "widget": "checkbox",
+      "group": "profilePlate",
+      "order": 20
+    },
+    "ui.profilePlate.spriteSize": {
+      "label": "Pokemon icon base size",
+      "widget": "number",
+      "min": 16,
+      "max": 128,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 21
+    },
+    "ui.profilePlate.spriteScale": {
+      "label": "Profile Pokemon icon scale",
+      "description": "Only the Pokemon icon in the top-right profile plate. Multiplies the icon base size directly; 2 means 2x.",
+      "widget": "slider",
+      "min": 0.25,
+      "max": 6,
+      "step": 0.05,
+      "group": "profilePlate",
+      "order": 22
+    },
+    "ui.profilePlate.spriteGap": {
+      "label": "Icon/name gap",
+      "widget": "number",
+      "min": 0,
+      "max": 48,
+      "step": 1,
+      "group": "profilePlate",
+      "order": 23
+    },
+    "ui.profilePlate.spriteOffsetX": {
+      "label": "Icon X offset",
+      "widget": "number",
+      "min": -120,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 1
+    },
+    "ui.profilePlate.spriteOffsetY": {
+      "label": "Icon Y offset",
+      "description": "Negative moves the icon up; positive moves it down.",
+      "widget": "number",
+      "min": -120,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 2
+    },
+    "ui.profilePlate.nameTextOffsetX": {
+      "label": "Name text X offset",
+      "widget": "number",
+      "min": -120,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 3
+    },
+    "ui.profilePlate.nameTextOffsetY": {
+      "label": "Name text Y offset",
+      "description": "Negative moves the name up; positive moves it down.",
+      "widget": "number",
+      "min": -120,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 4
+    },
+    "ui.profilePlate.detailTextOffsetX": {
+      "label": "Detail text X offset",
+      "widget": "number",
+      "min": -120,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 5
+    },
+    "ui.profilePlate.detailTextOffsetY": {
+      "label": "Detail text Y offset",
+      "description": "Negative moves both detail rows up; positive moves them down.",
+      "widget": "number",
+      "min": -120,
+      "max": 120,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 6
+    },
+    "ui.profilePlate.characteristic": {
+      "label": "Characteristic text",
+      "widget": "text",
+      "group": "profilePlate",
+      "order": 40
+    },
+    "ui.profilePlate.nature": {
+      "label": "Nature text",
+      "widget": "text",
+      "group": "profilePlate",
+      "order": 41
+    },
+    "ui.profilePlate.font": {
+      "label": "Font",
+      "widget": "text",
+      "group": "profilePlateAdvanced",
+      "order": 20
+    },
+    "ui.profilePlate.leftFadeWidth": {
+      "label": "Left fade width",
+      "widget": "number",
+      "min": 0,
+      "max": 160,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 21
+    },
+    "ui.profilePlate.slideOutX": {
+      "label": "Slide-out distance",
+      "widget": "number",
+      "min": 0,
+      "max": 240,
+      "step": 1,
+      "group": "profilePlateAdvanced",
+      "order": 22
+    },
+    "ui.cornerButtons.hideAfterPetSeconds": {
+      "label": "Hide after petting",
+      "description": "Seconds of continuous petting before the three corner buttons slide away.",
+      "widget": "slider",
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "group": "cornerButtons",
+      "order": 100
+    },
+    "ui.cornerButtons.returnDelaySeconds": {
+      "label": "Return delay",
+      "widget": "slider",
+      "min": 0,
+      "max": 3,
+      "step": 0.05,
+      "group": "cornerButtons",
+      "order": 101
+    },
+    "ui.cornerButtons.slideInSeconds": {
+      "label": "Slide-in time",
+      "widget": "slider",
+      "min": 0.05,
+      "max": 1,
+      "step": 0.01,
+      "group": "cornerButtons",
+      "order": 102
+    },
+    "ui.cornerButtons.slideOutSeconds": {
+      "label": "Slide-out time",
+      "widget": "slider",
+      "min": 0.05,
+      "max": 1,
+      "step": 0.01,
+      "group": "cornerButtons",
+      "order": 103
+    },
+    "ui.handCursor.scale": {
+      "label": "Hand visual scale",
+      "description": "Only changes the hand graphic, not the petting hit behavior.",
+      "widget": "slider",
+      "min": 0.5,
+      "max": 4,
+      "step": 0.05,
+      "group": "hand",
+      "order": 1
+    },
+    "ui.handCursor.hotspotXRatio": {
+      "label": "Hand active point X",
+      "group": "hand",
+      "order": 2
+    },
+    "ui.handCursor.hotspotYRatio": {
+      "label": "Hand active point Y",
+      "group": "hand",
+      "order": 3
+    },
+    "ui.handCursor.petAnimationSpeed": {
+      "label": "Hand pet animation speed",
+      "group": "hand",
+      "order": 4
+    }
+  },
+  "patterns": {
+    "ui.actionButton.*": {
+      "group": "cornerButtons"
+    },
+    "ui.itemsButton.*": {
+      "group": "cornerButtons"
+    },
+    "ui.returnButton.*": {
+      "group": "cornerButtons"
+    },
+    "ui.cornerButtons.*": {
+      "group": "cornerButtons"
+    },
+    "ui.*Button.enabled": {
+      "widget": "checkbox"
+    },
+    "ui.*Button.scale": {
+      "widget": "slider",
+      "min": 0.5,
+      "max": 3,
+      "step": 0.05
+    },
+    "ui.*Button.iconScale": {
+      "widget": "slider",
+      "min": 0.2,
+      "max": 1.2,
+      "step": 0.01
+    },
+    "ui.*Button.iconOffsetX": {
+      "widget": "slider",
+      "min": -0.35,
+      "max": 0.35,
+      "step": 0.01
+    },
+    "ui.*Button.iconOffsetY": {
+      "widget": "slider",
+      "min": -0.35,
+      "max": 0.35,
+      "step": 0.01,
+      "description": "Negative moves the icon up; positive moves it down."
+    },
+    "ui.*Button.icon": {
+      "widget": "asset"
+    },
+    "ui.*Button.sideExtensionRatio": {
+      "widget": "slider",
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    "ui.*Button.*Border": {
+      "widget": "color-wheel"
+    },
+    "ui.*Button.fillTop": {
+      "widget": "color-wheel"
+    },
+    "ui.*Button.fillBottom": {
+      "widget": "color-wheel"
+    },
+    "ui.profilePlate.*Border": {
+      "group": "profilePlateAdvanced",
+      "advanced": true
+    },
+    "ui.profilePlate.*Text": {
+      "group": "profilePlateAdvanced",
+      "advanced": true
+    }
+  }
+}

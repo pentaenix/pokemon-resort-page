@@ -1,0 +1,11 @@
+{
+  "id": "scripts",
+  "order": 4,
+  "title": "Script Engine",
+  "description": "Author reusable overworld idle, interaction, and NPC behavior scripts.",
+  "image": "/media/game_engine/scripts.png",
+  "entry": "/modules/scriptengine/editor.js",
+  "styles": ["/modules/scriptengine/editor.css"],
+  "bodyClass": "script-engine-active",
+  "capabilities": ["overworld-scripts", "script-validation", "script-authoring"]
+}

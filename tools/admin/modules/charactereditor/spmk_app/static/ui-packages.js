@@ -1,6 +1,30 @@
 /* .charbin characters — expands legacy renderLibraryDetail layout */
+/* Library search/filters: docs/LIBRARY_FILTERS.md — do not remove (see docs/AGENTS.md). */
 const PKG_POKEMON_SPRITES_KEY = 'spmk.pkg.pokemonShowSprites';
 const PKG_POKEMON_LIB_UI_KEY = 'spmk.pkg.pokemonLibUi';
+const PKG_OBJECT_LIB_UI_KEY = 'spmk.pkg.objectLibUi';
+const PKG_LIB_FILTERS_KEY = 'spmk.pkg.libFilters';
+
+function defaultPkgLibFilters() {
+  return { query: '', types: [], gens: [], cellSizes: [], sheetSizes: [], pokemonTypes: [], tags: [] };
+}
+
+function loadPkgLibFilters() {
+  try {
+    const raw = localStorage.getItem(PKG_LIB_FILTERS_KEY);
+    if (!raw) return defaultPkgLibFilters();
+    return { ...defaultPkgLibFilters(), ...JSON.parse(raw) };
+  } catch {
+    return defaultPkgLibFilters();
+  }
+}
+
+function savePkgLibFilters() {
+  try { localStorage.setItem(PKG_LIB_FILTERS_KEY, JSON.stringify(pkgLibFilters)); } catch { /* ignore */ }
+}
+
+let pkgLibFilters = loadPkgLibFilters();
+let pkgLibFilterTimer = null;
 
 let pkgState = {
   settings: null,
@@ -13,6 +37,7 @@ let pkgState = {
   variantSheetBehavior: null,
   preserveDetailVariant: null,
   pokemonLibUi: null,
+  objectLibUi: null,
   sheetMismatches: [],
   animStops: [],
   pokemonShowSprites: null,
@@ -89,6 +114,59 @@ function capturePokemonLibraryUiFromDom(path) {
   savePokemonLibUi(patch);
 }
 
+function loadObjectLibUi() {
+  if (pkgState.objectLibUi) return pkgState.objectLibUi;
+  try {
+    const raw = localStorage.getItem(PKG_OBJECT_LIB_UI_KEY);
+    pkgState.objectLibUi = raw ? JSON.parse(raw) : {};
+  } catch {
+    pkgState.objectLibUi = {};
+  }
+  return pkgState.objectLibUi;
+}
+
+function saveObjectLibUi(patch = {}) {
+  const prev = loadObjectLibUi();
+  const ui = { ...prev, ...patch };
+  if (patch.openCats) ui.openCats = [...new Set(patch.openCats.map((x) => String(x)))];
+  pkgState.objectLibUi = ui;
+  try {
+    localStorage.setItem(PKG_OBJECT_LIB_UI_KEY, JSON.stringify(ui));
+  } catch { /* ignore */ }
+  return ui;
+}
+
+function objectCatForEntryPath(list, path) {
+  const entry = (list || []).find((x) => x.path === path);
+  return entry ? objectCategoryId(entry) : null;
+}
+
+function captureObjectLibraryUiFromDom(path) {
+  const view = $('#view');
+  const root = $('.pkg-lib-objects');
+  const patch = {
+    scrollY: view?.scrollTop || 0,
+    lastPath: path || pkgState.selectedPath || loadObjectLibUi().lastPath || null,
+  };
+  if (root) {
+    patch.objectsOpen = root.open;
+    patch.openCats = [];
+    $$('.pkg-lib-obj-cat[data-cat]', root).forEach((details) => {
+      if (details.open) patch.openCats.push(String(details.dataset.cat));
+    });
+  }
+  if (path) {
+    const list = pkgState.settings?.scannedPackages || [];
+    const cat = objectCatForEntryPath(list, path);
+    if (cat != null) {
+      const cats = new Set([...(patch.openCats || []), ...(loadObjectLibUi().openCats || []), cat]);
+      patch.openCats = [...cats];
+      patch.objectsOpen = true;
+    }
+  }
+  saveObjectLibUi(patch);
+}
+
 function capturePokemonDetailVariant() {
   if (!pkgState.selectedPath) return;
   pkgState.preserveDetailVariant = {
@@ -142,15 +220,15 @@ let pkgPendingSheetAdd = null;
 async function startPkgSheetUpload() {
   const p = pkg();
   if (!p) return;
-  if (isObjectCharType(p?.metadata?.characterType)) {
+  if (pkgNeedsAddSheetModal(p)) {
+    const cfg = await openAddSheetModal(p);
+    if (!cfg) return;
+    pkgPendingSheetAdd = cfg;
+  } else if (isObjectCharType(p?.metadata?.characterType)) {
     pkgPendingSheetAdd = {
       mode: pkgHasPrimarySheet(p) ? 'replace_primary' : 'primary',
       label: '',
     };
-  } else if (pkgNeedsAddSheetModal(p)) {
-    const cfg = await openAddSheetModal(p);
-    if (!cfg) return;
-    pkgPendingSheetAdd = cfg;
   } else {
     pkgPendingSheetAdd = { mode: 'primary', label: '' };
   }
@@ -168,8 +246,103 @@ function pkgHasPrimarySheet(p) {
 }
 
 function pkgNeedsAddSheetModal(p) {
-  if (!p || isObjectCharType(p?.metadata?.characterType)) return false;
+  if (!p) return false;
+  if (isObjectCharType(p?.metadata?.characterType)) return pkgHasPrimarySheet(p);
   return pkgHasAnySheetAsset(p);
+}
+
+function normalizeObjectModifiers(mods) {
+  const raw = Array.isArray(mods) ? mods : (mods ? [mods] : []);
+  const seen = new Set();
+  const ordered = [];
+  for (const m of raw) {
+    const key = String(m || '').trim().toLowerCase().replace(/\s+/g, '_');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    ordered.push(key);
+  }
+  const known = ['shiny'].filter((k) => seen.has(k));
+  const rest = ordered.filter((k) => !known.includes(k));
+  return [...known, ...rest];
+}
+
+function objectSheetIdForModifiers(mods) {
+  const m = normalizeObjectModifiers(mods);
+  if (!m.length) return 'sheet';
+  return `sheet_${m.join('_')}`;
+}
+
+function objectAppearanceLabel(mods) {
+  const m = normalizeObjectModifiers(mods);
+  if (!m.length) return 'Default';
+  return m.map((x) => x.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())).join(', ');
+}
+
+function objectAppearanceDisplayName(sheet) {
+  if (!sheet) return 'Default';
+  const synced = syncObjectSheetFields(sheet);
+  const custom = String(sheet.name || '').trim();
+  if (custom) return custom;
+  return objectAppearanceLabel(synced.modifiers);
+}
+
+function objectActionId(animationName, mods) {
+  const anim = String(animationName || 'static').trim();
+  const m = normalizeObjectModifiers(mods);
+  if (!m.length) return anim;
+  return `${anim}_${m.join('_')}`;
+}
+
+function normalizeClipName(raw) {
+  const slug = slugFromName(raw);
+  return slug === 'character' && !String(raw || '').trim() ? '' : slug;
+}
+
+function objectClipNameFromAction(action) {
+  if (action?.animationName) return String(action.animationName).trim();
+  const id = String(action?.id || '').trim();
+  const mods = normalizeObjectModifiers(action?.modifiers || []);
+  if (!mods.length) return id;
+  const suffix = `_${mods.join('_')}`;
+  if (id.endsWith(suffix)) return id.slice(0, -suffix.length) || id;
+  return id;
+}
+
+function renameObjectSheetClip(sheet, oldAnimName, newAnimName) {
+  if (!sheet || !oldAnimName || oldAnimName === newAnimName) return sheet;
+  const out = { ...sheet, animations: { ...(sheet.animations || {}) } };
+  if (out.animations[oldAnimName]) {
+    out.animations[newAnimName] = out.animations[oldAnimName];
+    delete out.animations[oldAnimName];
+  }
+  const suppressed = [...(out.suppressedAnimations || [])];
+  const si = suppressed.indexOf(oldAnimName);
+  if (si >= 0) {
+    suppressed[si] = newAnimName;
+    out.suppressedAnimations = suppressed;
+  } else if (out.suppressedAnimations) {
+    out.suppressedAnimations = suppressed;
+  }
+  if (!Object.keys(out.animations || {}).length) delete out.animations;
+  return out;
+}
+
+function syncObjectSheetFields(sheet) {
+  if (!sheet) return sheet;
+  const mods = normalizeObjectModifiers(sheet.modifiers || []);
+  const id = objectSheetIdForModifiers(mods);
+  return {
+    ...sheet,
+    modifiers: mods,
+    id: sheet.id && !String(sheet.id).startsWith('sheet') ? sheet.id : id,
+    name: sheet.name || objectAppearanceLabel(mods),
+  };
+}
+
+function objectSheetsFromPackage(p) {
+  return (p?.spriteSheets || [])
+    .filter((s) => s.assetId)
+    .map((s) => syncObjectSheetFields(s));
 }
 
 function pkgHasOnlyPrimarySheet(p) {
@@ -187,11 +360,18 @@ const PKG_ADD_SHEET_MODES = [
 function addSheetModalModes(p) {
   const objectMode = isObjectCharType(p?.metadata?.characterType);
   const hasPrimary = pkgHasPrimarySheet(p);
+  if (objectMode) {
+    if (!hasPrimary) {
+      return [['primary', 'Add sprite sheet', 'First 4×4 PNG for this object.']];
+    }
+    return [
+      ['replace_primary', 'Replace sprite', 'Upload a new PNG for the default appearance.'],
+      ['object_appearance', 'Add appearance', 'Another look for the same object — upload a separate sheet PNG.'],
+    ];
+  }
   if (!hasPrimary) return PKG_ADD_SHEET_MODES;
-  const replaceLabel = objectMode ? 'Replace sprite sheet' : 'Replace walk sheet';
-  const replaceHint = objectMode
-    ? 'Upload a new PNG for the main sprite (replaces default play/static actions).'
-    : 'Upload a corrected walk cycle — replaces the <code>walk</code> PNG and resets idle/walk actions. Other sheets are kept.';
+  const replaceLabel = 'Replace walk sheet';
+  const replaceHint = 'Upload a corrected walk cycle — replaces the <code>walk</code> PNG and resets idle/walk actions. Other sheets are kept.';
   return [
     [PKG_ADD_SHEET_MODES[1][0], replaceLabel, replaceHint],
     PKG_ADD_SHEET_MODES[0],
@@ -200,7 +380,10 @@ function addSheetModalModes(p) {
 
 function openAddSheetModal(p) {
   const modes = addSheetModalModes(p);
-  const defaultMode = pkgHasOnlyPrimarySheet(p) ? 'replace_primary' : 'custom_anim';
+  const objectMode = isObjectCharType(p?.metadata?.characterType);
+  const defaultMode = objectMode
+    ? 'replace_primary'
+    : (pkgHasOnlyPrimarySheet(p) ? 'replace_primary' : 'custom_anim');
   const modeRadios = modes.map(([val, title, hint]) => `
     <label class="check pkg-add-sheet-mode">
       <input type="radio" name="pkgAddSheetMode" value="${esc(val)}" ${val === defaultMode ? 'checked' : ''}>
@@ -210,22 +393,34 @@ function openAddSheetModal(p) {
     <p class="tiny">Adds a charbin sheet with embedded PNG, per-sheet animation timing, and action records — same schema for player, NPC, and Pokémon.</p>
     <div class="pkg-add-sheet-modes">${modeRadios}</div>
     <div class="field" id="pkgAddSheetLabelRow">
-      <label>Animation name</label>
+      <label id="pkgAddSheetLabelCaption">Animation name</label>
       <input class="input" id="pkgAddSheetLabel" placeholder="run · bike · wave · sleep">
-      <p class="tiny">Becomes sheet id and action id (e.g. <code>run</code> → sheet <code>run</code>).</p>
+      <p class="tiny" id="pkgAddSheetLabelHint">Becomes sheet id and action id (e.g. <code>run</code> → sheet <code>run</code>).</p>
     </div>
     <div id="pkgAddSheetCustomOpts" class="pkg-add-sheet-custom" hidden>
       <div class="field"><label>Sheet layout</label>
         <select class="select" id="pkgAddSheetAnimKind">
           <option value="movement">Movement — 4 directions (one row per facing)</option>
+          <option value="session">Session — enter / stay / exit (4 directions)</option>
           <option value="idle">Idle / emote — hold pose on each row</option>
           <option value="south_only">South row only — single-facing loop</option>
         </select>
       </div>
-      <label class="check" id="pkgAddSheetIdleRow"><input type="checkbox" id="pkgAddSheetIncludeIdle"> Include idle on this sheet (frame 0 stand)</label>
-      <div class="grid cols2">
-        <div class="field"><label>Frames (columns)</label><input class="input" id="pkgAddSheetFrames" type="number" min="1" max="4" value="4"></div>
-        <div class="field"><label>Frame time (ms)</label><input class="input" id="pkgAddSheetFrameMs" type="number" min="50" value="120"></div>
+      <div id="pkgAddSheetLoopOpts">
+        <label class="check" id="pkgAddSheetIdleRow"><input type="checkbox" id="pkgAddSheetIncludeIdle"> Include idle on this sheet (frame 0 stand)</label>
+        <div class="grid cols2">
+          <div class="field"><label>Frames (columns)</label><input class="input" id="pkgAddSheetFrames" type="number" min="1" max="4" value="4"></div>
+          <div class="field"><label>Frame time (ms)</label><input class="input" id="pkgAddSheetFrameMs" type="number" min="50" value="120"></div>
+        </div>
+      </div>
+      <div id="pkgAddSheetSessionOpts" class="pkg-add-sheet-session" hidden>
+        <p class="tiny">One row per facing. Enter plays forward, stay holds, exit plays backward.</p>
+        <div class="grid cols3">
+          <div class="field"><label>Enter columns</label><input class="input" id="pkgAddSheetEnterFrames" value="0, 1, 2, 3" placeholder="0, 1, 2, 3"></div>
+          <div class="field"><label>Stay column</label><input class="input" id="pkgAddSheetStayFrames" value="3" placeholder="3"></div>
+          <div class="field"><label>Exit columns</label><input class="input" id="pkgAddSheetExitFrames" value="3, 2, 1, 0" placeholder="3, 2, 1, 0"></div>
+        </div>
+        <div class="field"><label>Frame time (ms)</label><input class="input" id="pkgAddSheetSessionMs" type="number" min="50" value="120"></div>
       </div>
     </div>
     ${modalFoot('<button type="button" class="btn" id="pkgAddSheetCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgAddSheetOk">Next: choose PNG</button>')}
@@ -234,16 +429,37 @@ function openAddSheetModal(p) {
   const labelRow = $('#pkgAddSheetLabelRow', m.root);
   const customRow = $('#pkgAddSheetCustomOpts', m.root);
   const idleRow = $('#pkgAddSheetIdleRow', m.root);
+  const loopRow = $('#pkgAddSheetLoopOpts', m.root);
+  const sessionRow = $('#pkgAddSheetSessionOpts', m.root);
   const animKindSel = $('#pkgAddSheetAnimKind', m.root);
   const syncCustomKind = () => {
     const kind = animKindSel?.value || 'movement';
+    const isSession = kind === 'session';
     if (idleRow) idleRow.style.display = kind === 'movement' ? '' : 'none';
+    if (loopRow) loopRow.hidden = isSession;
+    if (sessionRow) sessionRow.hidden = !isSession;
   };
   const syncMode = () => {
     const mode = $('input[name="pkgAddSheetMode"]:checked', m.root)?.value || 'custom_anim';
     const isAnim = mode === 'custom_anim';
+    const isAppearance = mode === 'object_appearance';
     labelRow.style.display = mode === 'replace_primary' ? 'none' : '';
     if (customRow) customRow.hidden = !isAnim;
+    const cap = $('#pkgAddSheetLabelCaption', m.root);
+    const hint = $('#pkgAddSheetLabelHint', m.root);
+    const labelInput = $('#pkgAddSheetLabel', m.root);
+    if (isAppearance) {
+      if (cap) cap.textContent = 'Appearance id';
+      if (hint) hint.innerHTML = 'Modifier id for this look (e.g. <code>shiny</code>).';
+      if (labelInput) labelInput.placeholder = 'shiny';
+    } else if (!isAnim) {
+      if (cap) cap.textContent = 'Animation name';
+      if (hint) hint.innerHTML = 'Becomes sheet id and action id.';
+    } else {
+      if (cap) cap.textContent = 'Animation name';
+      if (hint) hint.innerHTML = 'Becomes sheet id and action id (e.g. <code>run</code> → sheet <code>run</code>).';
+      if (labelInput) labelInput.placeholder = 'run · bike · wave · sleep';
+    }
     if (isAnim) syncCustomKind();
   };
   animKindSel?.addEventListener('change', syncCustomKind);
@@ -256,25 +472,33 @@ function openAddSheetModal(p) {
     $('#pkgAddSheetOk', m.root).onclick = () => {
       const mode = $('input[name="pkgAddSheetMode"]:checked', m.root)?.value || 'custom_anim';
       const label = ($('#pkgAddSheetLabel', m.root)?.value || '').trim();
-      if (mode !== 'replace_primary' && !label) {
-        toast('Enter an animation name');
+      if (mode !== 'replace_primary' && mode !== 'primary' && !label) {
+        toast(mode === 'object_appearance' ? 'Enter an appearance id' : 'Enter an animation name');
         return;
       }
       const animKind = $('#pkgAddSheetAnimKind', m.root)?.value || 'movement';
+      const isSession = animKind === 'session';
       finish({
         mode,
         label,
         animKind,
         includeIdle: !!$('#pkgAddSheetIncludeIdle', m.root)?.checked,
         frameCount: Math.max(1, Math.min(4, Number($('#pkgAddSheetFrames', m.root)?.value) || 4)),
-        frameTimeMs: Math.max(50, Number($('#pkgAddSheetFrameMs', m.root)?.value) || 120),
+        frameTimeMs: Math.max(50, Number(
+          isSession ? $('#pkgAddSheetSessionMs', m.root)?.value : $('#pkgAddSheetFrameMs', m.root)?.value,
+        ) || 120),
+        sessionEnterFrames: ($('#pkgAddSheetEnterFrames', m.root)?.value || '').trim(),
+        sessionStayFrames: ($('#pkgAddSheetStayFrames', m.root)?.value || '').trim(),
+        sessionExitFrames: ($('#pkgAddSheetExitFrames', m.root)?.value || '').trim(),
       });
     };
   });
 }
 
-function addSheetToast(mode, sheetId, scaled) {
+function addSheetToast(mode, sheetId, scaled, animKind) {
   const scaleNote = scaled ? ' (scaled 64px→32px cells)' : '';
+  if (mode === 'object_appearance') return `Appearance sheet added: ${sheetId}${scaleNote}`;
+  if (animKind === 'session') return `Session activity added: ${sheetId}${scaleNote}`;
   if (mode === 'custom_anim') return `Animation sheet added: ${sheetId}${scaleNote}`;
   if (mode === 'replace_primary') return `Walk sheet replaced${scaleNote}`;
   return `Sheet added${scaleNote}`;
@@ -294,6 +518,9 @@ async function onPkgSheetFileSelected(e) {
     includeIdle: false,
     frameCount: 4,
     frameTimeMs: 120,
+    sessionEnterFrames: '',
+    sessionStayFrames: '',
+    sessionExitFrames: '',
   };
   let opts = { ...defaults };
   if (pending) {
@@ -311,6 +538,13 @@ async function onPkgSheetFileSelected(e) {
     fd.append('includeIdle', opts.includeIdle ? '1' : '0');
     fd.append('frameCount', String(opts.frameCount));
     fd.append('frameTimeMs', String(opts.frameTimeMs));
+    if (opts.animKind === 'session') {
+      fd.append('sessionEnterFrames', opts.sessionEnterFrames || '0,1,2,3');
+      fd.append('sessionStayFrames', opts.sessionStayFrames || '3');
+      fd.append('sessionExitFrames', opts.sessionExitFrames || '3,2,1,0');
+    }
+  } else if (opts.mode === 'object_appearance') {
+    fd.append('label', opts.label || '');
   }
   setSave('uploading');
   try {
@@ -326,7 +560,7 @@ async function onPkgSheetFileSelected(e) {
     pkgState.selectedSheetId = body.sheetId || pkgState.selectedSheetId;
     renderPackages();
     const scaled = !!(body.prepare && body.prepare.scaled);
-    toast(addSheetToast(opts.mode, body.sheetId || '', scaled));
+    toast(addSheetToast(opts.mode, body.sheetId || '', scaled, opts.animKind));
   } finally {
     setSave('ready');
   }
@@ -338,6 +572,45 @@ const PKG_CHAR_TYPES = [
   ['pokemon', 'Pokémon'],
   ['object', 'Object'],
 ];
+
+const POKEMON_SIZE_OPTIONS = [
+  ['small', 'Small', '32px'],
+  ['human', 'Human', '32px trainer scale'],
+  ['medium', 'Medium', '40px'],
+  ['large', 'Large', '64px'],
+];
+
+function normalizePokemonSize(size) {
+  const s = String(size || 'small').toLowerCase();
+  if (s === 'large' || s === 'medium' || s === 'human') return s;
+  return 'small';
+}
+
+function readPokemonSize(p, m) {
+  if (m?.pokemonSize) return normalizePokemonSize(m.pokemonSize);
+  const prof = p?.baseProfile || '';
+  if (prof === 'pokemon_large') return 'large';
+  if (prof === 'character') return 'human';
+  const sheet = (p?.spriteSheets || []).find((s) => s.assetId);
+  if (sheet) {
+    const cell = pkgEffectiveCellSize(sheet);
+    if (cell >= 64) return 'large';
+    if (cell >= 36) return 'medium';
+  }
+  return 'small';
+}
+
+function pokemonSizeProfileLabel(size) {
+  const hit = POKEMON_SIZE_OPTIONS.find(([v]) => v === size);
+  return hit ? `${hit[1]} · ${hit[2]}` : size;
+}
+
+function pokemonSizeToProfile(size) {
+  const s = normalizePokemonSize(size);
+  if (s === 'large') return 'pokemon_large';
+  if (s === 'human') return 'character';
+  return 'pokemon_small';
+}
 
 function normalizeCharType(type) {
   const t = String(type || 'npc').toLowerCase();
@@ -396,17 +669,19 @@ function partitionLibrary(list) {
 
 function libraryTypeTag(entry) {
   const t = normalizeCharType(entry.characterType);
-  if (t === 'player') return '<span class="tag">player</span>';
+  if (t === 'player') return `<span class="tag">player</span>${libraryCellSizeTag(entry)}`;
   if (t === 'pokemon') {
     const dex = entry.pokemonId != null ? `#${entry.pokemonId}` : '';
     const sheets = Number(entry.sheetCount) || 0;
     const sheetTag = sheets > 1
       ? `<span class="tag good">${sheets} sheets</span>`
       : '<span class="tag">base only</span>';
-    return `<span class="tag">pokémon</span>${dex ? `<span class="tag">${esc(dex)}</span>` : ''}${sheetTag}`;
+    const types = (entry.pokemonTypes || []).slice(0, 2).map((pt) =>
+      `<span class="tag">${esc(String(pt))}</span>`).join('');
+    return `<span class="tag">pokémon</span>${dex ? `<span class="tag">${esc(dex)}</span>` : ''}${types}${sheetTag}${libraryCellSizeTag(entry)}`;
   }
-  if (t === 'object') return '<span class="tag">object</span>';
-  return '<span class="tag">npc</span>';
+  if (t === 'object') return `<span class="tag">object</span>${libraryCellSizeTag(entry)}`;
+  return `<span class="tag">npc</span>${libraryCellSizeTag(entry)}`;
 }
 
 function metadataStringList(m, key) {
@@ -486,8 +761,8 @@ function updatePkgFieldVisibility() {
     $('#pkgHasPartner').checked = false;
     if ($('#pkgPartnerRow')) $('#pkgPartnerRow').style.display = 'none';
   }
-  if (pokemon && $('#pkgProfile')?.value === 'character') {
-    $('#pkgProfile').value = 'pokemon_small';
+  if (pokemon) {
+    $$('[data-pokemon-hide-profile]').forEach((el) => el.classList.add('pkg-field-hidden'));
   }
   if (object && $('#pkgProfile')?.value === 'character') {
     $('#pkgProfile').value = 'object';
@@ -495,7 +770,12 @@ function updatePkgFieldVisibility() {
 }
 
 async function loadPackageContext() {
-  const lib = await api('/api/packages/library');
+  let lib = await api('/api/packages/library');
+  const needsWalkMeta = (lib.packages || []).some((e) => !e.error && e.hasThumb && e.walkCellWidth == null);
+  if (needsWalkMeta) {
+    const scanned = await api('/api/packages/scan', { method: 'POST' });
+    lib = { ...lib, packages: scanned.packages || lib.packages };
+  }
   pkgState.settings = {
     packageDirectory: lib.packageDirectory,
     scannedPackages: lib.packages,
@@ -530,14 +810,36 @@ function pkgMergedProf(sheet, baseProfile) {
 }
 
 function pkgDefaultCellSize(sheet) {
+  return pkgDefaultFrameSize(sheet).fw;
+}
+
+function pkgDefaultFrameSize(sheet) {
   const prof = profileDef(sheet?.profile || pkg()?.baseProfile);
-  return Number(prof.frameWidth) || 32;
+  const fw = Number(prof.frameWidth) || 32;
+  const fh = Number(prof.frameHeight) || fw;
+  return { fw, fh };
+}
+
+function pkgEffectiveFrameSize(sheet) {
+  const merged = pkgMergedProf(sheet);
+  return { fw: merged.frameWidth, fh: merged.frameHeight };
 }
 
 function pkgEffectiveCellSize(sheet) {
-  const o = sheet?.profileOverrides;
-  if (o?.frameWidth) return Number(o.frameWidth);
-  return pkgDefaultCellSize(sheet);
+  return pkgEffectiveFrameSize(sheet).fw;
+}
+
+function pkgFrameSizeLabel(sheet) {
+  const { fw, fh } = pkgEffectiveFrameSize(sheet);
+  return `${fw}×${fh}px`;
+}
+
+function pkgSheetHasCustomFrameSize(sheet) {
+  const o = sheet?.profileOverrides || {};
+  if (o.frameWidth != null || o.frameHeight != null) return true;
+  const { fw, fh } = pkgEffectiveFrameSize(sheet);
+  const def = pkgDefaultFrameSize(sheet);
+  return fw !== def.fw || fh !== def.fh;
 }
 
 function pkgInferPokemonLayout(w, h) {
@@ -564,33 +866,39 @@ function pkgApplySheetCellFix(sheet, width, height) {
     next.profile = layout.profile;
     if (layout.overrides) next.profileOverrides = { ...layout.overrides };
     else delete next.profileOverrides;
-    return next;
   }
-  const merged = pkgMergedProf(sheet);
-  const cols = merged.columns || 4;
-  const expected = Math.round(width / cols);
-  const defaultCell = pkgDefaultCellSize(sheet);
+  const { fw, fh } = pkgExpectedFrameSizeForSheet(next, width, height);
+  const def = pkgDefaultFrameSize(next);
   const overrides = { ...(next.profileOverrides || {}) };
-  if (expected === defaultCell) {
+  if (fw === def.fw && fh === def.fh) {
     delete overrides.frameWidth;
     delete overrides.frameHeight;
   } else {
-    overrides.frameWidth = expected;
-    overrides.frameHeight = expected;
+    overrides.frameWidth = fw;
+    overrides.frameHeight = fh;
   }
   if (Object.keys(overrides).length) next.profileOverrides = overrides;
   else delete next.profileOverrides;
   return next;
 }
 
-function pkgExpectedCellForSheet(sheet, width, height) {
+function pkgExpectedFrameSizeForSheet(sheet, width, height) {
   const p = pkg();
   const prof = sheet?.profile || p?.baseProfile || 'character';
-  if (prof === 'pokemon_small' || prof === 'pokemon_large') {
-    return pkgInferPokemonLayout(width, height).cell;
-  }
   const merged = pkgMergedProf(sheet);
-  return Math.round(width / (merged.columns || 4));
+  const cols = merged.columns || 4;
+  const rows = merged.rows || 4;
+  const fw = Math.round(width / cols);
+  const fh = Math.round(height / rows);
+  if (prof === 'pokemon_small' || prof === 'pokemon_large') {
+    const layout = pkgInferPokemonLayout(width, height);
+    if (fw === fh) return { fw: layout.cell, fh: layout.cell };
+  }
+  return { fw, fh };
+}
+
+function pkgExpectedCellForSheet(sheet, width, height) {
+  return pkgExpectedFrameSizeForSheet(sheet, width, height).fw;
 }
 
 function loadSheetImageSize(sheet) {
@@ -614,16 +922,20 @@ async function pkgProbeSheetMismatches() {
   await Promise.all(sheets.map(async (sheet) => {
     try {
       const { width, height } = await loadSheetImageSize(sheet);
-      const configured = pkgEffectiveCellSize(sheet);
-      const expected = pkgExpectedCellForSheet(sheet, width, height);
-      if (configured !== expected) {
+      const configured = pkgEffectiveFrameSize(sheet);
+      const expected = pkgExpectedFrameSizeForSheet(sheet, width, height);
+      if (configured.fw !== expected.fw || configured.fh !== expected.fh) {
         mismatches.push({
           sheetId: sheet.id,
           sheetName: sheet.name || sheet.id,
           width,
           height,
-          configuredCell: configured,
-          expectedCell: expected,
+          configuredFw: configured.fw,
+          configuredFh: configured.fh,
+          expectedFw: expected.fw,
+          expectedFh: expected.fh,
+          configuredCell: configured.fw,
+          expectedCell: expected.fw,
         });
       }
     } catch (_) { /* skip unreadable sheets */ }
@@ -633,9 +945,15 @@ async function pkgProbeSheetMismatches() {
 
 function renderPkgSheetMismatchBanner(mismatches) {
   if (!mismatches?.length) return '';
-  const items = mismatches.map((m) =>
-    `<li><b>${esc(m.sheetName || m.sheetId)}</b> — PNG ${m.width}×${m.height}px needs ${m.expectedCell}px cells; currently ${m.configuredCell}px</li>`,
-  ).join('');
+  const items = mismatches.map((m) => {
+    const exp = m.expectedFw != null && m.expectedFh != null
+      ? `${m.expectedFw}×${m.expectedFh}px`
+      : `${m.expectedCell}px`;
+    const cur = m.configuredFw != null && m.configuredFh != null
+      ? `${m.configuredFw}×${m.configuredFh}px`
+      : `${m.configuredCell}px`;
+    return `<li><b>${esc(m.sheetName || m.sheetId)}</b> — PNG ${m.width}×${m.height}px needs ${exp} cells; currently ${cur}</li>`;
+  }).join('');
   return `<div class="pkg-sheet-mismatch-banner" id="pkgSheetMismatchBanner" role="alert">
     <div>
       <p><b>Sheet cell size mismatch</b> — grid slicing may be wrong for ${mismatches.length} sheet${mismatches.length === 1 ? '' : 's'}.</p>
@@ -791,6 +1109,18 @@ async function saveDraft(patch) {
   setSave('ready');
 }
 
+function deepMergePatch(base, patch) {
+  const out = { ...base };
+  for (const [key, val] of Object.entries(patch || {})) {
+    if (val && typeof val === 'object' && !Array.isArray(val) && typeof out[key] === 'object' && out[key] && !Array.isArray(out[key])) {
+      out[key] = deepMergePatch(out[key], val);
+    } else if (val !== undefined) {
+      out[key] = val;
+    }
+  }
+  return out;
+}
+
 function collectDetailForm() {
   const p = pkg() || {};
   const m = p.metadata || {};
@@ -819,7 +1149,9 @@ function collectDetailForm() {
   return {
     displayName: ($('#pkgName')?.value || '').trim(),
     internalName: ($('#pkgInternal')?.value || '').trim() || p.id,
-    baseProfile: $('#pkgProfile')?.value || (pokemon ? 'pokemon_small' : (object ? 'object' : 'character')),
+    baseProfile: pokemon
+      ? pokemonSizeToProfile($('#pkgPokemonSize')?.value || readPokemonSize(p, m))
+      : ($('#pkgProfile')?.value || (object ? 'object' : 'character')),
     metadata: {
       ...m,
       characterType: charType,
@@ -830,7 +1162,8 @@ function collectDetailForm() {
       tags: isObjectCharType(charType)
         ? (pkgState.chipPickers?.tags?.get() || [])
         : ((player || pokemon) ? [] : (chips.tags?.get() || [])),
-      objectAnimated: object ? !!$('#pkgObjectAnimated')?.checked : false,
+    objectAnimated: object ? !!$('#pkgObjectAnimated')?.checked : false,
+      objectCategory: object ? ($('#pkgObjectCategory')?.value || DEFAULT_OBJECT_CATEGORY) : '',
       pokemonId: pokemon ? (Number($('#pkgNationalId')?.value) || null) : null,
       speciesName: pokemon ? ($('#pkgSpeciesName')?.value || '').trim() : '',
       forms: pokemon ? forms : [],
@@ -838,6 +1171,7 @@ function collectDetailForm() {
       originGame: pokemon ? ($('#pkgOriginGame')?.value || '').trim() : (m.originGame || ''),
       pokedexEntry: pokemon ? ($('#pkgPokedex')?.value || '').trim() : '',
       pokemonTypes: pokemon ? parseList($('#pkgPokemonTypes')?.value) : [],
+      pokemonSize: pokemon ? normalizePokemonSize($('#pkgPokemonSize')?.value || readPokemonSize(p, m)) : undefined,
       pokeapi: pokemon ? (m.pokeapi || null) : null,
     },
     dialogue: (player || pokemon || object)
@@ -956,7 +1290,9 @@ async function fetchPokemonData() {
 
 async function saveCharacter() {
   if (!pkg()) return;
-  await saveDraft(collectDetailForm());
+  const form = collectDetailForm();
+  const intelPatch = typeof collectNpcIntelDraftPatch === 'function' ? collectNpcIntelDraftPatch() : {};
+  await saveDraft(deepMergePatch(form, intelPatch));
   const r = await api('/api/packages/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
   pkgState.selectedPath = r.path;
   const lib = await api('/api/packages/library');
@@ -1055,9 +1391,15 @@ function buildPokemonGenGrid(entries, sel, showSprites) {
 function refreshVisiblePokemonGrids(list, rerender) {
   const root = $('.pkg-lib-pokemon');
   if (!root) return;
-  const pokemon = partitionLibrary(list).pokemon;
-  const groups = groupPokemonByGeneration(pokemon);
   const show = pokemonLibraryShowSprites();
+  const pokemon = partitionLibrary(applyPkgLibFilters(list)).pokemon;
+  const flatHost = $('.pkg-lib-pokemon-flat', root);
+  if (flatHost) {
+    flatHost.innerHTML = buildPokemonGenGrid(pokemon, isSelectMode('charbins'), show);
+    bindCharbinLibraryCards(flatHost, list, rerender);
+    return;
+  }
+  const groups = groupPokemonByGeneration(pokemon);
   $$('.pkg-lib-gen[data-gen]', root).forEach((details) => {
     const host = $('.pkg-lib-gen-body', details);
     if (!host?.dataset.rendered) return;
@@ -1072,7 +1414,13 @@ function refreshVisiblePokemonGrids(list, rerender) {
 function bindCharbinLibraryCards(root, list, rerender) {
   const scope = root || document;
   $$(`.character[data-path]`, scope).forEach((el) => {
-    bindCardOpen(el, () => openCharacter(el.dataset.path), 'charbins', el.dataset.path, rerender);
+    bindCardOpen(el, () => {
+      if (state.generatePickMode && typeof selectGenerateCharacter === 'function') {
+        selectGenerateCharacter(el.dataset.path);
+        return;
+      }
+      openCharacter(el.dataset.path);
+    }, 'charbins', el.dataset.path, rerender);
   });
   $$('[data-del-charbin-id]', scope).forEach((b) => {
     b.onclick = async (e) => {
@@ -1088,7 +1436,7 @@ function bindCharbinLibraryCards(root, list, rerender) {
 function mountPokemonGenBody(details, list, rerender) {
   const host = $('.pkg-lib-gen-body', details);
   if (!host || host.dataset.rendered) return;
-  const pokemon = partitionLibrary(list).pokemon;
+  const pokemon = partitionLibrary(applyPkgLibFilters(list)).pokemon;
   const groups = groupPokemonByGeneration(pokemon);
   const gen = Number(details.dataset.gen);
   const g = groups.find((x) => x.gen === gen);
@@ -1121,8 +1469,7 @@ function restorePokemonLibraryUiAfterRender(list, rerender) {
 
 function bindPokemonLibraryLazy(list, rerender) {
   const root = $('.pkg-lib-pokemon');
-  if (!root) return;
-  const pokemon = partitionLibrary(list).pokemon;
+  if (!root || $('.pkg-lib-pokemon-flat', root)) return;
   if (!root.dataset.libUiBound) {
     root.dataset.libUiBound = '1';
     root.addEventListener('toggle', () => {
@@ -1163,6 +1510,119 @@ function renderLibrarySection(title, entries, sel) {
   if (!entries.length) return '';
   const grid = `<div class="grid cols3">${entries.map((e) => charbinCard(e, { selectScope: sel ? 'charbins' : null, selected: isSelected('charbins', e.path) })).join('')}</div>`;
   return `<div class="section-title">${esc(title)}</div>${grid}`;
+}
+
+const OBJECT_CATEGORIES = [
+  { id: 'interactables', label: 'Interactables' },
+  { id: 'animations', label: 'Animations' },
+  { id: 'ui', label: 'UI' },
+  { id: 'others', label: 'Others' },
+];
+const DEFAULT_OBJECT_CATEGORY = 'others';
+
+function objectCategoryId(entry) {
+  const raw = String(entry?.objectCategory ?? '').trim().toLowerCase();
+  return OBJECT_CATEGORIES.some((c) => c.id === raw) ? raw : DEFAULT_OBJECT_CATEGORY;
+}
+
+function objectCategoryLabel(id) {
+  return OBJECT_CATEGORIES.find((c) => c.id === objectCategoryId({ objectCategory: id }))?.label || 'Others';
+}
+
+function groupObjectsByCategory(entries) {
+  const buckets = new Map();
+  for (const e of entries) {
+    const cid = objectCategoryId(e);
+    if (!buckets.has(cid)) buckets.set(cid, { id: cid, label: objectCategoryLabel(cid), entries: [] });
+    buckets.get(cid).entries.push(e);
+  }
+  return OBJECT_CATEGORIES.map((row) => buckets.get(row.id)).filter((g) => g?.entries?.length);
+}
+
+function buildObjectCatGrid(entries, sel) {
+  return `<div class="grid cols3">${entries.map((e) => charbinCard(e, { selectScope: sel ? 'charbins' : null, selected: isSelected('charbins', e.path) })).join('')}</div>`;
+}
+
+function mountObjectCatBody(details, list, rerender) {
+  const host = $('.pkg-lib-obj-cat-body', details);
+  if (!host || host.dataset.rendered) return;
+  const objects = partitionLibrary(list).objects;
+  const groups = groupObjectsByCategory(objects);
+  const cat = String(details.dataset.cat);
+  const g = groups.find((x) => x.id === cat);
+  if (!g?.entries?.length) return;
+  host.innerHTML = buildObjectCatGrid(g.entries, isSelectMode('charbins'));
+  host.dataset.rendered = '1';
+  bindCharbinLibraryCards(host, list, rerender);
+}
+
+function restoreObjectLibraryUiAfterRender(list, rerender) {
+  const ui = loadObjectLibUi();
+  const root = $('.pkg-lib-objects');
+  if (!root) return;
+  $$('.pkg-lib-obj-cat[data-cat]', root).forEach((details) => {
+    if (details.open) mountObjectCatBody(details, list, rerender);
+  });
+  requestAnimationFrame(() => {
+    const view = $('#view');
+    if (!view) return;
+    if (ui.lastPath) {
+      const card = $$(`.character[data-path]`, view).find((el) => el.dataset.path === ui.lastPath);
+      if (card) {
+        card.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+    }
+    if (ui.scrollY) view.scrollTop = ui.scrollY;
+  });
+}
+
+function bindObjectLibraryLazy(list, rerender) {
+  const root = $('.pkg-lib-objects');
+  if (!root) return;
+  if (!root.dataset.libUiBound) {
+    root.dataset.libUiBound = '1';
+    root.addEventListener('toggle', () => {
+      const openCats = [];
+      $$('.pkg-lib-obj-cat[data-cat]', root).forEach((d) => {
+        if (d.open) openCats.push(String(d.dataset.cat));
+      });
+      saveObjectLibUi({ objectsOpen: root.open, openCats });
+    });
+  }
+  $$('.pkg-lib-obj-cat[data-cat]', root).forEach((details) => {
+    if (details.dataset.lazyBound) return;
+    details.dataset.lazyBound = '1';
+    details.addEventListener('toggle', () => {
+      const openCats = [];
+      $$('.pkg-lib-obj-cat[data-cat]', root).forEach((d) => {
+        if (d.open) openCats.push(String(d.dataset.cat));
+      });
+      saveObjectLibUi({ objectsOpen: root.open, openCats });
+      if (!details.open) return;
+      mountObjectCatBody(details, list, rerender);
+    });
+  });
+}
+
+function renderObjectLibrarySection(entries, sel) {
+  if (!entries.length) return '';
+  const groups = groupObjectsByCategory(entries);
+  const ui = loadObjectLibUi();
+  const openCats = new Set((ui.openCats || []).map(String));
+  const catHtml = groups.map((g, idx) => {
+    const rule = idx > 0 ? '<div class="pkg-lib-gen-rule" role="separator"></div>' : '';
+    const catOpen = openCats.has(g.id) ? ' open' : '';
+    return `${rule}<details class="pkg-lib-gen pkg-lib-obj-cat" data-cat="${esc(g.id)}"${catOpen}>
+      <summary class="pkg-lib-gen-summary"><span>${esc(g.label)}</span><span class="pkg-lib-gen-count">${g.entries.length}</span></summary>
+      <div class="pkg-lib-obj-cat-body" data-lazy-cat="1"></div>
+    </details>`;
+  }).join('');
+  const objectsOpen = ui.objectsOpen ? ' open' : '';
+  return `<details class="pkg-lib-collapse pkg-lib-objects"${objectsOpen}>
+    <summary class="pkg-lib-collapse-summary"><span class="section-title inline">Objects</span><span class="pkg-lib-gen-count">${entries.length}</span></summary>
+    <div class="pkg-lib-objects-body">${catHtml}</div>
+  </details>`;
 }
 
 /** National dex generation ranges (inclusive). */
@@ -1213,30 +1673,343 @@ function groupPokemonByGeneration(entries) {
   return out;
 }
 
+const PKG_LIB_TYPE_FILTERS = [
+  ['player', 'Player'],
+  ['character', 'NPC'],
+  ['pokemon', 'Pokémon'],
+  ['object', 'Object'],
+];
+const PKG_LIB_CELL_FILTERS = [
+  ['small', 'Small', '32px'],
+  ['medium', 'Medium', '40px'],
+  ['large', 'Large', '64px+'],
+  ['other', 'Other', 'odd cells'],
+];
+const PKG_LIB_SHEET_FILTERS = [
+  ['128', '128px'],
+  ['160', '160px'],
+  ['256', '256px'],
+  ['other', 'Other'],
+];
+
+function pkgLibEntryTypeKey(entry) {
+  const t = normalizeCharType(entry?.characterType);
+  if (t === 'player') return 'player';
+  if (t === 'pokemon') return 'pokemon';
+  if (t === 'object') return 'object';
+  return 'character';
+}
+
+function pkgLibCellSizeBucket(entry) {
+  const w = Number(entry?.walkCellWidth);
+  if (!Number.isFinite(w)) return 'unknown';
+  if (w === 32) return 'small';
+  if (w === 40) return 'medium';
+  if (w >= 64) return 'large';
+  return 'other';
+}
+
+function pkgLibEntryGeneration(entry) {
+  const dex = pokemonDexNumber(entry);
+  if (dex == null) return 0;
+  return pokemonGenerationGroup(dex).gen;
+}
+
+function libraryCellSizeTag(entry) {
+  const w = Number(entry?.walkCellWidth);
+  if (!Number.isFinite(w)) return '';
+  const h = Number(entry?.walkCellHeight) || w;
+  if (w === 32 && h === 32) return '';
+  const bucket = pkgLibCellSizeBucket(entry);
+  const cls = bucket === 'other' ? 'tag warn' : 'tag';
+  const sheet = entry.walkSheetWidth && entry.walkSheetHeight
+    ? ` · sheet ${entry.walkSheetWidth}×${entry.walkSheetHeight}`
+    : '';
+  return `<span class="${cls}">${w}×${h}${sheet}</span>`;
+}
+
+function pkgLibSearchHaystack(entry) {
+  const w = entry.walkCellWidth;
+  const h = entry.walkCellHeight;
+  const sw = entry.walkSheetWidth;
+  const sh = entry.walkSheetHeight;
+  const sheetBits = (entry.sheetDimensions || []).map((s) =>
+    `${s.width}x${s.height} ${s.width}×${s.height} ${s.id || ''}`,
+  );
+  return [
+    entry.displayName,
+    entry.id,
+    entry.internalName,
+    entry.fileName,
+    entry.baseProfile,
+    entry.walkSheetId,
+    entry.pokemonId != null ? String(entry.pokemonId) : '',
+    entry.pokemonId != null ? `#${entry.pokemonId}` : '',
+    ...(entry.pokemonTypes || []),
+    ...(entry.tags || []),
+    ...(entry.sheetSizeBuckets || []),
+    w != null && h != null ? `${w}x${h}` : '',
+    w != null && h != null ? `${w}×${h}` : '',
+    sw != null && sh != null ? `${sw}x${sh}` : '',
+    sw != null && sh != null ? `sheet ${sw}×${sh}` : '',
+    ...sheetBits,
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function pkgLibActiveFilterCount() {
+  const f = pkgLibFilters;
+  return f.types.length + f.gens.length + f.cellSizes.length + f.sheetSizes.length
+    + f.pokemonTypes.length + f.tags.length;
+}
+
+function pkgLibFiltersActive() {
+  return pkgLibActiveFilterCount() > 0 || Boolean(pkgLibFilters.query.trim());
+}
+
+function pkgLibPokemonFlatMode() {
+  return pkgLibFiltersActive();
+}
+
+function matchesPkgLibFilters(entry) {
+  const f = pkgLibFilters;
+  if (f.query.trim()) {
+    const q = f.query.trim().toLowerCase();
+    if (!pkgLibSearchHaystack(entry).includes(q)) return false;
+  }
+  if (f.types.length && !f.types.includes(pkgLibEntryTypeKey(entry))) return false;
+  if (f.gens.length) {
+    if (pkgLibEntryTypeKey(entry) === 'pokemon'
+      && !f.gens.includes(String(pkgLibEntryGeneration(entry)))) return false;
+  }
+  if (f.cellSizes.length) {
+    const bucket = pkgLibCellSizeBucket(entry);
+    if (bucket === 'unknown' || !f.cellSizes.includes(bucket)) return false;
+  }
+  if (f.sheetSizes.length) {
+    const buckets = (entry.sheetSizeBuckets || []).map(String);
+    if (!f.sheetSizes.some((b) => buckets.includes(b))) return false;
+  }
+  if (f.pokemonTypes.length) {
+    const types = (entry.pokemonTypes || []).map((t) => String(t).toLowerCase());
+    if (!f.pokemonTypes.some((t) => types.includes(t))) return false;
+  }
+  if (f.tags.length) {
+    const tags = (entry.tags || []).map((t) => String(t).toLowerCase());
+    if (!f.tags.some((t) => tags.includes(t))) return false;
+  }
+  return true;
+}
+
+function applyPkgLibFilters(list) {
+  return (list || []).filter(matchesPkgLibFilters);
+}
+
+function collectPkgLibPokemonTypes(list) {
+  const out = new Set();
+  for (const e of list || []) {
+    if (pkgLibEntryTypeKey(e) !== 'pokemon') continue;
+    for (const t of e.pokemonTypes || []) {
+      const s = String(t).trim().toLowerCase();
+      if (s) out.add(s);
+    }
+  }
+  return [...out].sort();
+}
+
+function collectPkgLibTags(list) {
+  const out = new Set();
+  for (const e of list || []) {
+    for (const t of e.tags || []) {
+      const s = String(t).trim().toLowerCase();
+      if (s) out.add(s);
+    }
+  }
+  return [...out].sort();
+}
+
+function pkgLibFilterChip(kind, value, label, active) {
+  return `<button type="button" class="pkg-lib-filter-chip${active ? ' active' : ''}" data-filter-kind="${esc(kind)}" data-filter-value="${esc(value)}" aria-pressed="${active ? 'true' : 'false'}">${esc(label)}</button>`;
+}
+
+function pkgLibFilterModalSection(label, chipsHtml) {
+  return `<div class="pkg-lib-filter-group">
+    <span class="pkg-lib-filter-label">${esc(label)}</span>
+    <div class="pkg-lib-filter-chips pkg-lib-filter-chips-wrap">${chipsHtml}</div>
+  </div>`;
+}
+
+function renderPkgLibFilterModalBody(fullList) {
+  const f = pkgLibFilters;
+  const typeChips = PKG_LIB_TYPE_FILTERS.map(([val, label]) =>
+    pkgLibFilterChip('types', val, label, f.types.includes(val)),
+  ).join('');
+  const genChips = [
+    pkgLibFilterChip('gens', '0', 'No dex', f.gens.includes('0')),
+    ...POKEMON_GEN_RANGES.map((row) =>
+      pkgLibFilterChip('gens', String(row.gen), `Gen ${row.gen}`, f.gens.includes(String(row.gen))),
+    ),
+  ].join('');
+  const cellChips = PKG_LIB_CELL_FILTERS.map(([val, label, hint]) =>
+    pkgLibFilterChip('cellSizes', val, `${label} · ${hint}`, f.cellSizes.includes(val)),
+  ).join('');
+  const sheetChips = PKG_LIB_SHEET_FILTERS.map(([val, label]) =>
+    pkgLibFilterChip('sheetSizes', val, label, f.sheetSizes.includes(val)),
+  ).join('');
+  const pokeTypes = collectPkgLibPokemonTypes(fullList);
+  const pokeTypeChips = pokeTypes.length
+    ? pokeTypes.map((t) => pkgLibFilterChip('pokemonTypes', t, t, f.pokemonTypes.includes(t))).join('')
+    : '<span class="tiny pkg-lib-filter-empty">No types in library yet</span>';
+  const tagList = collectPkgLibTags(fullList);
+  const tagChips = tagList.length
+    ? tagList.map((t) => pkgLibFilterChip('tags', t, t, f.tags.includes(t))).join('')
+    : '<span class="tiny pkg-lib-filter-empty">Tags appear when added to charbins</span>';
+  return `
+    ${pkgLibFilterModalSection('Type', typeChips)}
+    ${pkgLibFilterModalSection('Generation', genChips)}
+    ${pkgLibFilterModalSection('Walk cell size', cellChips)}
+    ${pkgLibFilterModalSection('Sprite sheet size (any sheet)', sheetChips)}
+    ${pkgLibFilterModalSection('Pokémon types', pokeTypeChips)}
+    ${pkgLibFilterModalSection('Tags', tagChips)}
+    <p class="tiny pkg-lib-filter-modal-hint">Sprite sheet size checks <b>every</b> embedded PNG on the character. A species with both 128px and 160px sheets appears in both filters. When any filter is active, Pokémon results show in one flat list.</p>`;
+}
+
+function togglePkgLibFilter(kind, value) {
+  const arr = pkgLibFilters[kind];
+  if (!Array.isArray(arr)) return;
+  const i = arr.indexOf(value);
+  if (i >= 0) arr.splice(i, 1);
+  else arr.push(value);
+}
+
+function bindPkgLibFilterModalChips(modalRoot) {
+  $$('.pkg-lib-filter-chip', modalRoot).forEach((btn) => {
+    btn.onclick = () => {
+      togglePkgLibFilter(btn.dataset.filterKind, btn.dataset.filterValue);
+      const active = (pkgLibFilters[btn.dataset.filterKind] || []).includes(btn.dataset.filterValue);
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
+      const countEl = $('#pkgLibModalActiveCount', modalRoot);
+      if (countEl) countEl.textContent = String(pkgLibActiveFilterCount());
+    };
+  });
+}
+
+function openPkgLibFilterModal(fullList) {
+  const active = pkgLibActiveFilterCount();
+  const html = `<div class="modal card pkg-lib-filter-modal big">
+    ${modalHead('Library filters')}
+    <div class="pkg-lib-filter-modal-summary">
+      <span id="pkgLibModalActiveCount" class="tag">${active} active</span>
+      <span class="tiny">Toggle chips to narrow the library. Search text stays in the bar above the list.</span>
+    </div>
+    <div class="pkg-lib-filter-grid" id="pkgLibModalBody">${renderPkgLibFilterModalBody(fullList)}</div>
+    ${modalFoot(
+    '<button type="button" class="btn" id="pkgLibModalClear">Clear all</button>',
+    '<button type="button" class="btn primary" id="pkgLibModalDone">Apply</button>',
+  )}
+  </div>`;
+  const m = mountModal(html, { backdropClose: true });
+  const refreshModal = () => {
+    const body = $('#pkgLibModalBody', m.root);
+    if (body) {
+      body.innerHTML = renderPkgLibFilterModalBody(fullList);
+      bindPkgLibFilterModalChips(m.root);
+    }
+    const countEl = $('#pkgLibModalActiveCount', m.root);
+    if (countEl) countEl.textContent = String(pkgLibActiveFilterCount());
+  };
+  bindPkgLibFilterModalChips(m.root);
+  $('#pkgLibModalClear', m.root).onclick = () => {
+    const q = pkgLibFilters.query;
+    pkgLibFilters = defaultPkgLibFilters();
+    pkgLibFilters.query = q;
+    savePkgLibFilters();
+    refreshModal();
+  };
+  $('#pkgLibModalDone', m.root).onclick = () => {
+    savePkgLibFilters();
+    m.close();
+    renderCharList();
+  };
+}
+
+function renderPkgLibSearchBar(fullList, filteredList) {
+  const f = pkgLibFilters;
+  const total = fullList.length;
+  const shown = filteredList.length;
+  const chipCount = pkgLibActiveFilterCount();
+  const badge = chipCount ? `<span class="pkg-lib-filter-badge">${chipCount}</span>` : '';
+  return `<div class="pkg-lib-searchbar card sidecard">
+    <input class="input pkg-lib-search" id="pkgLibSearch" type="search" placeholder="Search name, dex #, tags, cell size, sheet dimensions…" value="${esc(f.query)}" autocomplete="off" spellcheck="false"/>
+    <button type="button" class="btn small pkg-lib-filters-btn" id="pkgLibOpenFilters">Filters${badge}</button>
+    ${pkgLibFiltersActive() ? '<button type="button" class="btn small ghost" id="pkgLibClearFilters">Clear</button>' : ''}
+    <span class="pkg-lib-result-count" id="pkgLibResultCount">${shown === total ? `${total} characters` : `${shown} of ${total}`}</span>
+  </div>`;
+}
+
+function clearPkgLibFilters() {
+  pkgLibFilters = defaultPkgLibFilters();
+  savePkgLibFilters();
+  renderCharList();
+}
+
+function bindPkgLibSearchBar(fullList) {
+  const search = $('#pkgLibSearch');
+  if (search) {
+    search.oninput = () => {
+      pkgLibFilters.query = search.value;
+      clearTimeout(pkgLibFilterTimer);
+      pkgLibFilterTimer = setTimeout(() => {
+        savePkgLibFilters();
+        renderCharList();
+      }, 180);
+    };
+    search.onkeydown = (e) => {
+      if (e.key === 'Escape') {
+        pkgLibFilters.query = '';
+        search.value = '';
+        savePkgLibFilters();
+        renderCharList();
+      }
+    };
+  }
+  const openBtn = $('#pkgLibOpenFilters');
+  if (openBtn) openBtn.onclick = () => openPkgLibFilterModal(fullList);
+  const clearBtn = $('#pkgLibClearFilters');
+  if (clearBtn) clearBtn.onclick = () => clearPkgLibFilters();
+}
+
 function renderPokemonLibrarySection(entries, sel) {
   if (!entries.length) return '';
-  const groups = groupPokemonByGeneration(entries);
+  const flat = pkgLibPokemonFlatMode();
   const ui = loadPokemonLibUi();
   const openGens = new Set((ui.openGens || []).map(Number));
-  const genHtml = groups.map((g, idx) => {
-    const rule = idx > 0 ? '<div class="pkg-lib-gen-rule" role="separator"></div>' : '';
-    const genOpen = openGens.has(g.gen) ? ' open' : '';
-    return `${rule}<details class="pkg-lib-gen" data-gen="${g.gen}"${genOpen}>
-      <summary class="pkg-lib-gen-summary"><span>${esc(g.label)}</span><span class="pkg-lib-gen-count">${g.entries.length}</span></summary>
-      <div class="pkg-lib-gen-body" data-lazy-gen="1"></div>
-    </details>`;
-  }).join('');
   const spritesOn = pokemonLibraryShowSprites();
-  const pokemonOpen = ui.pokemonOpen ? ' open' : '';
+  const spriteToggle = `<label class="check pkg-lib-poke-sprite-toggle" title="Loads preview sprites for visible rows">
+    <input type="checkbox" id="pkgPokemonShowSprites"${spritesOn ? ' checked' : ''}>
+    Show sprites${flat ? '' : ' (visible rows)'}
+  </label>`;
+  let inner;
+  if (flat) {
+    inner = `<div class="pkg-lib-pokemon-toolbar">${spriteToggle}</div>
+      <div class="pkg-lib-pokemon-flat">${buildPokemonGenGrid(entries, sel, spritesOn)}</div>`;
+  } else {
+    const groups = groupPokemonByGeneration(entries);
+    const genHtml = groups.map((g, idx) => {
+      const rule = idx > 0 ? '<div class="pkg-lib-gen-rule" role="separator"></div>' : '';
+      const genOpen = openGens.has(g.gen) ? ' open' : '';
+      return `${rule}<details class="pkg-lib-gen" data-gen="${g.gen}"${genOpen}>
+        <summary class="pkg-lib-gen-summary"><span>${esc(g.label)}</span><span class="pkg-lib-gen-count">${g.entries.length}</span></summary>
+        <div class="pkg-lib-gen-body" data-lazy-gen="1"></div>
+      </details>`;
+    }).join('');
+    inner = `<div class="pkg-lib-pokemon-toolbar">${spriteToggle}</div>${genHtml}`;
+  }
+  const flatHint = flat ? ' <span class="tag">filtered view</span>' : '';
+  const pokemonOpen = flat || ui.pokemonOpen ? ' open' : '';
   return `<details class="pkg-lib-collapse pkg-lib-pokemon"${pokemonOpen}>
-    <summary class="pkg-lib-collapse-summary"><span class="section-title inline">Pokémon</span><span class="pkg-lib-gen-count">${entries.length}</span></summary>
-    <div class="pkg-lib-pokemon-body">
-      <label class="check pkg-lib-poke-sprite-toggle" title="Loads preview sprites for expanded generations only">
-        <input type="checkbox" id="pkgPokemonShowSprites"${spritesOn ? ' checked' : ''}>
-        Show sprites (visible rows)
-      </label>
-      ${genHtml}
-    </div>
+    <summary class="pkg-lib-collapse-summary"><span class="section-title inline">Pokémon</span><span class="pkg-lib-gen-count">${entries.length}</span>${flatHint}</summary>
+    <div class="pkg-lib-pokemon-body">${inner}</div>
   </details>`;
 }
 
@@ -1617,28 +2390,76 @@ function openPkgBatchImportModal() {
   };
 }
 
+function highlightGeneratePickTarget(path) {
+  if (!path || !state.generatePickMode) return;
+  requestAnimationFrame(() => {
+    $$('.character[data-path]').forEach((el) => {
+      el.classList.toggle('gen-pick-active', el.dataset.path === path);
+    });
+    const card = $$(`.character[data-path]`).find((el) => el.dataset.path === path);
+    card?.scrollIntoView({ block: 'nearest' });
+  });
+}
+
 function renderCharList() {
   initSelectState();
   pkgState.panel = 'list';
   stopPkgAnims();
+  const fullList = pkgState.settings?.scannedPackages || [];
+  const pickGen = !!state.generatePickMode;
+  const genPick = pickGen && typeof ensureGenCharbinState === 'function' ? ensureGenCharbinState() : null;
+  const { pokemon: allPokemon } = partitionLibrary(fullList);
+  let pokemonEntries = allPokemon;
+  if (pickGen && genPick?.missingOnly && genPick.targets?.length) {
+    const paths = new Set(genPick.targets.map((t) => t.path));
+    pokemonEntries = allPokemon.filter((e) => paths.has(e.path));
+  }
+  const sel = pickGen ? false : isSelectMode('charbins');
+  if (pickGen) {
+    title('Choose Pokémon');
+    const beh = genPick?.outputBehavior || 'swim';
+    const filterNote = genPick?.missingOnly ? ' · missing only' : '';
+    toolbar(`<button class="btn" id="genPickBack">← Back to Generate</button><span class="tag">Generate ${esc(beh)}${esc(filterNote)}</span>`);
+    const pickBanner = `<div class="card sidecard gen-pick-banner"><p class="tiny">Click a Pokémon in the library to generate its <b>${esc(beh)}</b> sheet.</p></div>`;
+    const body = pokemonEntries.length
+      ? `<div class="gen-pick-mode">${renderPokemonLibrarySection(pokemonEntries, false)}</div>`
+      : `<div class="empty"><strong>No matching Pokémon.</strong><br/>Try turning off “Only missing slots” on Generate, or train the model first.</div>`;
+    $('#view').innerHTML = `${pickBanner}<div class="section-head"><span class="section-title inline">Pokémon</span></div>${body}`;
+    right(`<div class="sidecard card"><h3>Generate pick</h3>
+      <p>Same library as Characters — click a card to return to Generate with that Pokémon selected.</p>
+      ${genPick ? `<p class="tiny">Sheet: <code>${esc(beh)}</code><br/>${genPick.missingOnly ? 'Filtered to missing slots.' : 'All Pokémon shown.'}</p>` : ''}
+      <button type="button" class="btn full" id="genPickBackSide">← Back to Generate</button></div>`);
+    const back = () => {
+      state.generatePickMode = false;
+      state.view = 'generate';
+      renderNav();
+      if (typeof renderGenerate === 'function') renderGenerate();
+    };
+    $('#genPickBack').onclick = back;
+    $('#genPickBackSide').onclick = back;
+    bindCharbinLibraryCards($('#view'), fullList, renderPackages);
+    bindPokemonLibraryLazy(fullList, renderPackages);
+    bindPokemonSpriteToggle(fullList, renderPackages);
+    restorePokemonLibraryUiAfterRender(fullList, renderPackages);
+    highlightGeneratePickTarget(genPick?.targetPath);
+    return;
+  }
   title('Characters');
-  const list = pkgState.settings?.scannedPackages || [];
+  toolbar('<button class="btn primary" id="pkgCreateCharacter">Create character</button><button class="btn" id="pkgImportCharacter">Import</button>');
+  const list = applyPkgLibFilters(fullList);
   const { playable, characters, pokemon, objects } = partitionLibrary(list);
-  const sel = isSelectMode('charbins');
-  toolbar(`<button class="btn good" id="pkgQuickAnim" data-open-quick-anim>Quick anim</button><button class="btn" id="pkgBodyMarkers" data-open-body-markers>Body markers</button><span class="tag">batch .charbin</span><button class="btn primary" id="pkgNewPlayer">＋ Player</button><button class="btn" id="pkgNewNpc">＋ NPC</button><button class="btn" id="pkgNewPokemon">＋ Pokémon</button><button class="btn" id="pkgNewObject">＋ Object</button><button class="btn" id="pkgBatchImport">Batch import…</button><label class="btn">Import .charbin<input id="pkgImport" type="file" accept=".charbin" hidden></label>`);
+  const filterBar = renderPkgLibSearchBar(fullList, list);
   const sections = [
     renderLibrarySection('Playable', playable, sel),
     renderLibrarySection('Characters', characters, sel),
     renderPokemonLibrarySection(pokemon, sel),
-    renderLibrarySection('Objects', objects, sel),
+    renderObjectLibrarySection(objects, sel),
   ].filter(Boolean).join('');
-  const body = sections || `<div class="empty"><strong>No packages yet.</strong><br/>Create a package or import a .charbin file.</div>`;
-  $('#view').innerHTML = `${bulkBar('charbins')}${sectionHead('Library', 'charbins')}${body}`;
-  right(`<div class="sidecard card"><h3>Quick anim</h3><p>Paint <b>sleep</b> (or any id) on every Pokémon missing it — save &amp; next through the dex.</p>
-    <button type="button" class="btn good full" data-open-quick-anim>Open Quick anim</button></div>
-    <div class="sidecard card"><h3>Body markers</h3><p>Head, eye, and hand boxes per facing on the base walk sheet — for accessories and auto sleep.</p>
-    <button type="button" class="btn full" data-open-body-markers>Open body markers</button></div>
-    <div class="sidecard card pkg-library-settings"><h3>Library</h3><p>Saved under <code>playable/</code>, <code>npc/</code>, <code>pokemon/</code>, <code>objects/</code>.</p>
+  const body = sections || (fullList.length
+    ? '<div class="empty"><strong>No matches.</strong><br/>Try clearing filters or broadening your search.</div>'
+    : '<div class="empty"><strong>No packages yet.</strong><br/>Create a package or import a .charbin file.</div>');
+  $('#view').innerHTML = `${filterBar}${bulkBar('charbins')}${sectionHead('Library', 'charbins')}${body}`;
+  right(`<div class="sidecard card pkg-library-settings"><h3>Library</h3><p>Saved under <code>playable/</code>, <code>npc/</code>, <code>pokemon/</code>, <code>objects/</code>.</p>
     <p class="tiny pkg-lib-path">${esc(pkgState.settings?.packageDirectory || '')}</p>
     <div class="btn-row" style="margin-top:8px">
       <button type="button" class="btn small" id="pkgChangeDir">Change folder…</button>
@@ -1648,29 +2469,16 @@ function renderCharList() {
 
   $('#pkgChangeDir').onclick = () => changePackageDirectory();
   $('#pkgResetDir').onclick = () => resetPackageDirectory();
-  $('#pkgNewPlayer').onclick = () => createPackageQuick('player');
-  $('#pkgNewNpc').onclick = () => createPackageQuick('npc');
-  $('#pkgNewPokemon').onclick = () => createPackageQuick('pokemon');
-  $('#pkgNewObject').onclick = () => createPackageQuick('object');
-  $('#pkgBatchImport').onclick = openPkgBatchImportModal;
-  if (typeof bindQuickAnimEntrypoints === 'function') bindQuickAnimEntrypoints($('#view'));
-  $('#pkgImport')?.addEventListener('change', async (e) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const fd = new FormData();
-    fd.append('file', f);
-    const res = await api('/api/packages/draft/import', { method: 'POST', body: fd });
-    pkgState.selectedPath = res.path;
-    pkgState.panel = 'detail';
-    await loadPackageContext();
-    renderPackages();
-    e.target.value = '';
-  });
+  $('#pkgCreateCharacter').onclick = openCharacterCreateModal;
+  $('#pkgImportCharacter').onclick = openPkgImportMenu;
   bindSelectMode('charbins', renderPackages, bulkDeleteCharbins);
-  bindCharbinLibraryCards($('#view'), list, renderPackages);
-  bindPokemonLibraryLazy(list, renderPackages);
-  bindPokemonSpriteToggle(list, renderPackages);
-  restorePokemonLibraryUiAfterRender(list, renderPackages);
+  bindPkgLibSearchBar(fullList);
+  bindCharbinLibraryCards($('#view'), fullList, renderPackages);
+  bindPokemonLibraryLazy(fullList, renderPackages);
+  bindPokemonSpriteToggle(fullList, renderPackages);
+  bindObjectLibraryLazy(fullList, renderPackages);
+  restorePokemonLibraryUiAfterRender(fullList, renderPackages);
+  restoreObjectLibraryUiAfterRender(fullList, renderPackages);
 }
 
 async function createPackageQuick(characterType) {
@@ -1698,6 +2506,8 @@ async function createPackageQuick(characterType) {
     pokedexEntry: '',
     pokemonTypes: [],
     pokemonId: null,
+    objectCategory: characterType === 'object' ? DEFAULT_OBJECT_CATEGORY : undefined,
+    objectAnimated: characterType === 'object' ? false : undefined,
   };
   await saveDraft({
     id,
@@ -1726,8 +2536,270 @@ async function createPackageQuick(characterType) {
   }
 }
 
+function openCharacterCreateModal() {
+  const choices = [['player', 'Player'], ['npc', 'NPC'], ['pokemon', 'Pokemon'], ['object', 'Object']];
+  const m = mountModal(`<div class="modal wide pkg-create-modal">
+    ${modalHead('Create character')}
+    <div class="pkg-create-type"><span>Character type</span><select class="select" id="pkgCreateKind">${choices.map(([id, label]) => `<option value="${id}"${id === 'npc' ? ' selected' : ''}>${label}</option>`).join('')}</select></div>
+    <section class="pkg-create-section"><div class="pkg-create-section-head"><span class="pkg-create-step">1</span><div><h4>Overworld sheet</h4><p>Start with the sprite sheet you want to turn into a character.</p></div></div><label class="pkg-create-sheet" for="pkgCreateImage"><input id="pkgCreateImage" type="file" accept="image/png,image/webp"><span id="pkgCreateSheetPrompt">Choose a PNG or WebP sheet</span><img id="pkgCreateSheetPreview" alt="" hidden></label><p class="tiny" id="pkgCreateSheetMeta">A preview appears here before anything is sent.</p><div class="field" id="pkgCreateProfileInput"><label>Character profile JSON (optional)</label><textarea class="input pkg-desc-area" id="pkgCreateProfileJson" rows="7" placeholder='Paste a compact profile with character_name, role, dialogue, and the other configured fields.'></textarea><p class="tiny">A pasted profile is validated and loaded directly. It does not call the character model.</p></div></section>
+    <section class="pkg-create-section" id="pkgCreateIdentity"></section>
+    <section class="pkg-create-section pkg-create-generation" id="pkgCreateGeneration" hidden><div class="pkg-create-section-head"><span class="pkg-create-step">3</span><div><h4>Generation details</h4><p>Provider-visible summary and validation status for this request.</p></div></div><textarea class="input pkg-create-log" id="pkgCreateGenerationLog" rows="4" readonly></textarea></section>
+    <section class="pkg-create-section" id="pkgCreatePreview" hidden><div class="pkg-create-section-head"><span class="pkg-create-step">4</span><div><h4 id="pkgCreatePreviewTitle">Proposed character</h4><p>Review this profile before making a draft.</p></div></div><div id="pkgCreateStats"></div><div id="pkgCreateReview"></div><details class="pkg-create-raw"><summary>Raw profile JSON</summary><textarea class="input pkg-desc-area" id="pkgCreateJson" rows="12" readonly></textarea></details></section>
+    <section class="pkg-create-section pkg-create-error" id="pkgCreateError" hidden><div class="pkg-create-section-head"><span class="pkg-create-step">!</span><div><h4>Generation could not be used</h4><p id="pkgCreateErrorMessage"></p></div></div><details open><summary>Provider response and diagnostics</summary><textarea class="input pkg-desc-area" id="pkgCreateErrorRaw" rows="10" readonly></textarea></details></section>
+  ${modalFoot('<button type="button" class="btn" id="pkgCreateCancel">Cancel</button>', '<button type="button" class="btn" id="pkgCreateFetch">Generate character</button><button type="button" class="btn primary" id="pkgCreateDraft" disabled>Create character</button>')}</div>`, { backdropClose: true, warnDirty: true });
+  let guardActive = true;
+  let allowHistoryLeave = false;
+  const cleanupNavigationGuard = () => {
+    if (!guardActive) return;
+    guardActive = false;
+    window.removeEventListener('beforeunload', onBeforeUnload);
+    window.removeEventListener('popstate', onHistoryBack);
+  };
+  const onBeforeUnload = (event) => {
+    if (!guardActive) return undefined;
+    event.preventDefault();
+    event.returnValue = '';
+    return '';
+  };
+  const onHistoryBack = () => {
+    if (!guardActive || allowHistoryLeave) return;
+    if (window.confirm('Discard this character creation session and leave this page?')) {
+      allowHistoryLeave = true;
+      cleanupNavigationGuard();
+      window.history.back();
+      return;
+    }
+    window.history.pushState({ pkgCreateGuard: true }, '', window.location.href);
+  };
+  window.history.pushState({ pkgCreateGuard: true }, '', window.location.href);
+  window.addEventListener('beforeunload', onBeforeUnload);
+  window.addEventListener('popstate', onHistoryBack);
+  const closeCreateModal = () => {
+    if (!window.confirm('Discard this character creation session?')) return;
+    cleanupNavigationGuard();
+    m.close();
+  };
+  $('.modal-close', m.root).onclick = closeCreateModal;
+  m.backdrop.onclick = (event) => { if (event.target === m.backdrop) closeCreateModal(); };
+  const kind = $('#pkgCreateKind', m.root); let profile = null; let legacyIntel = null; let profileDiagnostics = null; let pokemon = null; let existingPackage = null;
+  const fileStem = (file) => String(file?.name || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
+  const setLog = (lines) => { $('#pkgCreateGeneration', m.root).hidden = false; $('#pkgCreateGenerationLog', m.root).value = lines.filter(Boolean).join('\n'); };
+  const reviewField = (label, value, wide = false) => `<div class="field${wide ? ' pkg-review-wide' : ''}"><label>${esc(label)}</label><input class="input" value="${escAttr(String(value ?? ''))}" readonly></div>`;
+  const renderProfileReview = (data) => {
+    const labelFor = (key) => key.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+    const valueField = (key, value) => {
+      if (key === 'dialogue') return '';
+      if (Array.isArray(value) || (value && typeof value === 'object') || key === 'description') return `<div class="field pkg-review-wide"><label>${esc(labelFor(key))}</label><textarea class="input pkg-desc-area" readonly>${esc(Array.isArray(value) ? value.join('\n') : (value && typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value ?? '')))}</textarea></div>`;
+      return reviewField(labelFor(key), value == null ? 'None' : value);
+    };
+    const coreOrder = ['character_name', 'description', 'role', 'main_pokemon', 'additional_pokemon', 'source_game', 'source_region', 'badge_requirement', 'relationships'];
+    const orderedKeys = [...coreOrder.filter((key) => Object.hasOwn(data, key)), ...Object.keys(data).filter((key) => !coreOrder.includes(key) && key !== 'dialogue')];
+    const overview = `<div class="pkg-review-fields">${orderedKeys.map((key) => valueField(key, data[key])).join('')}</div>`;
+    const dialogue = `<div class="pkg-review-dialogue">${(data.dialogue || []).map((line, i) => `<div class="pkg-review-dialogue-row"><span>${i + 1}</span><input class="input" value="${escAttr(line)}" readonly></div>`).join('')}</div>`;
+    const tabs = [['overview', 'Profile'], ['dialogue', 'Dialogue']];
+    $('#pkgCreateReview', m.root).innerHTML = `<div class="pkg-review-tabs" role="tablist">${tabs.map(([id, label], i) => `<button type="button" class="btn small${i ? '' : ' active'}" data-review-tab="${id}">${label}</button>`).join('')}</div>${tabs.map(([id]) => `<div class="pkg-review-panel" data-review-panel="${id}"${id === 'overview' ? '' : ' hidden'}>${id === 'overview' ? overview : dialogue}</div>`).join('')}`;
+    $$('[data-review-tab]', m.root).forEach((button) => button.onclick = () => { $$('[data-review-tab]', m.root).forEach((item) => item.classList.toggle('active', item === button)); $$('[data-review-panel]', m.root).forEach((panel) => { panel.hidden = panel.dataset.reviewPanel !== button.dataset.reviewTab; }); });
+  };
+  const syncProfileSource = () => {
+    const isNpc = kind.value === 'npc';
+    const hasPastedProfile = !!$('#pkgCreateProfileJson', m.root)?.value?.trim();
+    $('#pkgCreateProfileInput', m.root).hidden = !isNpc;
+    $('#pkgCreateFetch', m.root).textContent = isNpc ? (hasPastedProfile ? 'Load profile' : 'Generate character') : (kind.value === 'pokemon' ? 'Fetch Pokemon info' : 'Prepare character');
+  };
+  const applyNpcProfile = (rawProfile, adaptedIntel, diagnostics = {}) => {
+    if (!rawProfile?.character_name) throw new Error('Pasted profiles must use the compact character profile schema and include character_name.');
+    profile = rawProfile; legacyIntel = adaptedIntel; profileDiagnostics = diagnostics;
+    const nameInput = $('#pkgCreateName', m.root);
+    nameInput.value = profile.character_name || nameInput.value;
+    existingPackage = (pkgState.settings?.scannedPackages || []).find((entry) => entry.id === slugFromName(profile.character_name) && entry.characterType === 'npc') || null;
+    $('#pkgCreateGeneratedId', m.root).textContent = `Generated id: ${slugFromName(profile.character_name)}`; $('#pkgCreateGeneratedId', m.root).hidden = false;
+    $('#pkgCreateStats', m.root).innerHTML = statCards([['Name', profile.character_name || 'Unknown'], ['Role', profile.role || 'Unknown'], ['Main Pokemon', profile.main_pokemon || 'None'], ['Dialogue', profile.dialogue?.length || 0]]);
+    renderProfileReview(profile); $('#pkgCreateJson', m.root).value = JSON.stringify(profile, null, 2); $('#pkgCreatePreviewTitle', m.root).textContent = existingPackage ? 'Replace existing character' : 'Proposed character'; $('#pkgCreatePreview', m.root).hidden = false; $('#pkgCreateDraft', m.root).disabled = false; $('#pkgCreateDraft', m.root).textContent = existingPackage ? 'Replace NPC' : 'Create NPC';
+  };
+  const resetResult = () => { profile = null; legacyIntel = null; profileDiagnostics = null; pokemon = null; existingPackage = null; $('#pkgCreatePreview', m.root).hidden = true; $('#pkgCreateError', m.root).hidden = true; $('#pkgCreateGeneration', m.root).hidden = true; $('#pkgCreateDraft', m.root).disabled = true; };
+  const showFailure = (err) => {
+    const detail = err?.detail || {}; const diagnostics = detail.diagnostics || {};
+    $('#pkgCreateErrorMessage', m.root).textContent = detail.message || err.message || 'The provider did not return a usable profile.';
+    $('#pkgCreateErrorRaw', m.root).value = [
+      diagnostics.rawOutput && `Raw output:\n${diagnostics.rawOutput}`,
+      diagnostics.reasoningSummary && `Provider summary:\n${diagnostics.reasoningSummary}`,
+      diagnostics.responseId && `Response id: ${diagnostics.responseId}`,
+      diagnostics.status && `Status: ${diagnostics.status}`,
+      diagnostics.incompleteReason && `Incomplete reason: ${diagnostics.incompleteReason}`,
+      diagnostics.requestedMaxOutputTokens && `Requested output budget: ${diagnostics.requestedMaxOutputTokens} tokens`,
+      diagnostics.httpStatus && `HTTP status: ${diagnostics.httpStatus}`,
+      (diagnostics.validationErrors || []).length && `Validation: ${(diagnostics.validationErrors || []).join('; ')}`,
+    ].filter(Boolean).join('\n\n') || 'No provider payload was returned.';
+    $('#pkgCreateError', m.root).hidden = false;
+    setLog([`Status: ${diagnostics.status || 'failed'}`, diagnostics.incompleteReason && `Incomplete reason: ${diagnostics.incompleteReason}`, diagnostics.responseId && `Response: ${diagnostics.responseId}`, diagnostics.reasoningSummary ? 'Provider reasoning summary received.' : 'No provider reasoning summary was returned.']);
+  };
+  const refreshSheetPreview = () => {
+    const file = $('#pkgCreateImage', m.root)?.files?.[0]; const preview = $('#pkgCreateSheetPreview', m.root);
+    if (!file) { preview.hidden = true; $('#pkgCreateSheetPrompt', m.root).hidden = false; $('#pkgCreateSheetMeta', m.root).textContent = 'A preview appears here before anything is sent.'; return; }
+    const url = URL.createObjectURL(file); preview.onload = () => { $('#pkgCreateSheetMeta', m.root).textContent = `${file.name} · ${preview.naturalWidth}×${preview.naturalHeight}px`; URL.revokeObjectURL(url); }; preview.src = url; preview.hidden = false; $('#pkgCreateSheetPrompt', m.root).hidden = true; m.markDirty();
+  };
+  const renderFields = () => {
+    resetResult();
+    const mode = kind.value;
+    const label = mode === 'pokemon' ? 'Pokemon name' : (mode === 'player' ? 'Player name' : mode === 'object' ? 'Object name' : 'Known name');
+    const hint = mode === 'npc' ? 'Optional. It helps identify a canonical NPC; the sheet remains the primary source.' : mode === 'pokemon' ? 'Optional when the sheet filename already matches the species.' : 'Required before creating the draft.';
+    $('#pkgCreateIdentity', m.root).innerHTML = `<div class="pkg-create-section-head"><span class="pkg-create-step">2</span><div><h4>Identity</h4><p>${esc(hint)}</p></div></div><div class="field"><label>${label}</label><input class="input" id="pkgCreateName" placeholder="${mode === 'pokemon' ? 'Pikachu' : mode === 'object' ? 'Sign' : ''}"></div><p class="tiny" id="pkgCreateGeneratedId" hidden></p>`;
+    $('#pkgCreateDraft', m.root).textContent = `Create ${choices.find(([id]) => id === mode)?.[1] || 'character'}`;
+    syncProfileSource();
+  };
+  renderFields(); kind.onchange = renderFields; $('#pkgCreateImage', m.root).onchange = refreshSheetPreview; $('#pkgCreateProfileJson', m.root).oninput = syncProfileSource;
+  $('#pkgCreateCancel', m.root).onclick = closeCreateModal;
+  $('#pkgCreateFetch', m.root).onclick = async () => {
+    const value = kind.value; const file = $('#pkgCreateImage', m.root)?.files?.[0]; const nameInput = $('#pkgCreateName', m.root);
+    resetResult();
+    if (!file) { toast('Choose an overworld sheet first'); return; }
+    try {
+      if (value === 'npc') {
+        const pasted = $('#pkgCreateProfileJson', m.root).value.trim();
+        if (pasted) {
+          $('#pkgCreateFetch', m.root).disabled = true; setLog(['Validating pasted character profile…']);
+          let parsed;
+          try { parsed = JSON.parse(pasted); } catch (_) { throw new Error('Character profile JSON is not valid JSON.'); }
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Character profile JSON must be one object.');
+          const validation = await api('/api/packages/draft/npc-intel/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intel: parsed }) });
+          if (!validation.ok) throw new Error((validation.errors || ['Character profile failed validation.']).join(' '));
+          applyNpcProfile(parsed, validation.intel, { provider: 'pasted_json', status: 'loaded' });
+          setLog(['Status: loaded', 'Validated pasted character profile.']);
+          m.markDirty();
+          return;
+        }
+        const stage = 'profile';
+        $('#pkgCreateFetch', m.root).disabled = true; $('#pkgCreateFetch', m.root).textContent = 'Generating…'; setLog(['Preparing sheet…', 'Researching and generating character profile…']);
+        const fd = new FormData(); fd.append('file', file); fd.append('knownName', nameInput.value || ''); fd.append('stage', stage);
+        const report = await api('/api/packages/llm/intel/from-sprite', { method: 'POST', body: fd });
+        logModelTrace(report); const d = report.diagnostics || {};
+        if (!report.profile?.character_name) { const error = new Error('The provider returned a retired character profile. Review the diagnostics and try again.'); error.detail = { message: error.message, diagnostics: report.diagnostics || { rawOutput: JSON.stringify(report, null, 2) } }; throw error; }
+        applyNpcProfile(report.profile, report.intel, d);
+        const cost = d.estimatedTokenCostUsd != null ? `Estimated model-token cost: $${Number(d.estimatedTokenCostUsd).toFixed(4)} (web-search charges excluded)` : '';
+        setLog([`Status: ${d.status || 'completed'}`, d.responseId && `Response: ${d.responseId}`, d.model && `Model: ${d.model}`, d.webSearches?.length ? `Web research: ${d.webSearches.join(' | ')}` : 'Web research: no query reported.', d.usage?.inputTokens != null && `Tokens: ${d.usage.inputTokens} in · ${d.usage.outputTokens || 0} out`, cost, d.reasoningSummary ? `Provider reasoning summary:\n${d.reasoningSummary}` : 'No provider reasoning summary was returned.']);
+      } else if (value === 'pokemon') {
+        const query = nameInput.value.trim() || fileStem(file); if (!query) { toast('Enter a Pokemon name or use a named sheet'); return; }
+        const result = await api(`/api/packages/pokemon/lookup?q=${encodeURIComponent(query)}`); if (!result.found) { toast(result.suggestion ? `Not found. Try ${result.suggestion}.` : 'Pokemon not found in PokéAPI'); return; }
+        pokemon = result.data; nameInput.value = pokemon.displayName || query; $('#pkgCreateStats', m.root).innerHTML = statCards([['Name', pokemon.displayName], ['Dex', pokemon.pokemonId], ['Types', (pokemon.types || []).join(', ')], ['Forms', pokemon.forms?.length || 0]]); $('#pkgCreatePreviewTitle', m.root).textContent = 'Pokemon profile'; $('#pkgCreatePreview', m.root).hidden = false; $('#pkgCreateDraft', m.root).disabled = false;
+      } else {
+        if (!nameInput.value.trim()) { toast('Enter a name first'); return; } $('#pkgCreateDraft', m.root).disabled = false; setLog(['Ready to create a local draft.']);
+      }
+      m.markDirty();
+    } catch (err) { showFailure(err); toast(err.message || 'Generation failed'); }
+    finally { $('#pkgCreateFetch', m.root).disabled = false; syncProfileSource(); }
+  };
+  $('#pkgCreateDraft', m.root).onclick = async () => {
+    const value = kind.value;
+    const file = $('#pkgCreateImage', m.root)?.files?.[0];
+    try {
+      const name = (value === 'npc' && profile ? (profile.character_name || profile.display_name) : $('#pkgCreateName', m.root)?.value)?.trim();
+      if (value === 'pokemon' && !pokemon) { toast('Fetch Pokemon info before creating this draft'); return; }
+      if (!name) { toast(value === 'npc' ? 'Enter a name or fetch NPC info from the sheet' : 'Enter a name first'); return; }
+      const id = slugFromName(value === 'pokemon' ? pokemon.id : name);
+      const existing = existingPackage || (pkgState.settings?.scannedPackages || []).find((entry) => entry.id === id && entry.characterType === value) || null;
+      if (existing && !window.confirm(`Replace the existing ${existing.displayName || id} character when this new draft is saved?`)) return;
+      await api('/api/packages/draft/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, displayName: value === 'pokemon' ? pokemon.displayName : name, characterType: value, baseProfile: value === 'pokemon' ? 'pokemon_small' : (value === 'object' ? 'object' : 'character'), replaceExisting: Boolean(existing) }) });
+      await loadPackageContext();
+      if (value === 'npc' && legacyIntel) await applyGeneratedIntel(legacyIntel, true, profileDiagnostics, profile);
+      else if (value === 'pokemon') await applyPokemonLookup(pokemon);
+      else await saveDraft({ id, displayName: name, internalName: id, metadata: { ...(pkg()?.metadata || {}), characterType: value, ...(value === 'object' ? { objectCategory: DEFAULT_OBJECT_CATEGORY, objectAnimated: false } : {}) } });
+      if (file) { const sheet = new FormData(); sheet.append('file', file); sheet.append('mode', 'primary'); sheet.append('walkSheetId', 'walk'); await api('/api/packages/draft/add-sheet', { method: 'POST', body: sheet }); }
+      pkgState.panel = 'detail'; cleanupNavigationGuard(); m.close(); await loadPackageContext(); renderPackages(); toast(`${value === 'pokemon' ? 'Pokemon' : 'Character'} draft created`);
+    } catch (err) { toast(String(err.message || err)); }
+  };
+}
+
+function openPkgCharbinImportModal() {
+  const m = mountModal(`<div class="modal">
+    ${modalHead('Import charbin')}
+    <div class="field"><label>Charbin file</label><input class="input" id="pkgCharbinImportFile" type="file" accept=".charbin"></div>
+    <p class="tiny">Imports an existing character package into the active workspace.</p>
+  ${modalFoot('<button type="button" class="btn" id="pkgCharbinImportCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgCharbinImportSubmit">Import</button>')}</div>`, { backdropClose: true, warnDirty: true });
+  $('#pkgCharbinImportCancel', m.root).onclick = m.tryClose;
+  $('#pkgCharbinImportSubmit', m.root).onclick = async () => {
+    const file = $('#pkgCharbinImportFile', m.root)?.files?.[0];
+    if (!file) { toast('Choose a charbin file first'); return; }
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const result = await api('/api/packages/draft/import', { method: 'POST', body: fd });
+      pkgState.selectedPath = result.path; pkgState.panel = 'detail';
+      await loadPackageContext(); m.close(); renderPackages(); toast('Charbin imported');
+    } catch (err) { toast(String(err.message || err)); }
+  };
+}
+
+function openPkgImportMenu() {
+  const m = mountModal(`<div class="modal">
+    ${modalHead('Import character data')}
+    <div class="modal-section"><h4>Existing charbin</h4><p class="tiny">Bring an existing character package into this workspace.</p><button type="button" class="btn" id="pkgImportExistingCharbin">Import charbin</button></div>
+    <div class="modal-section"><h4>Character intel JSON</h4><p class="tiny">Create an NPC draft from an existing reviewed profile.</p><button type="button" class="btn" id="pkgImportExistingIntel">Import character intel JSON</button></div>
+    <div class="modal-section"><h4>Multiple sheets</h4><p class="tiny">Create several packages from a batch of sheets.</p><button type="button" class="btn" id="pkgImportExistingBatch">Batch import</button></div>
+  ${modalFoot('<button type="button" class="btn" id="pkgImportMenuCancel">Cancel</button>')}</div>`, { backdropClose: true });
+  $('#pkgImportMenuCancel', m.root).onclick = m.close;
+  $('#pkgImportExistingCharbin', m.root).onclick = () => { m.close(); openPkgCharbinImportModal(); };
+  $('#pkgImportExistingIntel', m.root).onclick = () => { m.close(); openNpcIntelImportModal(); };
+  $('#pkgImportExistingBatch', m.root).onclick = () => { m.close(); openPkgBatchImportModal(); };
+}
+
+function openPokemonCreateModal() {
+  let lookup = null;
+  const m = mountModal(`<div class="modal wide">
+    ${modalHead('Pokemon from PokéAPI')}
+    <div class="field"><label>Pokemon name</label><input class="input" id="pkgPokemonLookupName" placeholder="Pikachu"></div>
+    <div class="field"><label>Sprite sheet (optional)</label><input class="input" id="pkgPokemonSheet" type="file" accept="image/png,image/webp"></div>
+    <section id="pkgPokemonPreview" hidden><div id="pkgPokemonStats"></div></section>
+  ${modalFoot('<button type="button" class="btn" id="pkgPokemonCancel">Cancel</button>', '<button type="button" class="btn" id="pkgPokemonLookup">Look up PokéAPI</button><button type="button" class="btn primary" id="pkgPokemonCreate" disabled>Create draft</button>')}</div>`, { backdropClose: true });
+  $('#pkgPokemonCancel', m.root).onclick = m.tryClose;
+  $('#pkgPokemonLookup', m.root).onclick = async () => {
+    const name = $('#pkgPokemonLookupName', m.root).value.trim();
+    if (!name) { toast('Enter a Pokemon name first'); return; }
+    try {
+      const result = await api(`/api/packages/pokemon/lookup?q=${encodeURIComponent(name)}`);
+      if (!result.found) { toast(result.suggestion ? `Not found. Try ${result.suggestion}.` : 'Pokemon not found in PokéAPI'); return; }
+      lookup = result.data;
+      $('#pkgPokemonStats', m.root).innerHTML = statCards([['Name', lookup.displayName], ['Dex', lookup.pokemonId], ['Types', (lookup.types || []).join(', ')], ['Forms', lookup.forms?.length || 0]]);
+      $('#pkgPokemonPreview', m.root).hidden = false; $('#pkgPokemonCreate', m.root).disabled = false; m.markDirty();
+      toast('PokéAPI profile loaded. Review before creating the draft.');
+    } catch (err) { toast(String(err.message || err)); }
+  };
+  $('#pkgPokemonCreate', m.root).onclick = async () => {
+    if (!lookup) return;
+    try {
+      await api('/api/packages/draft/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: lookup.id, displayName: lookup.displayName, characterType: 'pokemon', baseProfile: 'pokemon_small' }) });
+      await loadPackageContext();
+      await applyPokemonLookup(lookup);
+      const file = $('#pkgPokemonSheet', m.root).files?.[0];
+      if (file) { const sheet = new FormData(); sheet.append('file', file); sheet.append('mode', 'primary'); sheet.append('walkSheetId', 'walk'); await api('/api/packages/draft/add-sheet', { method: 'POST', body: sheet }); }
+      pkgState.panel = 'detail'; m.close(); await loadPackageContext(); renderPackages(); toast('Pokemon draft created from PokéAPI');
+    } catch (err) { toast(String(err.message || err)); }
+  };
+}
+
+function renderCharacterSettings() {
+  title('Settings');
+  toolbar('');
+  $('#view').innerHTML = `<div class="card sidecard pkg-settings-card"><div class="pkg-info-tabs"><button type="button" class="btn small active" data-settings-tab="model">Model</button><button type="button" class="btn small" data-settings-tab="prompts">Prompt &amp; schema</button></div><section id="settingsModelPanel"><h3>Character model</h3><div class="field"><label>Vendor</label><select class="select" id="settingsVendor"><option value="openai">OpenAI</option></select></div><div class="field"><label>Model</label><select class="select" id="settingsModel"><option value="gpt-5.6-luna">GPT-5.6 Luna</option></select><button type="button" class="btn small" id="settingsRefreshModels">Refresh available models</button><p class="tiny" id="settingsModelNote"></p></div><div class="field"><label>API key</label><input class="input" id="settingsApiKey" type="password" autocomplete="off" placeholder="Leave blank to keep the saved key"></div><label class="check"><input id="settingsReasoningEnabled" type="checkbox"> Enable reasoning</label><div class="field"><label>Reasoning effort</label><select class="select" id="settingsReasoningEffort"><option value="minimal">Minimal</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div><div class="field"><label>Temperature <span id="settingsTemperatureValue"></span></label><input id="settingsTemperature" type="range" min="0" max="1" step="0.05"></div><div class="field"><label>Profile output budget</label><input class="input" id="settingsMaxTokens" type="number" min="2000" max="128000" step="1000"></div></section><section id="settingsPromptsPanel" hidden><h3>Character profile</h3><p class="tiny">One researched request uses this prompt and editable schema.</p><div class="field"><label>Prompt</label><textarea class="input pkg-desc-area" id="settingsPromptProfile" rows="22"></textarea></div><details class="pkg-settings-schema" open><summary>Output schema</summary><textarea class="input pkg-desc-area" id="settingsSchemaProfile" rows="26"></textarea></details></section><div class="btn-row"><button type="button" class="btn primary" id="settingsSaveModel">Save settings</button></div></div>`;
+  right(`<div class="sidecard card"><h3>Workspace</h3><button type="button" class="btn full" id="settingsBackup">Export backup</button><button type="button" class="btn full" id="settingsQuickAnim" style="margin-top:8px">Quick anim</button><button type="button" class="btn full" id="settingsBodyMarkers" style="margin-top:8px">Body markers</button></div>`);
+  const setTemperature = () => { $('#settingsTemperatureValue').textContent = Number($('#settingsTemperature').value || 0).toFixed(2); };
+  const refreshModels = async (selected = '') => { const result = await api('/api/packages/llm/models'); const models = result.models || []; if (models.length) $('#settingsModel').innerHTML = models.map((model) => `<option value="${esc(model)}">${esc(model)}</option>`).join(''); if (selected && models.includes(selected)) $('#settingsModel').value = selected; $('#settingsModelNote').textContent = result.warning || (models.length ? `${models.length} models available to this API key` : 'Save an API key, then refresh the model list.'); };
+  const autoGrow = (el) => { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; };
+  api('/api/packages/llm/settings').then(async (settings) => { $('#settingsReasoningEnabled').checked = !!settings.reasoningEnabled; $('#settingsReasoningEffort').value = settings.reasoningEffort || 'low'; $('#settingsTemperature').value = settings.temperature ?? 0.15; $('#settingsMaxTokens').value = settings.maxTokens || 8000; $('#settingsPromptProfile').value = settings.prompts?.profile || ''; $('#settingsSchemaProfile').value = JSON.stringify(settings.schemas?.profile || {}, null, 2); autoGrow($('#settingsPromptProfile')); autoGrow($('#settingsSchemaProfile')); setTemperature(); $('#settingsApiKey').placeholder = settings.configured ? 'Saved key is configured. Leave blank to keep it.' : 'API key'; await refreshModels(settings.model); }).catch((err) => toast(String(err.message || err)));
+  $('#settingsRefreshModels').onclick = () => refreshModels($('#settingsModel').value).catch((err) => toast(String(err.message || err)));
+  $('#settingsTemperature').oninput = setTemperature;
+  $$('[data-settings-tab]').forEach((button) => button.onclick = () => { const prompts = button.dataset.settingsTab === 'prompts'; $('#settingsModelPanel').hidden = prompts; $('#settingsPromptsPanel').hidden = !prompts; $$('[data-settings-tab]').forEach((item) => item.classList.toggle('active', item === button)); });
+  $('#settingsPromptProfile').oninput = () => autoGrow($('#settingsPromptProfile'));
+  $('#settingsSchemaProfile').oninput = () => autoGrow($('#settingsSchemaProfile'));
+  $('#settingsSaveModel').onclick = async () => { try { const profileSchema = JSON.parse($('#settingsSchemaProfile').value); const saved = await api('/api/packages/llm/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vendor: $('#settingsVendor').value, endpoint: 'https://api.openai.com/v1/responses', model: $('#settingsModel').value, apiKey: $('#settingsApiKey').value, reasoningEnabled: $('#settingsReasoningEnabled').checked, reasoningEffort: $('#settingsReasoningEffort').value, temperature: $('#settingsTemperature').value, maxTokens: $('#settingsMaxTokens').value, prompts: { profile: $('#settingsPromptProfile').value }, profileSchema }) }); toast(saved.cacheInvalidated ? 'Settings saved and profile cache cleared' : 'Settings saved'); } catch (err) { toast(`Settings were not saved: ${err.message || err}`); } };
+  $('#settingsBackup').onclick = () => { location.href = '/api/export/project'; };
+  $('#settingsQuickAnim').onclick = () => { if (typeof openQuickAnimMode === 'function') openQuickAnimMode(); };
+  $('#settingsBodyMarkers').onclick = () => { if (typeof openBodyMarkers === 'function') void openBodyMarkers(null, ''); };
+}
+
 async function openCharacter(path) {
-  if (pkgState.panel === 'list') capturePokemonLibraryUiFromDom(path);
+  if (pkgState.panel === 'list') {
+    capturePokemonLibraryUiFromDom(path);
+    captureObjectLibraryUiFromDom(path);
+  }
   await api('/api/packages/draft/open-path', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1745,6 +2817,11 @@ async function openCharacter(path) {
   } else if (isPokemonCharType(p?.metadata?.characterType)) {
     pkgState.selectedSheetId = defaultPokemonWalkSheetId(p);
     pkgState.variantSheetBehavior = null;
+  } else if (isObjectCharType(p?.metadata?.characterType)) {
+    pkgState.selectedSheetId = p.spriteSheets?.find((s) => s.id === 'sheet')?.id
+      || p.spriteSheets?.find((s) => s.assetId)?.id
+      || null;
+    pkgState.variantSheetBehavior = null;
   } else {
     pkgState.selectedSheetId = p?.spriteSheets?.[0]?.id || null;
     pkgState.variantSheetBehavior = null;
@@ -1755,19 +2832,25 @@ async function openCharacter(path) {
 }
 
 function pkgSheetTile(sheet) {
-  const active = sheet.id === pkgState.selectedSheetId ? ' primary' : '';
-  const cell = pkgEffectiveCellSize(sheet);
+  const active = sheet.id === pkgState.selectedSheetId ? ' selected' : '';
+  const frameLabel = pkgFrameSizeLabel(sheet);
+  const objectMode = isObjectCharType(pkg()?.metadata?.characterType);
+  const synced = objectMode ? syncObjectSheetFields(sheet) : sheet;
   const v = isPokemonCharType(pkg()?.metadata?.characterType) ? syncSheetVariantFields(sheet) : null;
-  const sub = v
-    ? pokemonVariantLabel(v.formId, v.modifiers, v.behavior)
-    : profileLabel(sheet.profile || pkg()?.baseProfile || 'character');
+  const sub = objectMode
+    ? ((synced.modifiers || []).length
+      ? `id: ${synced.modifiers.join(', ')}`
+      : 'default appearance')
+    : (v
+      ? pokemonVariantLabel(v.formId, v.modifiers, v.behavior)
+      : profileLabel(sheet.profile || pkg()?.baseProfile || 'character'));
   const thumb = sheet.assetId
     ? `<div class="thumb wide" style="margin-bottom:8px"><img src="${sheetAssetUrl(sheet)}?t=${Date.now()}"/></div>`
     : '<div class="thumb wide" style="margin-bottom:8px"><span class="tiny">no png</span></div>';
-  return `<div class="card sidecard sheet-tile pkg-sheet-tile selectable-card${active}" data-sheet="${esc(sheet.id)}" role="button" tabindex="0" title="Open sheet inspector">
-    ${thumb}<h3 class="truncate">${esc(sheet.name || sheet.id)}</h3>
+  return `<div class="card sidecard sheet-tile pkg-sheet-tile selectable-card${active}" data-sheet="${esc(sheet.id)}" role="button" tabindex="0" title="Select appearance">
+    ${thumb}<h3 class="truncate">${esc(objectMode ? objectAppearanceDisplayName(sheet) : (synced.name || sheet.name || sheet.id))}</h3>
     <p>${esc(sub)}</p>
-    <p class="tiny">${cell}×${cell}px cells · click to inspect</p>
+    <p class="tiny">${esc(frameLabel)} · <button type="button" class="btn linkish tiny pkg-sheet-inspect" data-sheet-inspect="${esc(sheet.id)}">Inspect grid</button>${objectMode ? ` · <button type="button" class="btn linkish tiny pkg-sheet-rename" data-sheet-rename="${esc(sheet.id)}">Rename</button>` : ''}</p>
   </div>`;
 }
 
@@ -1806,13 +2889,14 @@ function openPkgSheetModal(sheetId) {
   selectPkgSheet(sheetId);
 
   const merged = pkgMergedProf(sheet);
-  const defaultCell = pkgDefaultCellSize(sheet);
-  const cellSize = pkgEffectiveCellSize(sheet);
-  const hasOverride = Boolean(sheet.profileOverrides?.frameWidth);
+  const def = pkgDefaultFrameSize(sheet);
+  const { fw, fh } = pkgEffectiveFrameSize(sheet);
+  const separate = fw !== fh;
+  const hasOverride = pkgSheetHasCustomFrameSize(sheet);
 
   const html = `<div class="modal card pkg-sheet-modal">
     ${modalHead(`Sheet · ${esc(sheet.name || sheet.id)}`)}
-    <p class="tiny">Embedded PNG and how it is sliced for animations. Cell size applies to this sheet only.</p>
+    <p class="tiny">Embedded PNG and how it is sliced for animations. Frame size applies to this sheet only.</p>
     <div class="pkg-sheet-modal-previews">
       <div class="pkg-sheet-modal-pane">
         <div class="section-title inline">Raw sheet</div>
@@ -1824,15 +2908,23 @@ function openPkgSheetModal(sheetId) {
       <div class="pkg-sheet-modal-pane">
         <div class="section-title inline">Grid</div>
         <canvas id="pkgSheetModalGrid" class="pkg-sheet-modal-grid checker"></canvas>
-        <p class="tiny" id="pkgSheetModalGridHint">${merged.columns}×${merged.rows} · ${cellSize}×${cellSize}px</p>
+        <p class="tiny" id="pkgSheetModalGridHint">${merged.columns}×${merged.rows} · ${fw}×${fh}px</p>
       </div>
     </div>
     <div class="field pkg-sheet-cell-field">
-      <label>Cell size (px)</label>
-      <div class="row wrap" style="align-items:center;gap:10px">
-        <input class="input" id="pkgSheetModalCell" type="number" min="8" max="256" step="1" value="${cellSize}" style="max-width:6rem">
-        <span class="tiny">Square cells — profile default is <b>${defaultCell}px</b>. <span id="pkgSheetDetected"></span></span>
+      <label class="check"><input type="checkbox" id="pkgSheetModalSeparate"${separate ? ' checked' : ''}> Separate width &amp; height (non-square cells)</label>
+      <div class="pkg-sheet-frame-size-row row wrap" style="align-items:center;gap:10px;margin-top:8px">
+        <div class="pkg-sheet-frame-square">
+          <label>Cell size (px)</label>
+          <input class="input" id="pkgSheetModalCell" type="number" min="8" max="256" step="1" value="${fw}" style="max-width:6rem"${separate ? ' disabled' : ''}>
+        </div>
+        <div class="pkg-sheet-frame-rect" style="display:${separate ? 'flex' : 'none'};gap:10px;flex-wrap:wrap">
+          <div><label>Width (px)</label><input class="input" id="pkgSheetModalWidth" type="number" min="8" max="256" step="1" value="${fw}" style="max-width:6rem"></div>
+          <div><label>Height (px)</label><input class="input" id="pkgSheetModalHeight" type="number" min="8" max="256" step="1" value="${fh}" style="max-width:6rem"></div>
+        </div>
+        <button type="button" class="btn small" id="pkgSheetModalDetect" disabled>Use detected</button>
       </div>
+      <p class="tiny">Profile default is <b>${def.fw}×${def.fh}px</b>. <span id="pkgSheetDetected"></span></p>
       ${hasOverride ? '<label class="check"><input type="checkbox" id="pkgSheetModalResetCell"> Use profile default</label>' : ''}
     </div>
     ${modalFoot('<button type="button" class="btn" id="pkgSheetModalCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgSheetModalSave">Apply</button>')}
@@ -1842,39 +2934,101 @@ function openPkgSheetModal(sheetId) {
   const rawImg = $('#pkgSheetModalRaw', m.root);
   const gridCan = $('#pkgSheetModalGrid', m.root);
   const cellInput = $('#pkgSheetModalCell', m.root);
+  const widthInput = $('#pkgSheetModalWidth', m.root);
+  const heightInput = $('#pkgSheetModalHeight', m.root);
+  const separateChk = $('#pkgSheetModalSeparate', m.root);
+  const squareWrap = $('.pkg-sheet-frame-square', m.root);
+  const rectWrap = $('.pkg-sheet-frame-rect', m.root);
+  const detectBtn = $('#pkgSheetModalDetect', m.root);
   const gridHint = $('#pkgSheetModalGridHint', m.root);
   const dimsEl = $('#pkgSheetModalDims', m.root);
   const detectedEl = $('#pkgSheetDetected', m.root);
   const resetChk = $('#pkgSheetModalResetCell', m.root);
 
   let loadedImg = null;
+  let detected = null;
 
-  const previewCell = () => {
-    if (resetChk?.checked) return defaultCell;
-    return Math.max(8, Number(cellInput?.value) || defaultCell);
+  const isSeparate = () => !!separateChk?.checked;
+
+  const syncSeparateUi = () => {
+    const on = isSeparate();
+    if (squareWrap) squareWrap.style.display = on ? 'none' : '';
+    if (rectWrap) rectWrap.style.display = on ? 'flex' : 'none';
+    if (cellInput) cellInput.disabled = on || !!resetChk?.checked;
+    if (widthInput) widthInput.disabled = !!resetChk?.checked;
+    if (heightInput) heightInput.disabled = !!resetChk?.checked;
+    if (!on && cellInput && widthInput && heightInput) {
+      const cell = Math.max(8, Number(cellInput.value) || def.fw);
+      widthInput.value = String(cell);
+      heightInput.value = String(cell);
+    }
+    refreshGrid();
+  };
+
+  const previewFrameSize = () => {
+    if (resetChk?.checked) return { fw: def.fw, fh: def.fh };
+    if (isSeparate()) {
+      return {
+        fw: Math.max(8, Math.round(Number(widthInput?.value) || def.fw)),
+        fh: Math.max(8, Math.round(Number(heightInput?.value) || def.fh)),
+      };
+    }
+    const cell = Math.max(8, Math.round(Number(cellInput?.value) || def.fw));
+    return { fw: cell, fh: cell };
   };
 
   const refreshGrid = () => {
     if (!loadedImg) return;
-    const cell = previewCell();
-    const profPreview = { ...merged, frameWidth: cell, frameHeight: cell };
+    const { fw, fh } = previewFrameSize();
+    const profPreview = { ...merged, frameWidth: fw, frameHeight: fh };
     drawPkgSheetGridCanvas(gridCan, loadedImg, profPreview);
     if (gridHint) {
-      gridHint.textContent = `${profPreview.columns}×${profPreview.rows} grid · ${cell}×${cell}px cells`;
+      gridHint.textContent = `${profPreview.columns}×${profPreview.rows} grid · ${fw}×${fh}px cells`;
     }
   };
+
+  if (separateChk) separateChk.onchange = syncSeparateUi;
 
   if (resetChk) {
     resetChk.onchange = () => {
       const on = resetChk.checked;
       if (cellInput) {
-        cellInput.disabled = on;
-        if (on) cellInput.value = String(defaultCell);
+        if (!isSeparate()) {
+          cellInput.disabled = on;
+          if (on) cellInput.value = String(def.fw);
+        }
+      }
+      if (widthInput) {
+        widthInput.disabled = on;
+        if (on) widthInput.value = String(def.fw);
+      }
+      if (heightInput) {
+        heightInput.disabled = on;
+        if (on) heightInput.value = String(def.fh);
       }
       refreshGrid();
     };
   }
+
   cellInput?.addEventListener('input', refreshGrid);
+  widthInput?.addEventListener('input', refreshGrid);
+  heightInput?.addEventListener('input', refreshGrid);
+
+  if (detectBtn) {
+    detectBtn.onclick = () => {
+      if (!detected) return;
+      if (separateChk) separateChk.checked = detected.fw !== detected.fh;
+      syncSeparateUi();
+      if (isSeparate()) {
+        if (widthInput) widthInput.value = String(detected.fw);
+        if (heightInput) heightInput.value = String(detected.fh);
+      } else if (cellInput) {
+        cellInput.value = String(detected.fw);
+      }
+      refreshGrid();
+      m.markDirty();
+    };
+  }
 
   if (!sheet.assetId) {
     if (dimsEl) dimsEl.textContent = 'No PNG embedded on this sheet yet.';
@@ -1888,13 +3042,19 @@ function openPkgSheetModal(sheetId) {
         rawImg.style.width = `${Math.min(320, img.width)}px`;
       }
       const cols = merged.columns || 4;
-      const detected = Math.round(img.width / cols);
+      const rows = merged.rows || 4;
+      const detFw = Math.round(img.width / cols);
+      const detFh = Math.round(img.height / rows);
+      detected = { fw: detFw, fh: detFh };
       if (dimsEl) dimsEl.textContent = `${img.width}×${img.height}px`;
       if (detectedEl) {
-        detectedEl.textContent = detected !== defaultCell
-          ? `Image width ÷ ${cols} columns ≈ ${detected}px.`
-          : '';
+        const parts = [];
+        if (detFw !== def.fw || detFh !== def.fh) {
+          parts.push(`Detected: ${detFw}×${detFh}px (${cols}×${rows} grid).`);
+        }
+        detectedEl.textContent = parts.join(' ');
       }
+      if (detectBtn) detectBtn.disabled = false;
       refreshGrid();
     };
     img.src = `${sheetAssetUrl(sheet)}?t=${Date.now()}`;
@@ -1903,16 +3063,16 @@ function openPkgSheetModal(sheetId) {
   $('#pkgSheetModalCancel', m.root).onclick = m.tryClose;
   $('#pkgSheetModalSave', m.root).onclick = async () => {
     const useDefault = !!resetChk?.checked;
-    const cell = Math.max(8, Math.round(Number(cellInput?.value) || defaultCell));
+    const { fw, fh } = useDefault ? def : previewFrameSize();
     const nextSheets = (p.spriteSheets || []).map((s) => {
       if (s.id !== sheetId) return s;
       const overrides = { ...(s.profileOverrides || {}) };
-      if (useDefault || cell === defaultCell) {
+      if (useDefault || (fw === def.fw && fh === def.fh)) {
         delete overrides.frameWidth;
         delete overrides.frameHeight;
       } else {
-        overrides.frameWidth = cell;
-        overrides.frameHeight = cell;
+        overrides.frameWidth = fw;
+        overrides.frameHeight = fh;
       }
       const next = { ...s };
       if (Object.keys(overrides).length) next.profileOverrides = overrides;
@@ -1932,6 +3092,12 @@ function openPkgSheetModal(sheetId) {
 
 function pkgActionDisplayName(action) {
   if (!action) return '';
+  if (isObjectCharType(pkg()?.metadata?.characterType)) {
+    return action.id || action.animationName || '';
+  }
+  if (action.type === 'activity') {
+    return action.id || 'activity';
+  }
   const sheetBeh = actionSheetBehavior(action);
   const isStance = !action.movementDriven || action.type === 'idle' || (action.behavior || '') === 'idle';
   if (isStance) return `idle (${sheetBeh})`;
@@ -1942,9 +3108,27 @@ function pkgAnimGroupHeader(action) {
   const name = pkgActionDisplayName(action);
   const sheetBeh = actionSheetBehavior(action);
   const pokemonMode = isPokemonCharType(pkg()?.metadata?.characterType);
+  const objectMode = isObjectCharType(pkg()?.metadata?.characterType);
   const isStance = !action.movementDriven || action.type === 'idle' || (action.behavior || '') === 'idle';
   let hint;
-  if (pokemonMode && isStance && ['walk', 'swim', 'eating'].includes(sheetBeh)) {
+  if (objectMode) {
+    const sheet = (pkg()?.spriteSheets || []).find((s) => s.id === action.sheetId);
+    const spec = sheet ? pkgEffectiveAnimSpec(sheet, action.animationName || action.id) : {};
+    const frames = (spec.frames || []).join(', ') || '0';
+    const loop = spec.loop === false ? 'plays once' : 'loops';
+    hint = `cells [${frames}] · ${Number(spec.frameTimeMs) || 0} ms · ${loop}`;
+  } else if (action.type === 'activity') {
+    if (action.activityKind === 'session') {
+      const sheet = (pkg()?.spriteSheets || []).find((s) => s.id === action.sheetId);
+      const enter = sheet ? pkgEffectiveAnimSpec(sheet, 'enter').frames : null;
+      const stay = sheet ? pkgEffectiveAnimSpec(sheet, 'stay').frames : null;
+      const exit = sheet ? pkgEffectiveAnimSpec(sheet, 'exit').frames : null;
+      const fmt = (f) => (f?.length ? f.join('→') : '—');
+      hint = `session · enter [${fmt(enter)}] · stay [${fmt(stay)}] · exit [${fmt(exit)}]`;
+    } else {
+      hint = 'activity · single play · 4-dir';
+    }
+  } else if (pokemonMode && isStance && ['walk', 'swim', 'eating'].includes(sheetBeh)) {
     hint = `same ${sheetBeh} animation`;
   } else if (action.movementDriven) {
     hint = `loops on ${sheetBeh} sheet`;
@@ -1952,19 +3136,21 @@ function pkgAnimGroupHeader(action) {
     hint = `frame 0 on ${sheetBeh} sheet`;
   }
   return `<div class="pkg-anim-group-head">
-    <span class="section-title inline">${esc(name)}</span>
-    <button type="button" class="pkg-action-info-btn" data-pkg-action-info="${esc(action.id)}" title="Animation metadata" aria-label="Edit animation metadata for ${esc(name)}">i</button>
+    <span class="section-title inline">${esc(action.id || name)}</span>
+    <button type="button" class="pkg-action-info-btn" data-pkg-action-info="${esc(action.id)}" title="Edit animation" aria-label="Edit animation ${esc(action.id || name)}">i</button>
+    ${objectMode ? `<button type="button" class="pkg-action-del-btn" data-pkg-action-del="${esc(action.id)}" title="Remove animation" aria-label="Remove animation ${esc(action.id || name)}">×</button>` : ''}
     <span class="tiny pkg-anim-group-hint">${esc(hint)}</span>
   </div>`;
 }
 
 function pkgSheetAnimNames(sheet) {
   const prof = profileDef(sheet?.profile || pkg()?.baseProfile);
+  const suppressed = new Set(sheet?.suppressedAnimations || []);
   const keys = new Set([
     ...Object.keys(prof.animations || {}),
     ...Object.keys(sheet?.animations || {}),
   ]);
-  return [...keys].sort();
+  return [...keys].filter((k) => !suppressed.has(k)).sort();
 }
 
 function pkgEffectiveAnimSpec(sheet, animName) {
@@ -1987,9 +3173,116 @@ function parseFrameList(raw) {
     .filter((n) => Number.isInteger(n) && n >= 0);
 }
 
+async function removeObjectAnimation(actionId) {
+  const p = pkg();
+  if (!p || !isObjectCharType(p?.metadata?.characterType)) return;
+  const action = (p.actions || []).find((a) => a.id === actionId);
+  if (!action) return;
+  const animName = (action.animationName || action.id || '').trim();
+  const sheetId = action.sheetId;
+  const label = action.id || animName;
+  if (!confirm(`Remove animation "${label}" from this appearance?`)) return;
+  const nextActions = (p.actions || []).filter((a) => a.id !== actionId);
+  const nextSheets = (p.spriteSheets || []).map((s) => {
+    if (s.id !== sheetId) return { ...s };
+    const out = { ...s };
+    const suppressed = [...(out.suppressedAnimations || [])];
+    if (animName && !suppressed.includes(animName)) suppressed.push(animName);
+    out.suppressedAnimations = suppressed;
+    if (out.animations) {
+      const anims = { ...out.animations };
+      delete anims[animName];
+      if (Object.keys(anims).length) out.animations = anims;
+      else delete out.animations;
+    }
+    return out;
+  });
+  try {
+    await saveDraft({ actions: nextActions, spriteSheets: nextSheets });
+    toast(`Removed ${label}`);
+    renderCharDetail();
+  } catch (err) {
+    toast(String(err.message || err));
+  }
+}
+
+function pkgActivityTimingClipNames(action) {
+  if (action?.activityKind === 'session') return ['enter', 'stay', 'exit'];
+  const phases = action?.phases || {};
+  return [phases.play?.animationName || 'play'];
+}
+
+function pkgEffectiveFrameMs(sheet, animName) {
+  const spec = sheet ? pkgEffectiveAnimSpec(sheet, animName) : {};
+  return Math.max(1, Number(spec.frameTimeMs) || 120);
+}
+
+function pkgActivityEffectiveFrameMs(sheet, action) {
+  const clips = pkgActivityTimingClipNames(action);
+  for (const clip of clips) {
+    if (sheet && pkgEffectiveAnimSpec(sheet, clip).frameTimeMs != null) {
+      return pkgEffectiveFrameMs(sheet, clip);
+    }
+  }
+  return clips.length ? pkgEffectiveFrameMs(sheet, clips[0]) : 120;
+}
+
+function buildPkgActionTimingHtml({ sheet, animName, animSpec, hasOverride, objectMode, isActivity, action }) {
+  if (!sheet) return '';
+  const effectiveMs = isActivity
+    ? pkgActivityEffectiveFrameMs(sheet, action)
+    : pkgEffectiveFrameMs(sheet, animName);
+  const defaultFrames = (animSpec.frames || []).join(', ');
+  if (isActivity) {
+    const clipNote = action.activityKind === 'session'
+      ? 'Applies to <code>enter</code>, <code>stay</code>, and <code>exit</code> on this sheet.'
+      : `Applies to the <code>${esc(pkgActivityTimingClipNames(action)[0])}</code> clip.`;
+    return `<div class="modal-section pkg-action-timing">
+      <h4>Timing</h4>
+      <p class="tiny">${clipNote} Lower = faster.</p>
+      <div class="field"><label>Frame time (ms)</label>
+        <input class="input" id="pkgActFrameMs" type="number" min="1" step="1" value="${effectiveMs}">
+      </div>
+    </div>`;
+  }
+  return `<div class="modal-section pkg-action-timing">
+    <h4>Sheet timing${hasOverride ? ' <span class="tag short">override</span>' : ''}</h4>
+    <p class="tiny">Per-sheet override for <code>${esc(animName)}</code>. Profile default: frames <b>${esc(defaultFrames || '—')}</b>, ${effectiveMs} ms${animSpec.loop === false ? ', no loop' : ''}.</p>
+    <div class="grid cols2">
+      <div class="field"><label>${objectMode ? 'Frame cells' : 'Frame columns'}</label>
+        <input class="input" id="pkgActFrames" value="${esc(defaultFrames)}" placeholder="0, 1, 2, 3">
+      </div>
+      <div class="field"><label>Frame time (ms)</label>
+        <input class="input" id="pkgActFrameMs" type="number" min="1" step="1" value="${effectiveMs}">
+        <p class="tiny">Milliseconds per frame. Lower = faster.</p>
+      </div>
+    </div>
+    <label class="check"><input type="checkbox" id="pkgActLoop" ${animSpec.loop === false ? '' : 'checked'}> Loop animation</label>
+    <label class="check"><input type="checkbox" id="pkgActClearOverride" ${hasOverride ? '' : 'disabled'}> Clear sheet override (use profile defaults)</label>
+  </div>`;
+}
+
+function applyPkgSheetAnimTiming(sh, animName, { frames, frameMs, loopChecked, clearOverride }) {
+  const anims = { ...(sh.animations || {}) };
+  if (clearOverride) {
+    delete anims[animName];
+  } else {
+    const spec = { ...(anims[animName] || {}) };
+    if (frames?.length) spec.frames = frames;
+    if (frameMs != null) spec.frameTimeMs = frameMs;
+    if (loopChecked) delete spec.loop;
+    else spec.loop = false;
+    anims[animName] = spec;
+  }
+  sh.animations = Object.keys(anims).length ? anims : undefined;
+  if (!sh.animations) delete sh.animations;
+  return sh;
+}
+
 function openPkgActionMetaModal(actionId) {
   const p = pkg();
   if (!p) return;
+  const objectMode = isObjectCharType(p?.metadata?.characterType);
   const actions = [...(p.actions || [])];
   const idx = actions.findIndex((a) => a.id === actionId);
   if (idx < 0) return;
@@ -1997,6 +3290,7 @@ function openPkgActionMetaModal(actionId) {
   const sheets = (p.spriteSheets || []).filter((s) => s.assetId);
   const sheet = sheets.find((s) => s.id === action.sheetId) || sheets[0];
   const animName = action.animationName || action.id;
+  const objectClipName = objectClipNameFromAction(action);
   const animSpec = sheet ? pkgEffectiveAnimSpec(sheet, animName) : {};
   const hasOverride = sheet ? pkgSheetHasAnimOverride(sheet, animName) : false;
   const defaultFrames = (animSpec.frames || []).join(', ');
@@ -2005,6 +3299,9 @@ function openPkgActionMetaModal(actionId) {
   const animOpts = (sheet ? pkgSheetAnimNames(sheet) : [animName]).map((n) =>
     `<option value="${esc(n)}" ${n === animName ? 'selected' : ''}>${esc(n)}</option>`).join('');
   const isActivity = action.type === 'activity';
+  const timingFields = buildPkgActionTimingHtml({
+    sheet, animName, animSpec, hasOverride, objectMode, isActivity, action,
+  });
   const phasesJson = JSON.stringify(action.phases || {}, null, 2);
   const activityFields = `
     <div class="pkg-action-activity-only" ${isActivity ? '' : 'hidden'}>
@@ -2022,67 +3319,68 @@ function openPkgActionMetaModal(actionId) {
           </select>
         </div>
       </div>
+      ${action.activityKind === 'session' && sheet ? '<p class="tiny">Clips on this sheet: <code>enter</code>, <code>stay</code>, <code>exit</code>. Frame columns are edited per clip in sheet overrides; speed is below.</p>' : ''}
       <div class="field"><label>Phases (JSON)</label>
         <textarea class="input pkg-desc-area" id="pkgActPhases" rows="6" spellcheck="false">${esc(phasesJson)}</textarea>
         <p class="tiny">Phase ids map to <code>{ animationName, loop? }</code> on the sheet.</p>
       </div>
     </div>`;
-  const standardFields = `
+  const standardFields = objectMode ? `
+    <div class="pkg-action-standard-only" ${isActivity ? 'hidden' : ''}>
+      <div class="field"><label>Clip name</label>
+        <input class="input" id="pkgObjActClipName" value="${esc(objectClipName)}" placeholder="open">
+        <p class="tiny" id="pkgObjActIdHint">Action id: <code>${esc(action.id)}</code></p>
+      </div>
+    </div>` : `
     <div class="pkg-action-standard-only" ${isActivity ? 'hidden' : ''}>
       <div class="field"><label>Animation name</label>
         <select class="select" id="pkgActAnimName">${animOpts}</select>
         <p class="tiny">Profile animation key used when playing this action.</p>
       </div>
     </div>`;
-  const timingFields = sheet ? `
-    <div class="modal-section">
-      <h4>Sheet timing${hasOverride ? ' <span class="tag short">override</span>' : ''}</h4>
-      <p class="tiny">Per-sheet override for <code>${esc(animName)}</code>. Profile default: frames <b>${esc(defaultFrames || '—')}</b>, ${Number(animSpec.frameTimeMs) || '—'} ms${animSpec.loop === false ? ', no loop' : ''}.</p>
-      <div class="grid cols2">
-        <div class="field"><label>Frame columns</label>
-          <input class="input" id="pkgActFrames" value="${esc(hasOverride ? (animSpec.frames || []).join(', ') : '')}" placeholder="${esc(defaultFrames || '0, 1, 2, 3')}">
-        </div>
-        <div class="field"><label>Frame time (ms)</label>
-          <input class="input" id="pkgActFrameMs" type="number" min="1" value="${hasOverride && animSpec.frameTimeMs != null ? Number(animSpec.frameTimeMs) : ''}" placeholder="${Number(animSpec.frameTimeMs) || 120}">
-        </div>
-      </div>
-      <label class="check"><input type="checkbox" id="pkgActLoop" ${animSpec.loop === false ? '' : 'checked'}> Loop animation</label>
-      <label class="check"><input type="checkbox" id="pkgActClearOverride" ${hasOverride ? '' : 'disabled'}> Clear sheet override (use profile defaults)</label>
-    </div>` : '';
-
   const html = `<div class="modal card pkg-action-meta-modal">
     ${modalHead(`Animation · ${esc(action.id)}`)}
     <p class="tiny">Edits the <code>actions[]</code> record saved in this .charbin. Save the character to write to disk.</p>
     <div class="grid cols2">
-      <div class="field"><label>Action id</label><input class="input" id="pkgActId" value="${esc(action.id)}"></div>
+      ${objectMode ? '' : `<div class="field"><label>Action id</label><input class="input" id="pkgActId" value="${esc(action.id)}"></div>`}
       <div class="field"><label>Type</label>
         <select class="select" id="pkgActType">
           <option value="idle" ${action.type === 'idle' ? 'selected' : ''}>idle</option>
-          <option value="movement" ${action.type === 'movement' ? 'selected' : ''}>movement</option>
-          <option value="walk" ${action.type === 'walk' ? 'selected' : ''}>walk (legacy)</option>
+          ${objectMode ? '' : `<option value="movement" ${action.type === 'movement' ? 'selected' : ''}>movement</option>
+          <option value="walk" ${action.type === 'walk' ? 'selected' : ''}>walk (legacy)</option>`}
           <option value="activity" ${action.type === 'activity' ? 'selected' : ''}>activity</option>
         </select>
       </div>
       <div class="field"><label>Sheet</label>
         <select class="select" id="pkgActSheet">${sheetOpts || '<option value="">—</option>'}</select>
       </div>
-      <div class="field pkg-action-move-row" ${isActivity ? 'hidden' : ''}>
+      <div class="field pkg-action-move-row" ${isActivity || objectMode ? 'hidden' : ''}>
         <label class="check" style="margin-top:28px"><input type="checkbox" id="pkgActMovementDriven" ${action.movementDriven ? 'checked' : ''}> Movement driven</label>
       </div>
     </div>
     ${standardFields}
     ${activityFields}
     ${timingFields}
-    ${modalFoot('<button type="button" class="btn" id="pkgActCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgActSave">Apply</button>')}
+    ${modalFoot(`${objectMode ? '<button type="button" class="btn bad" id="pkgActDelete">Delete</button>' : ''}<button type="button" class="btn" id="pkgActCancel">Cancel</button>`, '<button type="button" class="btn primary" id="pkgActSave">Apply</button>')}
   </div>`;
 
   const m = mountModal(html, { backdropClose: true, warnDirty: true });
+  const syncObjectClipIdHint = () => {
+    if (!objectMode) return;
+    const clip = normalizeClipName($('#pkgObjActClipName', m.root)?.value || '');
+    const hint = $('#pkgObjActIdHint', m.root);
+    if (!hint) return;
+    const nextId = clip ? objectActionId(clip, action.modifiers || []) : '—';
+    hint.innerHTML = `Action id: <code>${esc(nextId)}</code>`;
+  };
+  $('#pkgObjActClipName', m.root)?.addEventListener('input', syncObjectClipIdHint);
   const syncTypeUi = () => {
     const t = $('#pkgActType', m.root)?.value;
     const activity = t === 'activity';
     $('.pkg-action-activity-only', m.root)?.toggleAttribute('hidden', !activity);
     $('.pkg-action-standard-only', m.root)?.toggleAttribute('hidden', activity);
-    $('.pkg-action-move-row', m.root)?.toggleAttribute('hidden', activity);
+    $('.pkg-action-move-row', m.root)?.toggleAttribute('hidden', activity || objectMode);
+    $('.pkg-action-timing', m.root)?.toggleAttribute('hidden', !sheet);
     const move = $('#pkgActMovementDriven', m.root);
     if (move && !activity) {
       if (t === 'movement' || t === 'walk') move.checked = true;
@@ -2091,6 +3389,7 @@ function openPkgActionMetaModal(actionId) {
   };
   $('#pkgActType', m.root)?.addEventListener('change', syncTypeUi);
   $('#pkgActSheet', m.root)?.addEventListener('change', () => {
+    if (objectMode) return;
     const sid = $('#pkgActSheet', m.root)?.value;
     const sh = sheets.find((s) => s.id === sid);
     const sel = $('#pkgActAnimName', m.root);
@@ -2102,18 +3401,39 @@ function openPkgActionMetaModal(actionId) {
     else if (names.length) sel.value = names[0];
   });
   $('#pkgActCancel', m.root).onclick = m.tryClose;
+  if (objectMode) {
+    $('#pkgActDelete', m.root).onclick = async () => {
+      m.close();
+      await removeObjectAnimation(actionId);
+    };
+  }
   $('#pkgActSave', m.root).onclick = async () => {
-    const newId = ($('#pkgActId', m.root)?.value || '').trim();
-    if (!newId) {
-      toast('Action id is required');
-      return;
+    const actType = $('#pkgActType', m.root)?.value || 'idle';
+    const sheetId = $('#pkgActSheet', m.root)?.value || action.sheetId;
+    let newId;
+    let clipName = animName;
+    if (objectMode && actType !== 'activity') {
+      clipName = normalizeClipName($('#pkgObjActClipName', m.root)?.value || '');
+      if (!clipName) {
+        toast('Clip name is required');
+        return;
+      }
+      if (!/^[a-z][a-z0-9_]*$/.test(clipName)) {
+        toast('Clip name must start with a letter and use only a-z, 0-9, _');
+        return;
+      }
+      newId = objectActionId(clipName, action.modifiers || []);
+    } else {
+      newId = ($('#pkgActId', m.root)?.value || '').trim();
+      if (!newId) {
+        toast('Action id is required');
+        return;
+      }
     }
     if (actions.some((a, i) => i !== idx && a.id === newId)) {
       toast(`Another action already uses id "${newId}"`);
       return;
     }
-    const actType = $('#pkgActType', m.root)?.value || 'idle';
-    const sheetId = $('#pkgActSheet', m.root)?.value || action.sheetId;
     const updated = { ...action, id: newId, type: actType, sheetId };
     if (actType === 'activity') {
       updated.movementDriven = false;
@@ -2127,42 +3447,50 @@ function openPkgActionMetaModal(actionId) {
       }
       delete updated.animationName;
     } else {
-      updated.animationName = ($('#pkgActAnimName', m.root)?.value || action.animationName || newId).trim();
-      updated.movementDriven = !!$('#pkgActMovementDriven', m.root)?.checked;
+      updated.animationName = objectMode
+        ? clipName
+        : ($('#pkgActAnimName', m.root)?.value || action.animationName || newId).trim();
+      updated.movementDriven = objectMode ? false : !!$('#pkgActMovementDriven', m.root)?.checked;
+      if (objectMode) updated.type = 'idle';
       delete updated.activityKind;
       delete updated.facingMode;
       delete updated.phases;
     }
     const nextActions = actions.map((a, i) => (i === idx ? updated : a));
     let nextSheets = (p.spriteSheets || []).map((s) => ({ ...s, animations: { ...(s.animations || {}) } }));
-    if (sheet && actType !== 'activity') {
+    const frameMs = Math.max(1, Number($('#pkgActFrameMs', m.root)?.value) || 120);
+    if (sheet && actType === 'activity') {
+      const si = nextSheets.findIndex((s) => s.id === sheetId);
+      if (si >= 0) {
+        const sh = { ...nextSheets[si] };
+        const anims = { ...(sh.animations || {}) };
+        for (const clip of pkgActivityTimingClipNames(updated)) {
+          anims[clip] = { ...(anims[clip] || {}), frameTimeMs: frameMs };
+        }
+        sh.animations = anims;
+        nextSheets[si] = sh;
+      }
+    } else if (sheet && actType !== 'activity') {
+      const oldAnimName = animName;
       const targetAnim = updated.animationName;
       const si = nextSheets.findIndex((s) => s.id === sheetId);
       if (si >= 0) {
-        const sh = nextSheets[si];
+        let sh = nextSheets[si];
+        if (objectMode && oldAnimName !== targetAnim) {
+          sh = renameObjectSheetClip(sh, oldAnimName, targetAnim);
+        }
         const prof = profileDef(sh.profile || p.baseProfile);
         const profDefault = prof.animations?.[targetAnim] || {};
         const clearOverride = !!$('#pkgActClearOverride', m.root)?.checked;
         const framesRaw = ($('#pkgActFrames', m.root)?.value || '').trim();
-        const frameMsRaw = ($('#pkgActFrameMs', m.root)?.value || '').trim();
         const loopChecked = !!$('#pkgActLoop', m.root)?.checked;
-        const frames = framesRaw ? parseFrameList(framesRaw) : null;
-        const frameMs = frameMsRaw ? Math.max(1, Number(frameMsRaw)) : null;
-        const anims = { ...(sh.animations || {}) };
-        if (clearOverride) {
-          delete anims[targetAnim];
-        } else if (frames || frameMs != null || loopChecked !== (profDefault.loop !== false)) {
-          const spec = { ...(anims[targetAnim] || {}) };
-          if (frames?.length) spec.frames = frames;
-          else if (!framesRaw && anims[targetAnim]) delete spec.frames;
-          if (frameMs != null) spec.frameTimeMs = frameMs;
-          else if (!frameMsRaw && anims[targetAnim]) delete spec.frameTimeMs;
-          if (loopChecked) delete spec.loop;
-          else spec.loop = false;
-          anims[targetAnim] = spec;
-        }
-        sh.animations = Object.keys(anims).length ? anims : undefined;
-        if (!sh.animations) delete sh.animations;
+        const frames = framesRaw ? parseFrameList(framesRaw) : [];
+        sh = applyPkgSheetAnimTiming(sh, targetAnim, {
+          frames: frames.length ? frames : null,
+          frameMs: clearOverride ? null : frameMs,
+          loopChecked,
+          clearOverride,
+        });
         nextSheets[si] = sh;
       }
     }
@@ -2185,6 +3513,161 @@ function bindPkgActionInfoButtons(root) {
       openPkgActionMetaModal(btn.dataset.pkgActionInfo);
     };
   });
+  (root || document).querySelectorAll('[data-pkg-action-del]').forEach((btn) => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      await removeObjectAnimation(btn.dataset.pkgActionDel);
+    };
+  });
+}
+
+function renderObjectAppearancePicker(sheets) {
+  if (!sheets.length) return '';
+  const opts = sheets.map((s) => {
+    const sel = s.id === pkgState.selectedSheetId ? ' selected' : '';
+    return `<option value="${esc(s.id)}"${sel}>${esc(objectAppearanceDisplayName(s))}</option>`;
+  }).join('');
+  return `<div class="card sidecard pkg-object-appearance" data-object-only>
+    <div class="field"><label>Appearance</label>
+      <div class="row wrap" style="gap:8px;align-items:center">
+        <select class="select" id="pkgObjectAppearance" style="flex:1;min-width:140px">${opts}</select>
+        <button type="button" class="btn small" id="pkgObjectAppearanceRename">Rename</button>
+      </div>
+      <p class="tiny">Display names are editable; sheet ids stay fixed for the game.</p>
+    </div>
+  </div>`;
+}
+
+function openObjectRenameAppearanceModal(sheetId) {
+  const p = pkg();
+  if (!p || !isObjectCharType(p?.metadata?.characterType)) return;
+  const sid = sheetId || pkgState.selectedSheetId || selectedPkgSheet()?.id;
+  const sheet = (p.spriteSheets || []).find((s) => s.id === sid);
+  if (!sheet) return;
+  const synced = syncObjectSheetFields(sheet);
+  const defaultLabel = objectAppearanceLabel(synced.modifiers);
+  const currentCustom = String(sheet.name || '').trim();
+  const html = `<div class="modal card">
+    ${modalHead('Rename appearance')}
+    <p class="tiny">Sheet <code>${esc(sheet.id)}</code>${(synced.modifiers || []).length ? ` · modifier <code>${esc(synced.modifiers.join('_'))}</code>` : ''}</p>
+    <div class="field"><label>Display name</label>
+      <input class="input" id="pkgObjAppearName" value="${esc(currentCustom || defaultLabel)}" placeholder="${esc(defaultLabel)}">
+      <p class="tiny">Shown in the editor and picker. Does not change sheet id or action ids.</p>
+    </div>
+    ${modalFoot('<button type="button" class="btn" id="pkgObjAppearCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgObjAppearSave">Save</button>')}
+  </div>`;
+  const m = mountModal(html, { backdropClose: true });
+  $('#pkgObjAppearCancel', m.root).onclick = () => m.close();
+  $('#pkgObjAppearSave', m.root).onclick = async () => {
+    const raw = ($('#pkgObjAppearName', m.root)?.value || '').trim();
+    const nextName = raw && raw !== defaultLabel ? raw : '';
+    const nextSheets = (p.spriteSheets || []).map((s) => {
+      if (s.id !== sid) return s;
+      const out = { ...s };
+      if (nextName) out.name = nextName;
+      else delete out.name;
+      return out;
+    });
+    try {
+      await saveDraft({ spriteSheets: nextSheets });
+      toast(nextName ? `Renamed to ${nextName}` : 'Reset to default name');
+      m.close();
+      renderCharDetail();
+    } catch (err) {
+      toast(String(err.message || err));
+    }
+  };
+}
+
+function refreshObjectSheetPreview() {
+  const p = pkg();
+  if (!p || !isObjectCharType(p?.metadata?.characterType)) return;
+  const actionsAll = pkgActionsWithResolvablePreview(p);
+  const actions = filterActionsForPreview(p, actionsAll);
+  const grid = $('#pkgAnimGrid');
+  if (grid) grid.innerHTML = renderPkgAnimationsHtml(actions);
+  hydratePkgVisuals();
+  bindPkgActionInfoButtons($('#view'));
+}
+
+function openObjectAddAnimationModal() {
+  const p = pkg();
+  if (!p) return;
+  const sheet = selectedPkgSheet();
+  if (!sheet?.assetId) {
+    toast('Add a sprite sheet first');
+    return;
+  }
+  const synced = syncObjectSheetFields(sheet);
+  const mods = synced.modifiers || [];
+  const html = `<div class="modal card">
+    ${modalHead('Add animation')}
+    <p class="tiny">Named clip on <b>${esc(synced.name || synced.id)}</b>. Saved as a game action on this appearance.</p>
+    <div class="field"><label>Name</label>
+      <input class="input" id="pkgObjAnimName" placeholder="open"></div>
+    <div class="grid cols2">
+      <div class="field"><label>Frame cells</label>
+        <input class="input" id="pkgObjAnimFrames" value="0" placeholder="0, 1, 2, 3">
+        <p class="tiny">Comma-separated cell indices on the sheet grid.</p></div>
+      <div class="field"><label>ms / frame</label>
+        <input class="input" id="pkgObjAnimMs" type="number" min="0" value="120"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="pkgObjAnimLoop" checked> Loop</label>
+    ${modalFoot('<button type="button" class="btn" id="pkgObjAnimCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgObjAnimSave">Add</button>')}
+  </div>`;
+  const m = mountModal(html, { backdropClose: true });
+  $('#pkgObjAnimCancel', m.root).onclick = () => m.close();
+  $('#pkgObjAnimSave', m.root).onclick = async () => {
+    const animName = ($('#pkgObjAnimName', m.root)?.value || '').trim().toLowerCase().replace(/\s+/g, '_');
+    if (!animName) {
+      toast('Enter an animation name');
+      return;
+    }
+    if (!/^[a-z][a-z0-9_]*$/.test(animName)) {
+      toast('Name must start with a letter and use only a-z, 0-9, _');
+      return;
+    }
+    const frames = parseFrameList($('#pkgObjAnimFrames', m.root)?.value || '0');
+    if (!frames.length) {
+      toast('Enter at least one frame cell');
+      return;
+    }
+    const frameTimeMs = Math.max(0, Number($('#pkgObjAnimMs', m.root)?.value) || 0);
+    const loop = !!$('#pkgObjAnimLoop', m.root)?.checked;
+    const sheetId = synced.id;
+    const actions = [...(p.actions || [])];
+    const actionId = objectActionId(animName, mods);
+    if (actions.some((a) => a.id === actionId)) {
+      toast(`Action "${actionId}" already exists`);
+      return;
+    }
+    const nextSheets = (p.spriteSheets || []).map((s) => {
+      if (s.id !== sheetId) return { ...s, animations: { ...(s.animations || {}) } };
+      const anims = { ...(s.animations || {}) };
+      anims[animName] = { frames, frameTimeMs, ...(loop ? {} : { loop: false }) };
+      const suppressed = (s.suppressedAnimations || []).filter((x) => x !== animName);
+      const out = { ...s, animations: anims };
+      if (suppressed.length) out.suppressedAnimations = suppressed;
+      else delete out.suppressedAnimations;
+      return out;
+    });
+    const newAction = {
+      id: actionId,
+      type: 'idle',
+      sheetId,
+      animationName: animName,
+      movementDriven: false,
+      modifiers: [...mods],
+    };
+    try {
+      await saveDraft({ spriteSheets: nextSheets, actions: [...actions, newAction] });
+      toast(`Added ${actionId}`);
+      m.close();
+      renderCharDetail();
+    } catch (err) {
+      toast(String(err.message || err));
+    }
+  };
 }
 
 function pkgSpriteSlot(label, hasSheet) {
@@ -2309,6 +3792,9 @@ function inferActionSheetBehaviorFromId(action) {
 }
 
 function actionSheetBehavior(action) {
+  if (action?.type === 'activity') {
+    return action.sheetId || action.id || 'activity';
+  }
   if (action?.sheetBehavior) return action.sheetBehavior;
   const inferred = inferActionSheetBehaviorFromId(action);
   if (inferred !== 'walk') return inferred;
@@ -2322,6 +3808,13 @@ function actionSheetBehavior(action) {
 }
 
 function pkgPreviewAnimName(action, sheet, profileName) {
+  if (action?.type === 'activity') {
+    const phases = action.phases || {};
+    if (action.activityKind === 'session') {
+      return phases.stay?.animationName || phases.enter?.animationName || 'stay';
+    }
+    return phases.play?.animationName || action.id || 'play';
+  }
   let anim = action?.animationName || action?.id || 'walk';
   const prof = pkgMergedProf(sheet, profileName);
   if (pkgAnimSpec(sheet, prof, anim)) return anim;
@@ -2622,6 +4115,11 @@ function bindPkgVariantPicker(variantSheets) {
 
 /** Limit animation preview to the selected form, look, and sheet type (walk / swim / …). */
 function filterActionsForPreview(p, actions) {
+  if (isObjectCharType(p?.metadata?.characterType)) {
+    const sid = pkgState.selectedSheetId || selectedPkgSheet()?.id;
+    if (!sid) return actions;
+    return actions.filter((a) => a.sheetId === sid);
+  }
   if (!isPokemonCharType(p?.metadata?.characterType)) return actions;
   const variantSheets = pokemonVariantSheetsFromPackage(p);
   if (variantSheets.length <= 1) return actions;
@@ -2651,7 +4149,7 @@ function renderPkgAnimationsHtml(actions) {
   const objectMode = isObjectCharType(pkg()?.metadata?.characterType);
   if (!actions.length) {
     return objectMode
-      ? '<div class="empty">Add a sprite sheet to preview play (row-major; preview loops with a short pause between plays).</div>'
+      ? '<div class="empty">No animations on this appearance. Use <b>+ Add animation</b>.</div>'
       : '<div class="empty">Import a walk sheet, or use <b>Add sheet</b> for more animations or to replace walk.</div>';
   }
   const order = pkgActionOrder(pkg());
@@ -2692,14 +4190,27 @@ function pkgCharInfoPanel(p, m, profNames, hasPartner) {
   const formOpts = (forms.length ? forms : [{ id: 'default', name: 'Default' }])
     .map((f) => `<option value="${esc(f.id)}" ${f.id === (m.selectedFormId || 'default') ? 'selected' : ''}>${esc(f.name || f.id)}</option>`)
     .join('');
+  const pokemonSize = readPokemonSize(p, m);
+  const pokemonSizeHidden = pokemon ? '' : ' pkg-field-hidden';
+  const profileHidden = pokemon ? ' pkg-field-hidden' : '';
+  const npcProfile = isNpcCharType(charType) && typeof renderNpcIntelPanel === 'function' ? renderNpcIntelPanel(p) : '';
   return `<details class="card sidecard pkg-char-info" id="pkgCharInfo">
-    <summary>Character info</summary>
-    <div class="pkg-char-info-body">
+    <summary>Information</summary>
+    ${npcProfile ? '<div class="pkg-info-tabs"><button type="button" class="btn small active" data-info-tab="basics">Basics</button><button type="button" class="btn small" data-info-tab="profile">Profile</button></div>' : ''}
+    <div class="pkg-char-info-body" id="pkgInfoBasics">
       <div class="pkg-char-grid">
         <div class="field"><label>Name</label><input class="input" id="pkgName" value="${esc(p.displayName || '')}"></div>
-        <div class="field"><label>Sprite template</label><select class="select" id="pkgProfile">${profNames.map((n) =>
+        <div class="field${profileHidden}" data-pokemon-hide-profile><label>Sprite template</label><select class="select" id="pkgProfile">${profNames.map((n) =>
     `<option value="${n}" ${n === (p.baseProfile || 'character') ? 'selected' : ''}>${esc(profileLabel(n))}</option>`
   ).join('')}</select></div>
+        <div class="field data-pokemon-only${pokemonSizeHidden}" data-pokemon-only>
+          <label>Overworld size</label>
+          <select class="select" id="pkgPokemonSize">
+            ${POKEMON_SIZE_OPTIONS.map(([val, label, hint]) =>
+    `<option value="${esc(val)}" ${val === pokemonSize ? 'selected' : ''}>${esc(label)} · ${esc(hint)}</option>`).join('')}
+          </select>
+          <p class="tiny">Small / medium / large set cell size on sheets. Human uses trainer-scale 32px profile.</p>
+        </div>
         <div class="field"><label>Type</label><select class="select" id="pkgType">
           ${PKG_CHAR_TYPES.map(([val, label]) =>
     `<option value="${val}" ${val === charType ? 'selected' : ''}>${esc(label)}</option>`).join('')}
@@ -2723,8 +4234,15 @@ function pkgCharInfoPanel(p, m, profNames, hasPartner) {
         <summary>PokéAPI data (saved in .charbin)</summary>
         ${pkgPokeapiSummaryHtml(m.pokeapi)}
       </details>
-      <div class="field ${pokemon ? 'pkg-field-hidden' : ''}"><label>Description</label><textarea class="input pkg-desc-area" id="pkgDesc" rows="3" placeholder="Sign text, inspect blurb, etc.">${esc(m.description || '')}</textarea></div>
+      <div class="field ${(pokemon || isNpcCharType(charType)) ? 'pkg-field-hidden' : ''}"><label>Description</label><textarea class="input pkg-desc-area" id="pkgDesc" rows="3" placeholder="Sign text, inspect blurb, etc.">${esc(m.description || '')}</textarea></div>
       <div class="data-object-only${objectHidden}" data-object-only>
+        <div class="field"><label>Category</label>
+          <select class="select" id="pkgObjectCategory">
+            ${OBJECT_CATEGORIES.map((c) =>
+    `<option value="${esc(c.id)}" ${c.id === objectCategoryId({ objectCategory: m.objectCategory }) ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}
+          </select>
+          <p class="tiny">Groups this object in the library, like Pokémon generations.</p>
+        </div>
         <label class="check"><input type="checkbox" id="pkgObjectAnimated" ${m.objectAnimated ? 'checked' : ''}> Animated sprite (row 0 cycle)</label>
         <p class="tiny">Off = use <b>static</b> only (frame 0). On = game may use <b>animate</b> when the sheet has multiple frames.</p>
       </div>
@@ -2732,13 +4250,8 @@ function pkgCharInfoPanel(p, m, profNames, hasPartner) {
         <div class="field"><label>Tags</label></div>
         <div class="chip-field pkg-chip-field" id="pkgObjectTagsChips"></div>
       </div>
-      <div class="pkg-npc-only pkg-partner-block${npcHidden}" data-npc-only>
-        <label class="check pkg-partner-check"><input type="checkbox" id="pkgHasPartner" ${hasPartner ? 'checked' : ''}> Partner Pokémon</label>
-        <div class="pkg-partner-row" id="pkgPartnerRow" style="${hasPartner ? '' : 'display:none'}">
-          <div class="field"><label>Species</label><input class="input" id="pkgPartnerId" value="${esc(partner?.pokemonId || '')}" placeholder="garchomp"></div>
-          <div class="field"><label>Form</label><input class="input" id="pkgPartnerForm" value="${esc(partner?.formId || 'default')}"></div>
-          <div class="field"><label>Nickname</label><input class="input" id="pkgPartnerNick" value="${esc(partner?.nickname || '')}"></div>
-        </div>
+      <div class="pkg-npc-only pkg-partner-block${npcHidden} pkg-legacy-npc-meta" data-npc-only>
+        <p class="tiny">Pokemon links and dialogue are edited in the profile section below.</p>
       </div>
       <div class="pkg-meta-block pkg-npc-only${npcHidden}" data-npc-only>
         <div class="field"><label>Personality</label></div>
@@ -2748,12 +4261,12 @@ function pkgCharInfoPanel(p, m, profNames, hasPartner) {
         <div class="field"><label>Likes</label></div>
         <div class="chip-field pkg-chip-field" id="pkgLikesChips"></div>
       </div>
-      <div class="pkg-meta-block pkg-npc-only${npcHidden}" data-npc-only>
+      <div class="pkg-meta-block pkg-npc-only${npcHidden} pkg-legacy-npc-meta" data-npc-only>
         <div class="field"><label>Tags</label></div>
         <div class="chip-field pkg-chip-field" id="pkgTagsChips"></div>
       </div>
-      <div class="field pkg-npc-only${npcHidden}" data-npc-only><label>Dialogue</label><textarea class="input pkg-desc-area" id="pkgLines" rows="3" placeholder="One line per row">${esc((p.dialogue?.lines || []).join('\n'))}</textarea></div>
     </div>
+    ${npcProfile ? `<div id="pkgInfoProfile" hidden>${npcProfile}</div>` : ''}
   </details>`;
 }
 
@@ -2778,6 +4291,69 @@ function pkgAnimSpec(sheet, prof, animName) {
 
 /** Pause before restarting a one-shot anim in the editor preview (game uses loop: false). */
 const PKG_PREVIEW_CYCLE_GAP_MS = 480;
+/** How many times the stay phase holds before exit in session-activity preview. */
+const PKG_SESSION_STAY_LOOPS = 4;
+
+function playSessionActivityOnCanvas(canvas, sheet, profileName, action, direction = 'south') {
+  if (!canvas || !sheet?.assetId || action?.activityKind !== 'session') return () => {};
+  const prof = pkgMergedProf(sheet, profileName);
+  const dir = prof.directions?.[direction];
+  if (!dir) return () => {};
+  const dirRow = Number(dir.row) || 0;
+  const phases = action.phases || {};
+  const clip = (phase) => pkgAnimSpec(sheet, prof, phases[phase]?.animationName || phase);
+  const enterSpec = clip('enter');
+  const staySpec = clip('stay');
+  const exitSpec = clip('exit');
+  if (!enterSpec || !staySpec || !exitSpec) return () => {};
+
+  let stopped = false;
+  const img = new Image();
+  img.onload = () => {
+    const ctx = canvas.getContext('2d');
+    const drawCol = (col) => drawSheetCell(ctx, canvas, img, dirRow, col, prof);
+
+    const playClip = (spec, repeat, done) => {
+      const frames = spec.frames || [0];
+      const delay = Math.max(1, Number(spec.frameTimeMs) || 120);
+      let repsLeft = Math.max(1, repeat);
+      let fi = 0;
+      const step = () => {
+        if (stopped) return;
+        drawCol(frames[Math.min(fi, frames.length - 1)]);
+        if (fi < frames.length - 1) {
+          fi += 1;
+          setTimeout(step, delay);
+          return;
+        }
+        repsLeft -= 1;
+        if (repsLeft > 0) {
+          fi = 0;
+          setTimeout(step, delay);
+          return;
+        }
+        done();
+      };
+      step();
+    };
+
+    const runCycle = () => {
+      if (stopped) return;
+      playClip(enterSpec, 1, () => {
+        playClip(staySpec, PKG_SESSION_STAY_LOOPS, () => {
+          playClip(exitSpec, 1, () => {
+            if (stopped) return;
+            setTimeout(runCycle, PKG_PREVIEW_CYCLE_GAP_MS);
+          });
+        });
+      });
+    };
+    runCycle();
+  };
+  img.onerror = () => {};
+  img.src = `${sheetAssetUrl(sheet)}?t=${Date.now()}`;
+  return () => { stopped = true; };
+}
 
 function playPkgAnimOnCanvas(canvas, sheet, profileName, animName, direction = 'south', opts = {}) {
   if (!canvas || !sheet?.assetId) return () => {};
@@ -2831,6 +4407,8 @@ function playPkgAnimOnCanvas(canvas, sheet, profileName, animName, direction = '
 /** Pokémon idle uses the same looping clip as walk/swim; NPC idle holds frame 0. */
 function pkgPreviewHoldFrame(action, p) {
   if (isPokemonCharType(p?.metadata?.characterType)) return false;
+  if (isObjectCharType(p?.metadata?.characterType)) return false;
+  if (action?.type === 'activity') return false;
   return !action?.movementDriven;
 }
 
@@ -2873,7 +4451,9 @@ function hydratePkgVisuals() {
     const dirKey = card.dataset.dir || 'south';
     const holdFrame = pkgPreviewHoldFrame(action, p);
     if (canvas) {
-      const stop = playPkgAnimOnCanvas(canvas, sheetForAnim, profileName, animName, dirKey, { holdFrame });
+      const stop = action.type === 'activity' && action.activityKind === 'session'
+        ? playSessionActivityOnCanvas(canvas, sheetForAnim, profileName, action, dirKey)
+        : playPkgAnimOnCanvas(canvas, sheetForAnim, profileName, animName, dirKey, { holdFrame });
       pkgState.animStops.push(stop);
     }
   });
@@ -2910,6 +4490,12 @@ function renderCharDetail() {
   const variantPickerHtml = pokemonMode ? renderPokemonVariantPicker(variantSheets) : '';
   const variantSummary = pokemonMode ? summarizePokemonVariantMatrix(p) : null;
 
+  const objectSheets = objectMode ? objectSheetsFromPackage(p) : [];
+  const objectAppearanceHtml = objectMode ? renderObjectAppearancePicker(objectSheets) : '';
+  const objectAnimToolbar = objectMode
+    ? `<div class="row object-anim-toolbar"><button type="button" class="btn good" id="pkgObjectAddAnim">+ Add animation</button></div>`
+    : '';
+
   title(p.displayName || p.id);
   const quickAnimBtn = pokemonMode
     ? '<button type="button" class="btn good" id="pkgQuickAnimDetail" data-open-quick-anim>Quick anim</button>'
@@ -2932,7 +4518,7 @@ function renderCharDetail() {
     : `<div class="empty">No sheets yet — use <b>${objectMode ? 'Add sprite' : 'Add sheet'}</b> in the toolbar.</div>`;
   const infoHtml = pkgCharInfoPanel(p, m, profNames, hasPartner);
   const baseSection = objectMode
-    ? `<div class="section-title">Sprite</div><div class="grid cols2">${pkgSpriteSlot('view', hasSheet)}</div>`
+    ? `<div class="section-title">${esc(objectAppearanceDisplayName(selectedPkgSheet()))}</div><div class="grid cols2">${pkgSpriteSlot('view', hasSheet)}</div>`
     : `<div class="section-title" data-walk-character-only>Base sprites</div><div class="grid cols4" data-walk-character-only>${baseHtml}</div>`;
 
   $('#view').innerHTML = `
@@ -2941,21 +4527,29 @@ function renderCharDetail() {
       <p>${sheets.length} sheet${sheets.length === 1 ? '' : 's'} · ${actionsAll.length} action${actionsAll.length === 1 ? '' : 's'}${variantSummary ? ` · ${variantSummary.formCount} form${variantSummary.formCount === 1 ? '' : 's'} · ${variantSummary.variantCombos} combo${variantSummary.variantCombos === 1 ? '' : 's'}` : ''} · .charbin${objectMode ? ' · object' : ''}</p>
     </div><button class="btn" id="pkgRename">Rename</button></div>
     ${infoHtml}
-    <div class="section-title">Attached sheets</div>
+    <div class="section-title">${objectMode ? 'Appearances' : 'Attached sheets'}</div>
     <div class="grid cols3" id="pkgSheetGrid">${sheetsHtml}</div>
+    ${objectAppearanceHtml}
     ${baseSection}
-    <div class="section-title">Animations</div>
+    <div class="section-title">Game animations</div>
+    ${objectMode ? '<div class="card sidecard pkg-form-hint"><p class="tiny">Each clip is a named action on the selected appearance. Pick frame cells from the sheet; enable <b>Loop</b> for repeating cycles.</p></div>' : ''}
     ${pokemonMode && variantSheets.length <= 1 ? `<div class="card sidecard pkg-form-hint"><p class="tiny"><b>One variant in this file.</b> Use <b>Batch import</b> to add forms, shiny, swim, sleep, or eating sheets. Each walk import creates <code>idle</code> + <code>walk</code> actions (no auto <code>pause</code>).</p></div>` : ''}
     ${variantPickerHtml}
+    ${objectAnimToolbar}
     <div id="pkgAnimGrid">${animsHtml}</div>`;
 
   right(`<div class="sidecard card"><h3>Package detail</h3>
-    <p class="tiny"><b>Object</b>: non-moving map prop; <b>static</b> (frame 0) or <b>animate</b> (row 0). <b>Player/NPC</b>: 4-dir walk. <b>Pokémon</b>: walk cycle + pause.</p></div>`);
+    <p class="tiny">${objectMode
+    ? '<b>Object</b>: appearances + named animation clips.'
+    : '<b>Player/NPC</b>: 4-dir walk. <b>Pokémon</b>: variant sheets.'}</p></div>`);
 
   $('#pkgBack').onclick = () => {
     if (isPokemonCharType(m.characterType)) {
       capturePokemonDetailVariant();
       capturePokemonLibraryUiFromDom(pkgState.selectedPath);
+    }
+    if (isObjectCharType(m.characterType)) {
+      captureObjectLibraryUiFromDom(pkgState.selectedPath);
     }
     pkgState.panel = 'list';
     renderPackages();
@@ -2983,15 +4577,55 @@ function renderCharDetail() {
   $('#pkgFetchPokemon')?.addEventListener('click', () => fetchPokemonData());
   $('#pkgType')?.addEventListener('change', () => updatePkgFieldVisibility());
   $('#pkgProfile')?.addEventListener('change', () => hydratePkgVisuals());
+  $('#pkgPokemonSize')?.addEventListener('change', async () => {
+    const size = normalizePokemonSize($('#pkgPokemonSize')?.value);
+    await saveDraft({
+      baseProfile: pokemonSizeToProfile(size),
+      metadata: { pokemonSize: size },
+    });
+    hydratePkgVisuals();
+    toast(`Size → ${pokemonSizeProfileLabel(size)}`);
+  });
+  if (typeof bindNpcIntelPanel === 'function') bindNpcIntelPanel();
+  $$('[data-info-tab]').forEach((button) => button.onclick = () => {
+    const profileTab = button.dataset.infoTab === 'profile';
+    $('#pkgInfoBasics').hidden = profileTab;
+    $('#pkgInfoProfile').hidden = !profileTab;
+    $$('[data-info-tab]').forEach((item) => item.classList.toggle('active', item === button));
+  });
   updatePkgFieldVisibility();
+  $('#pkgObjectAddAnim')?.addEventListener('click', () => openObjectAddAnimationModal());
+  $('#pkgObjectAppearance')?.addEventListener('change', (e) => {
+    selectPkgSheet(e.target.value);
+    refreshObjectSheetPreview();
+  });
+  $('#pkgObjectAppearanceRename')?.addEventListener('click', () => openObjectRenameAppearanceModal());
   $$('.pkg-sheet-tile').forEach((el) => {
-    const open = () => openPkgSheetModal(el.dataset.sheet);
-    el.onclick = open;
+    el.onclick = (e) => {
+      if (e.target.closest('.pkg-sheet-inspect') || e.target.closest('.pkg-sheet-rename')) return;
+      selectPkgSheet(el.dataset.sheet);
+      const appear = $('#pkgObjectAppearance');
+      if (appear) appear.value = el.dataset.sheet;
+      refreshObjectSheetPreview();
+    };
     el.onkeydown = (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        open();
+        selectPkgSheet(el.dataset.sheet);
+        refreshObjectSheetPreview();
       }
+    };
+  });
+  $$('[data-sheet-inspect]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openPkgSheetModal(btn.dataset.sheetInspect);
+    };
+  });
+  $$('[data-sheet-rename]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      openObjectRenameAppearanceModal(btn.dataset.sheetRename);
     };
   });
   bindPkgVariantPicker(variantSheets);

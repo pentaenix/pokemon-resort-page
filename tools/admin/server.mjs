@@ -36,6 +36,7 @@ import {
 } from '../fetch-boxart.mjs';
 import { LIBRETRO_BASE } from '../lib/libretro-thumbnails.mjs';
 import { handleDataEditorApi } from './modules/dataeditor/server-api.mjs';
+import { handleScriptEngineApi } from './modules/scriptengine/server-api.mjs';
 
 loadProjectEnv();
 const root = resolve(new URL('../..', import.meta.url).pathname);
@@ -1067,6 +1068,10 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     // DATA EDITOR PATCH END
+    if (url.pathname.startsWith('/api/script-engine/')) {
+      await handleScriptEngineApi({ req, res, url, repoRoot, readBody, json });
+      return;
+    }
     if (url.pathname === '/api/data') return json(res, 200, await readAllData());
     if (url.pathname === '/api/assets') return json(res, 200, { assets: await listAssets() });
     if (url.pathname === '/api/assets/upload' && req.method === 'POST') {
@@ -1265,7 +1270,7 @@ const server = http.createServer(async (req, res) => {
       if (payload.file === 'research-pois.json') {
         return json(res, 400, {
           ok: false,
-          error: 'research-pois.json was split into research.json (Concierge Research) and pois.json (Atlas). Save from Workshop → Research or Atlas POIs. Restart the desk if you still see this.',
+          error: 'research-pois.json was split into research.json and pois.json (Atlas). Save from Atlas POIs. Restart the desk if you still see this.',
         });
       }
       if (!allowedData.has(payload.file)) return json(res, 400, { ok: false, error: 'File is not editable by this tool.' });

@@ -1,0 +1,29 @@
+{
+  "title": "Attend Audio Defaults",
+  "description": "Shared TEST ATTEND audio timing. Cry assets follow the active Pokemon species at runtime.",
+  "matches": [
+    "gameplay/pokemon_attend/audio/*.json"
+  ],
+  "tags": [
+    "attend",
+    "audio"
+  ],
+  "groups": [
+    {
+      "id": "cries",
+      "label": "Pokemon cries",
+      "description": "Timing for Pokemon cry playback during Attend interactions.",
+      "order": 1
+    }
+  ],
+  "fields": {
+    "audio.petHappyCryDelaySeconds": {
+      "label": "Pet-happy cry delay",
+      "group": "cries",
+      "order": 1,
+      "step": 0.01,
+      "unit": " seconds",
+      "min": 0
+    }
+  }
+}

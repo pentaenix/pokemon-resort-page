@@ -1,0 +1,48 @@
+{
+  "defaults": {
+    "enabled": true,
+    "radius": 5.2,
+    "distance": 1.78,
+    "height": 3.45,
+    "bottomY": -0.035,
+    "arcDegrees": 126,
+    "segments": 96,
+    "verticalSegments": 24,
+    "edgeDarkening": 0.46,
+    "gradientColors": [
+      {
+        "at": 0,
+        "color": "#3E7FA4"
+      },
+      {
+        "at": 0.38,
+        "color": "#82C7CA"
+      },
+      {
+        "at": 0.72,
+        "color": "#E2DCA9"
+      },
+      {
+        "at": 1,
+        "color": "#FFF0BE"
+      }
+    ]
+  },
+  "walls": {
+    "soft_gradient": {
+      "id": "soft_gradient"
+    },
+    "grass_png": {
+      "id": "grass_png",
+      "texture": "assets/pokemon_attend/wall_textures/beach.png",
+      "texturePlacement": {
+        "x": 0,
+        "y": 0,
+        "z": -1.9,
+        "width": 5.2,
+        "height": 3.12,
+        "coverViewport": true
+      }
+    }
+  }
+}

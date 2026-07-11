@@ -76,6 +76,7 @@ def empty_package(
             "pokemonTypes": [],
             "pokeapi": None,
             "objectAnimated": False,
+            "objectCategory": "others",
             "custom": {},
         },
         "baseProfile": "character",
@@ -96,6 +97,56 @@ def deep_merge_preserve_unknown(base: Dict[str, Any], patch: Dict[str, Any]) -> 
             out[key] = deep_merge_preserve_unknown(out[key], val)
         else:
             out[key] = val
+    return out
+
+
+def normalize_pokemon_size(size: Optional[str]) -> str:
+    key = str(size or "small").strip().lower()
+    if key in ("large", "medium", "human"):
+        return key
+    return "small"
+
+
+def infer_pokemon_size_from_package(package: Dict[str, Any]) -> str:
+    """Read explicit metadata or infer from profile / walk cell width."""
+    meta = package.get("metadata") or {}
+    explicit = meta.get("pokemonSize")
+    if explicit:
+        return normalize_pokemon_size(str(explicit))
+    profile = str(package.get("baseProfile") or "").lower()
+    if profile == "character":
+        return "human"
+    if profile == "pokemon_large":
+        return "large"
+    sheet = preferred_walk_sheet(package)
+    if sheet:
+        fw, _ = effective_sheet_cell_size(sheet, package)
+        if fw >= 60:
+            return "large"
+        if fw >= 36:
+            return "medium"
+    return "small"
+
+
+def apply_pokemon_size_to_package(package: Dict[str, Any], size: str) -> Dict[str, Any]:
+    """Apply overworld size to metadata, baseProfile, and embedded Pokémon sheets."""
+    from spmk_app.package_image import layout_for_pokemon_size
+
+    out = deepcopy(package)
+    layout = layout_for_pokemon_size(size)
+    meta = out.setdefault("metadata", {})
+    meta["pokemonSize"] = layout["pokemonSize"]
+    out["baseProfile"] = layout["profile"]
+    overrides = layout.get("profileOverrides")
+    for sheet in out.get("spriteSheets") or []:
+        if not sheet.get("assetId"):
+            continue
+        sheet["profile"] = layout["profile"]
+        if overrides:
+            sheet["profileOverrides"] = dict(overrides)
+        else:
+            sheet.pop("profileOverrides", None)
+    out["metadata"] = meta
     return out
 
 
@@ -286,7 +337,7 @@ def default_pokemon_actions(sheet_id: str = "walk") -> List[Dict[str, Any]]:
 
 
 def default_object_actions(sheet_id: str = "sheet") -> List[Dict[str, Any]]:
-    """Map objects: single non-looping play animation (row-major frames on sheet)."""
+    """Map objects: default play clip on the sheet grid."""
     return [
         {
             "id": "play",
@@ -322,11 +373,27 @@ def ensure_package_actions(package: Dict[str, Any]) -> Dict[str, Any]:
     out = deepcopy(package)
     sheets = out.get("spriteSheets") or []
     if is_object_package(out):
-        primary = _primary_sprite_sheet(sheets)
-        if not primary:
+        from spmk_app.object_variant_model import (
+            OBJECT_BASE_SHEET_ID,
+            actions_for_object_sheet,
+            sync_object_sheet_fields,
+        )
+
+        merged_actions: List[Dict[str, Any]] = list(out.get("actions") or [])
+        seen_ids = {a.get("id") for a in merged_actions if a.get("id")}
+        for sheet in sheets:
+            if not sheet.get("assetId"):
+                continue
+            synced = sync_object_sheet_fields(sheet)
+            for act in actions_for_object_sheet(synced, out.get("baseProfile") or "object"):
+                aid = act.get("id")
+                if aid and aid not in seen_ids:
+                    merged_actions.append(act)
+                    seen_ids.add(aid)
+        if not any(s.get("id") == OBJECT_BASE_SHEET_ID and s.get("assetId") for s in sheets):
             return out
-        sheet_id = primary.get("id") or "sheet"
-        defaults = default_object_actions(sheet_id)
+        out["actions"] = merged_actions
+        return out
     elif is_pokemon_package(out):
         from spmk_app.pokemon_variant_model import (
             actions_for_sheet_import,
@@ -497,9 +564,11 @@ def validate_package(
                     warnings.append(f"action {aid!r} animation {anim!r} not in profile or sheet overrides")
 
     if is_object_package(package):
-        has_play = any(a.get("id") == "play" for a in package.get("actions") or [])
-        if not has_play:
-            warnings.append('object: no play action defined (use animationName "play")')
+        actions = package.get("actions") or []
+        if not actions:
+            warnings.append("object: no actions defined")
+        elif not any(a.get("id") for a in actions):
+            warnings.append("object: actions missing ids")
         if any(a.get("type") in ("movement", "walk") for a in package.get("actions") or []):
             warnings.append("object: movement/walk actions are unusual for non-moving map objects")
 

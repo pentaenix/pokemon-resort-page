@@ -1,6 +1,36 @@
 {
   "bugs": [
     {
+      "id": "BUG-NEW-46888",
+      "title": "Idle Behaviors are not working",
+      "status": "Open",
+      "severity": "Minor",
+      "area": "Overworld",
+      "summary": "Some idle behaviors are misbehaving, for example one of them makes the pokemon just float in place. Also, Idle time activation is too short, update to a full minute.",
+      "linkedFeature": "",
+      "linkedRoutes": [],
+      "lastUpdated": "2026-06-29",
+      "checklist": [
+        {
+          "done": false,
+          "label": "Fix floating behaviour"
+        },
+        {
+          "done": false,
+          "label": "Audit all the possible idle behaviours"
+        },
+        {
+          "done": false,
+          "label": "Increase time to 1 minute to start idle behaviours"
+        },
+        {
+          "done": false,
+          "label": "Add a debug key to force start behaviours"
+        }
+      ],
+      "images": []
+    },
+    {
       "id": "BUG-TRANSFER-GEN2-SELF",
       "title": "Generation II self round-trip fails",
       "status": "Open",
@@ -66,7 +96,8 @@
       "lastUpdated": "2026-05-25",
       "linkedRoutes": [
         "gen7-gen7"
-      ]
+      ],
+      "images": []
     },
     {
       "id": "BUG-UI-ONTOLOGY-HOVER-STUTTER",

@@ -55,7 +55,6 @@ const WORKSHOP_SECTIONS = [
   { id: 'docs', label: 'Docs', hint: 'Technical & design articles', fileKey: 'docs' },
   { id: 'features', label: 'Features', hint: 'On-flight board cards + dossiers', fileKey: 'features' },
   { id: 'bugs', label: 'Bugs', hint: 'Internal bugs + GitHub issues', fileKey: 'bugs' },
-  { id: 'research', label: 'Research', hint: 'Characters, Pokémon, locations', fileKey: 'research' },
   { id: 'ideas', label: 'Ideas', hint: 'Extended sparks for #/ideas', fileKey: 'ideas' },
 ];
 const WORKSHOP_TABS = WORKSHOP_SECTIONS.map((s) => s.id);
@@ -93,7 +92,7 @@ function slugToTab(slug) {
 
 function normalizeTabName(tab) {
   if (tab === 'Box Art') return 'Library';
-  if (['Milestones', 'Docs', 'Features', 'Research', 'Bugs', 'Community Issues', 'Ideas'].includes(tab)) return 'Workshop';
+  if (['Milestones', 'Docs', 'Features', 'Bugs', 'Community Issues', 'Ideas'].includes(tab)) return 'Workshop';
   if (['Game Library', 'Media Library', 'Models', 'Characters'].includes(tab)) return 'Library';
   if (tab === 'Map Editor' || tab === 'Character Editor') return 'Game Engine';
   return tab;
@@ -124,7 +123,6 @@ function workshopSectionForTab(tab) {
     Milestones: 'milestones',
     Docs: 'docs',
     Features: 'features',
-    Research: 'research',
     Bugs: 'bugs',
     'Community Issues': 'bugs',
     Ideas: 'ideas',
@@ -167,7 +165,6 @@ function workshopSectionCount(sectionId) {
     case 'docs': return (state.data?.['docs.json']?.articles || []).length;
     case 'features': return (state.data?.['features.json']?.features || []).length;
     case 'bugs': return (state.data?.['bugs.json']?.bugs || []).length;
-    case 'research': return (state.data?.['research.json']?.entries || []).length;
     case 'ideas': return (state.data?.['ideas.json']?.items || []).length;
     default: return 0;
   }
@@ -208,7 +205,7 @@ function parseAdminRoute() {
     roadmap: 'milestones',
     docs: 'docs',
     features: 'features',
-    research: 'research',
+    research: 'milestones',
     bugs: 'bugs',
     'community-issues': 'bugs',
     ideas: 'ideas',
@@ -693,13 +690,11 @@ function dashboard() {
   const bugs = state.data['bugs.json'].bugs;
   const features = state.data['features.json'].features;
   const pins = state.data['atlas-pins.json']?.pins || [];
-  const researchEntries = state.data['research.json'].entries || [];
   const cards = [
     ['Open/blocked bugs', bugs.filter(b => ['Open','Blocked'].includes(b.status)).length],
     ['Untested routes', routes.filter(r => r.status === 'gray').length],
     ['Known failing routes', routes.filter(r => r.status === 'red').length],
     ['On-flight features', features.filter(f => ['On-Flight','Testing'].includes(f.stage)).length],
-    ['Research entries', researchEntries.length],
     ['Atlas cork pins', pins.length],
   ];
   return `<section class="grid dashboard">${cards.map(([label,val]) => `<article class="card"><span>${label}</span><strong>${val}</strong></article>`).join('')}</section>
@@ -712,13 +707,11 @@ function attentionItems() {
   const routes = data['compatibility.json'].routes;
   const bugs = data['bugs.json'].bugs;
   const pins = data['atlas-pins.json']?.pins || [];
-  const researchEntries = data['research.json'].entries || [];
   const items = [];
   games.filter(g => !g.boxArt || !state.assets.includes(g.boxArt)).slice(0,6).forEach(g => items.push({ type:'Library', text:`${g.title} needs local box art at ${g.boxArt}.` }));
   routes.filter(r => r.status === 'red' && !r.relatedBugs?.length).slice(0,4).forEach(r => items.push({ type:'Compatibility', text:`${r.title} is red but has no linked bug.` }));
   bugs.filter(b => b.status === 'Fixed' && b.linkedRoutes?.length).slice(0,3).forEach(b => items.push({ type:'Issue Desk', text:`${b.id} is fixed; verify linked routes are updated.` }));
   pins.filter(p => !p.summary?.trim()).slice(0,3).forEach(p => items.push({ type:'Island Atlas', text:`Cork pin ${p.name} has no hover summary yet.` }));
-  researchEntries.filter((e) => !e.summary?.trim()).slice(0,3).forEach((e) => items.push({ type:'Research', text:`${e.title || e.id} needs a card summary.` }));
   return items.length ? items : [{ type:'Resort', text:'Everything has the minimum data needed. Nice.' }];
 }
 function list(items, selectedId, labelFn) {
@@ -737,7 +730,6 @@ function persistWorkshopTabDraft(tabKey) {
   if (tabKey === 'milestones') applyMilestoneFromForm({ persistOnly: true });
   else if (tabKey === 'docs') applyDocFromForm({ persistOnly: true });
   else if (tabKey === 'features') applyFeatureFromForm({ persistOnly: true });
-  else if (tabKey === 'research') applyResearchFromForm({ persistOnly: true });
   else if (tabKey === 'bugs') applyBugFromForm({ persistOnly: true });
   else if (tabKey === 'ideas') applyIdeaFromForm({ persistOnly: true });
 }
@@ -3141,11 +3133,7 @@ function bindWorkshopPaneSection(paneKey) {
   if (paneKey === 'milestones') bindMilestonesDesk();
   else if (paneKey === 'docs') bindDocsDesk();
   else if (paneKey === 'features') bindFeatureDesk();
-  else if (paneKey === 'research') {
-    bindResearchDesk();
-    bindResearchDetail();
-    bindWorkshopResearchList();
-  } else if (paneKey === 'bugs') bindBugDesk();
+  else if (paneKey === 'bugs') bindBugDesk();
   else if (paneKey === 'ideas') bindIdeasDesk();
 }
 function bindWorkshopDesk() {
@@ -3320,7 +3308,7 @@ function atlasPoisEditor() {
   const poi = pois.find((p) => p.id === id);
   const dirty = state.dirty.has(files.pois);
   return `<section class="toolbar feature-toolbar atlas-poi-toolbar">
-    <div><h2>Atlas POIs</h2><p>3D island map markers only: characters, Pokémon, and lore live under Workshop → Research.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
+    <div><h2>Atlas POIs</h2><p>3D island map markers only. Attach dossiers and lore directly on each POI.</p>${dirty ? '<p class="hint feature-unsaved"><strong>Not on disk yet</strong></p>' : '<p class="hint feature-disk-ok">In sync with disk.</p>'}</div>
   </section>
   <section class="panel atlas-poi-desk">
     <div class="feature-action-bar milestone-action-bar">
@@ -3343,7 +3331,6 @@ function workshop() {
     docs: workshopDocsPane,
     features: workshopFeaturesPane,
     bugs: workshopBugsPane,
-    research: workshopResearchPane,
     ideas: workshopIdeasPane,
   };
   const panelHtml = (panes[active] || workshopMilestonesPane)();
@@ -3351,7 +3338,7 @@ function workshop() {
     .map((section) => state.dirty.has(workshopSectionFile(section.id)) && section.id)
     .filter(Boolean);
   return `<section class="toolbar feature-toolbar workshop-toolbar">
-    <div><h2>Workshop</h2><p>Milestones, docs, features, bugs, research, and ideas. Cork map pins live under <strong>Island Atlas</strong>.</p>
+    <div><h2>Workshop</h2><p>Milestones, docs, features, bugs, and ideas. Cork map pins live under <strong>Island Atlas</strong>.</p>
     ${dirtyNote.length ? `<p class="hint feature-unsaved"><strong>Unsaved:</strong> ${dirtyNote.join(', ')}</p>` : '<p class="hint feature-disk-ok">All workshop files in sync with disk.</p>'}</div>
   </section>
   <section class="panel workshop-page">
@@ -3635,12 +3622,11 @@ async function render() {
   const workbenchPanel = $('#workbenchPanel');
   const workbenchOpen = isGameEngineWorkbenchOpen();
   if (state.tab === 'Box Art') state.tab = 'Library';
-  if (['Milestones', 'Docs', 'Features', 'Research', 'Bugs', 'Community Issues', 'Ideas'].includes(state.tab)) {
+  if (['Milestones', 'Docs', 'Features', 'Bugs', 'Community Issues', 'Ideas'].includes(state.tab)) {
     state.workshopTab = {
       Milestones: 'milestones',
       Docs: 'docs',
       Features: 'features',
-      Research: 'research',
       Bugs: 'bugs',
       'Community Issues': 'bugs',
       Ideas: 'ideas',

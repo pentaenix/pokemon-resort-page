@@ -1,0 +1,89 @@
+{
+  "title": "Attend Debug: Alola Battle Map",
+  "description": "Temporary TEST ATTEND scene selections for ripped Alola battle maps. Runtime behavior lives in interaction/provider/environment files.",
+  "matches": [
+    "gameplay/pokemon_attend/debug/*.json"
+  ],
+  "tags": [
+    "attend",
+    "debug"
+  ],
+  "groups": [
+    {
+      "id": "scene",
+      "label": "Scene picks",
+      "description": "Choose the current Pokemon, Alola map, and sky preset for this debug scene.",
+      "order": 1
+    },
+    {
+      "id": "pokemon",
+      "label": "Debug Pokemon spawn",
+      "description": "Temporary spawn stub until Attend is launched from a real overworld tile.",
+      "order": 10
+    },
+    {
+      "id": "overlay",
+      "label": "Debug overlay buttons",
+      "description": "D-menu button layout/style for TEST ATTEND only.",
+      "order": 70,
+      "collapsedDefault": true
+    }
+  ],
+  "fields": {
+    "id": {
+      "label": "Debug scene id",
+      "group": "scene",
+      "order": 1
+    },
+    "activePokemon": {
+      "label": "Active Pokemon",
+      "widget": "text",
+      "group": "scene",
+      "order": 2
+    },
+    "activeFloor": {
+      "label": "Active Alola map",
+      "group": "scene",
+      "order": 3
+    },
+    "activeSky": {
+      "label": "Active sky preset",
+      "options": [
+        "clear",
+        "sunset",
+        "cloudy",
+        "night"
+      ],
+      "widget": "select",
+      "group": "scene",
+      "order": 4
+    },
+    "pokemon.position.x": {
+      "label": "Pokemon spawn X",
+      "group": "pokemon",
+      "order": 1,
+      "step": 0.01,
+      "unit": " world"
+    },
+    "pokemon.position.y": {
+      "label": "Pokemon spawn height",
+      "group": "pokemon",
+      "order": 2,
+      "step": 0.01,
+      "unit": " world"
+    },
+    "pokemon.position.z": {
+      "label": "Pokemon spawn depth",
+      "group": "pokemon",
+      "order": 3,
+      "step": 0.01,
+      "unit": " world"
+    }
+  },
+  "patterns": {
+    "ui.*Button.*": {
+      "group": "overlay",
+      "advanced": true
+    }
+  }
+}

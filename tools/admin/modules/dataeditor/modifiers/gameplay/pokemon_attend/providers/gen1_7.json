@@ -1,0 +1,152 @@
+{
+  "title": "Attend Pokemon Provider: Gen 1-7",
+  "description": "Provider defaults, model discovery, animation semantics, and sparse Pokemon overrides for the Gen 1-7 3DS/Alola model set.",
+  "matches": [
+    "gameplay/pokemon_attend/providers/*.json"
+  ],
+  "tags": [
+    "attend",
+    "pokemon",
+    "provider"
+  ],
+  "groups": [
+    {
+      "id": "assets",
+      "label": "Model discovery",
+      "order": 1
+    },
+    {
+      "id": "placement",
+      "label": "Default Pokemon transform",
+      "order": 10
+    },
+    {
+      "id": "interaction",
+      "label": "Interaction adapter",
+      "description": "Semantic nodes and interaction timing shared by provider models.",
+      "order": 20
+    },
+    {
+      "id": "idle",
+      "label": "Idle behavior",
+      "description": "Provider-level no-interaction emote and sleep timing.",
+      "order": 30
+    },
+    {
+      "id": "semantics",
+      "label": "Animation semantics",
+      "order": 40,
+      "collapsedDefault": true
+    },
+    {
+      "id": "frames",
+      "label": "Expression frame maps",
+      "order": 50,
+      "collapsedDefault": true
+    },
+    {
+      "id": "pokemon",
+      "label": "Per-Pokemon overrides",
+      "order": 70,
+      "collapsedDefault": true
+    }
+  ],
+  "fields": {
+    "defaults.idleBehavior.enabled": {
+      "label": "Idle behavior enabled",
+      "widget": "checkbox",
+      "group": "idle",
+      "order": 1
+    },
+    "defaults.idleBehavior.emoteAfterSeconds": {
+      "label": "Emote after no interaction",
+      "unit": " sec",
+      "group": "idle",
+      "order": 2
+    },
+    "defaults.idleBehavior.emoteIntervalMinSeconds": {
+      "label": "Emote random delay min",
+      "unit": " sec",
+      "group": "idle",
+      "order": 3
+    },
+    "defaults.idleBehavior.emoteIntervalMaxSeconds": {
+      "label": "Emote random delay max",
+      "unit": " sec",
+      "group": "idle",
+      "order": 4
+    },
+    "defaults.idleBehavior.sleepAfterSeconds": {
+      "label": "Sleep after no interaction",
+      "unit": " sec",
+      "group": "idle",
+      "order": 5
+    },
+    "defaults.idleBehavior.emoteAnimation": {
+      "label": "Emote animation semantic",
+      "group": "idle",
+      "order": 6
+    },
+    "defaults.idleBehavior.sleepAnimation": {
+      "label": "Sleep animation semantic",
+      "group": "idle",
+      "order": 7
+    },
+    "defaults.idleBehavior.sleepDurationSeconds": {
+      "label": "Sleep visible duration",
+      "unit": " sec",
+      "group": "idle",
+      "max": 7200,
+      "order": 8
+    }
+  },
+  "patterns": {
+    "defaults.model*": {
+      "group": "assets"
+    },
+    "defaults.*Degrees": {
+      "group": "placement"
+    },
+    "defaults.scale": {
+      "label": "Default Pokemon model scale",
+      "group": "placement"
+    },
+    "defaults.idleMotion.*": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.*Eye": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.*Mouth": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.*DurationSeconds": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.fade*": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.interactionAdapter.semanticAnimationSlots.*": {
+      "group": "semantics",
+      "advanced": true
+    },
+    "defaults.interactionAdapter.*ExpressionFrames.*": {
+      "group": "frames",
+      "advanced": true
+    },
+    "defaults.interactionAdapter.*": {
+      "group": "interaction"
+    },
+    "pokemon.*": {
+      "group": "pokemon"
+    },
+    "pokemon.*.*": {
+      "group": "pokemon"
+    }
+  }
+}

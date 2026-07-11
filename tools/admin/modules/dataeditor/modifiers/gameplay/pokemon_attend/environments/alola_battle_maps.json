@@ -1,0 +1,181 @@
+{
+  "title": "Attend Environment: Alola Battle Maps",
+  "description": "Ripped Alola battle map models, large-map extensions, weather material filters, and sky/light presets.",
+  "matches": [
+    "gameplay/pokemon_attend/environments/*.json"
+  ],
+  "tags": [
+    "attend",
+    "environment",
+    "sky"
+  ],
+  "groups": [
+    {
+      "id": "active",
+      "label": "Active Alola map set",
+      "order": 1
+    },
+    {
+      "id": "floor",
+      "label": "Alola map catalog",
+      "order": 10
+    },
+    {
+      "id": "floorPlacement",
+      "label": "Alola map placement",
+      "description": "Move and rotate the floor map set. X and depth position the map; rotation inspects spawn alignment.",
+      "order": 20,
+      "columnLayout": {
+        "columns": [
+          {
+            "label": "Floor map",
+            "pathPrefix": "floorDefaults.modelPlacement"
+          }
+        ],
+        "rows": [
+          {
+            "key": "x",
+            "label": "World X"
+          },
+          {
+            "key": "z",
+            "label": "World depth"
+          },
+          {
+            "key": "yawDegrees",
+            "label": "Rotation"
+          },
+          {
+            "key": "y",
+            "label": "Surface height"
+          },
+          {
+            "key": "scale",
+            "label": "Model scale"
+          }
+        ]
+      }
+    },
+    {
+      "id": "weather",
+      "label": "Weather material modes",
+      "order": 30,
+      "collapsedDefault": true
+    },
+    {
+      "id": "sky",
+      "label": "Sky presets",
+      "order": 40
+    },
+    {
+      "id": "sceneVisuals",
+      "label": "Scene visual tuning",
+      "order": 50
+    },
+    {
+      "id": "skyAdvanced",
+      "label": "Advanced sky dome",
+      "order": 90,
+      "collapsedDefault": true
+    }
+  ],
+  "fields": {
+    "activeFloor": {
+      "label": "Active Alola map",
+      "group": "active",
+      "order": 1
+    },
+    "activeSky": {
+      "label": "Active sky preset",
+      "widget": "select",
+      "optionsFrom": {
+        "path": "skyPresetOrder"
+      },
+      "group": "active",
+      "order": 2
+    },
+    "floorDefaults.modelPlacement.x": {
+      "label": "World X",
+      "group": "floorPlacement",
+      "order": 1,
+      "step": 0.01
+    },
+    "floorDefaults.modelPlacement.z": {
+      "label": "World depth",
+      "group": "floorPlacement",
+      "order": 2,
+      "step": 0.01
+    },
+    "floorDefaults.modelPlacement.yawDegrees": {
+      "label": "Rotation",
+      "description": "Rotate the floor map around the vertical axis to inspect spawn alignment.",
+      "group": "floorPlacement",
+      "order": 3,
+      "step": 1,
+      "unit": " deg"
+    },
+    "floorDefaults.modelPlacement.y": {
+      "label": "Surface height",
+      "group": "floorPlacement",
+      "order": 4,
+      "step": 0.001
+    },
+    "floorDefaults.modelPlacement.scale": {
+      "label": "Model scale",
+      "group": "floorPlacement",
+      "order": 5,
+      "step": 0.001
+    }
+  },
+  "patterns": {
+    "floorDefaults.modelPlacement.*": {
+      "group": "floorPlacement"
+    },
+    "floors.*": {
+      "group": "floor"
+    },
+    "floors.*.*": {
+      "group": "floor"
+    },
+    "floors.*.extensions.*": {
+      "group": "floor"
+    },
+    "floorDefaults.weather*": {
+      "group": "weather",
+      "advanced": true
+    },
+    "floorDefaults.activeWeather": {
+      "group": "weather",
+      "advanced": true
+    },
+    "shadow.*": {
+      "group": "sceneVisuals"
+    },
+    "depthOfField.*": {
+      "group": "sceneVisuals"
+    },
+    "background.*": {
+      "group": "sceneVisuals"
+    },
+    "skyPresetOrder.*": {
+      "group": "sky"
+    },
+    "skyPresets.*.label": {
+      "group": "sky"
+    },
+    "skyPresets.*.gradientColors.*.*": {
+      "group": "sky"
+    },
+    "skyPresets.*.lighting.*": {
+      "group": "sky"
+    },
+    "skyDefaults.*": {
+      "group": "skyAdvanced",
+      "advanced": true
+    },
+    "skyDefaults.*.*": {
+      "group": "skyAdvanced",
+      "advanced": true
+    }
+  }
+}

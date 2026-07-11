@@ -129,6 +129,135 @@ async function readModifier(relPath) {
   return {};
 }
 
+function pathParts(path = '') { return String(path || '').split('.').filter(Boolean); }
+function getAtPath(root, path, fallback = undefined) {
+  if (!path) return root ?? fallback;
+  let cur = root;
+  for (const part of pathParts(path)) {
+    if (cur == null || !Object.prototype.hasOwnProperty.call(cur, part)) return fallback;
+    cur = cur[part];
+  }
+  return cur;
+}
+function optionFromValue(value, label = value) {
+  if (value && typeof value === 'object') return { value: value.value ?? value.id ?? value.key ?? '', label: value.label ?? value.name ?? value.value ?? value.id ?? value.key ?? '' };
+  return { value, label };
+}
+function readOptionProp(item, prop, fallback = '') {
+  if (prop === undefined || prop === null || prop === '') return fallback;
+  return getAtPath(item, prop, fallback);
+}
+function normalizeOptions(options = []) {
+  const seen = new Set();
+  const out = [];
+  for (const item of Array.isArray(options) ? options : []) {
+    const option = optionFromValue(item);
+    const value = option.value == null ? '' : String(option.value);
+    if (!value || seen.has(value)) continue;
+    seen.add(value);
+    out.push({ value, label: String(option.label ?? value) });
+  }
+  return out;
+}
+function optionsFromData(data, spec = {}) {
+  const include = normalizeOptions(spec.include || spec.prepend || []);
+  const sourcePaths = Array.isArray(spec.paths) && spec.paths.length ? spec.paths : [spec.path || ''];
+  let dynamic = [];
+  for (const sourcePath of sourcePaths) {
+    const source = getAtPath(data, sourcePath, data);
+    if (Array.isArray(source)) {
+      dynamic.push(...source
+        .map((item) => {
+          const value = readOptionProp(item, spec.value ?? spec.valuePath ?? 'id', item);
+          const label = readOptionProp(item, spec.label ?? spec.labelPath ?? spec.value ?? spec.valuePath ?? 'id', value);
+          return optionFromValue(value, label);
+        }));
+    } else if (source && typeof source === 'object') {
+      dynamic.push(...Object.entries(source).map(([key, item]) => {
+        if (spec.keys === false && item && typeof item === 'object') {
+          const value = readOptionProp(item, spec.value ?? spec.valuePath ?? 'id', key);
+          const label = readOptionProp(item, spec.label ?? spec.labelPath ?? spec.value ?? spec.valuePath ?? 'id', value);
+          return optionFromValue(value, label);
+        }
+        return optionFromValue(key, item && typeof item === 'object' ? (item.label ?? item.name ?? item.id ?? key) : key);
+      }));
+    }
+  }
+  const append = normalizeOptions(spec.append || []);
+  return normalizeOptions([...include, ...dynamic, ...append]);
+}
+async function readConfigDataByRelPath(ctx, settings, relPath) {
+  const safe = safeRelPath(relPath);
+  const base = resolveConfigBase(ctx.repoRoot, settings);
+  const target = resolve(base, ...safe.split('/'));
+  if (!isPathInside(target, base)) throw new Error('Invalid dynamic options config path.');
+  if (!existsSync(target)) return {};
+  return JSON.parse(await readFile(target, 'utf8'));
+}
+function normalizeExtensions(values = []) {
+  return new Set((Array.isArray(values) ? values : [values])
+    .map((ext) => String(ext || '').trim().toLowerCase())
+    .filter(Boolean)
+    .map((ext) => ext.startsWith('.') ? ext : `.${ext}`));
+}
+async function walkAssetFiles(dir, base = '', recursive = false) {
+  if (!existsSync(dir)) return [];
+  const entries = await readdir(dir, { withFileTypes: true });
+  const out = [];
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const rel = base ? `${base}/${entry.name}` : entry.name;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (recursive) out.push(...await walkAssetFiles(full, rel, recursive));
+    } else if (entry.isFile()) {
+      out.push(rel);
+    }
+  }
+  return out.sort((a, b) => a.localeCompare(b));
+}
+async function optionsFromAssets(ctx, settings, spec = {}) {
+  const directory = String(spec.directory || spec.path || '').replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');
+  if (!directory || directory.split('/').some((part) => !part || part === '..' || part.startsWith('.'))) {
+    return normalizeOptions(spec.include || []);
+  }
+  const config_base = resolveConfigBase(ctx.repoRoot, settings);
+  const project_root = dirname(config_base);
+  const target = resolve(project_root, ...directory.split('/'));
+  if (!isPathInside(target, project_root)) throw new Error('Invalid dynamic asset options path.');
+  const extensions = normalizeExtensions(spec.extensions || spec.ext || []);
+  const files = await walkAssetFiles(target, '', Boolean(spec.recursive));
+  const dynamic = files
+    .filter((file) => !extensions.size || extensions.has(`.${file.split('.').pop().toLowerCase()}`))
+    .map((file) => {
+      const value = `${directory}/${file}`.replace(/\/+/g, '/');
+      return { value, label: spec.label === 'path' ? value : file };
+    });
+  return normalizeOptions([...(spec.include || []), ...dynamic, ...(spec.append || [])]);
+}
+async function resolveRuleDynamicOptions(ctx, settings, currentData, rule = {}) {
+  if (!rule || typeof rule !== 'object') return rule;
+  if (rule.optionsFromAssets) {
+    const spec = typeof rule.optionsFromAssets === 'string'
+      ? { directory: rule.optionsFromAssets }
+      : rule.optionsFromAssets;
+    return { ...rule, options: await optionsFromAssets(ctx, settings, spec) };
+  }
+  const sourceSpec = rule.optionsFromFile || rule.optionsFrom;
+  if (!sourceSpec) return rule;
+  const spec = typeof sourceSpec === 'string' ? { path: sourceSpec } : sourceSpec;
+  const sourceData = rule.optionsFromFile?.file
+    ? await readConfigDataByRelPath(ctx, settings, rule.optionsFromFile.file)
+    : currentData;
+  return { ...rule, options: optionsFromData(sourceData, spec) };
+}
+async function resolveModifierDynamicOptions(ctx, settings, currentData, modifier = {}) {
+  const resolved = JSON.parse(JSON.stringify(modifier || {}));
+  for (const [path, rule] of Object.entries(resolved.fields || {})) resolved.fields[path] = await resolveRuleDynamicOptions(ctx, settings, currentData, rule);
+  for (const [pattern, rule] of Object.entries(resolved.patterns || {})) resolved.patterns[pattern] = await resolveRuleDynamicOptions(ctx, settings, currentData, rule);
+  return resolved;
+}
+
 function safeUtilityName(input = '') {
   const name = String(input || '').trim().replace(/\.json$/i, '');
   if (!/^[a-z0-9][a-z0-9_-]*$/i.test(name)) throw new Error(`Invalid utility name: ${input}`);
@@ -164,7 +293,9 @@ async function listFiles(ctx) {
     let parseError = '', fieldCount = 0;
     try { fieldCount = countFields(JSON.parse(await readFile(full, 'utf8'))); } catch (error) { parseError = error.message; }
     const modifier = await readModifier(rel);
-    files.push({ path: rel, name: basename(rel), folder: dirname(rel) === '.' ? '' : dirname(rel), size: st.size, modifiedAt: st.mtime.toISOString(), hasModifier: modifierHasCustomizations(modifier), modifierSource: modifier.__source || '', title: modifier.title || '', description: modifier.description || '', tags: Array.isArray(modifier.tags) ? modifier.tags : [], fieldCount, parseError });
+    const browseFolder = String(modifier.browseFolder || '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const folder = browseFolder || (dirname(rel) === '.' ? '' : dirname(rel));
+    files.push({ path: rel, name: basename(rel), folder, size: st.size, modifiedAt: st.mtime.toISOString(), hasModifier: modifierHasCustomizations(modifier), modifierSource: modifier.__source || '', title: modifier.title || '', description: modifier.description || '', tags: Array.isArray(modifier.tags) ? modifier.tags : [], fieldCount, parseError });
   }
   return { settings, resolvedPath: base, files };
 }
@@ -179,7 +310,7 @@ async function readConfigFile(ctx, relPath) {
   let data;
   try { data = JSON.parse(rawText); } catch (error) { throw new Error(`Invalid JSON in ${safe}: ${error.message}`); }
   const st = await stat(target);
-  const modifier = await readModifier(safe);
+  const modifier = await resolveModifierDynamicOptions(ctx, settings, data, await readModifier(safe));
   return { file: safe, data, rawText, hash: fileHash(rawText), modifier, utilities: await resolveModifierUtilities(modifier), defaults: await readDefaultsModifier(), stats: { size: st.size, modifiedAt: st.mtime.toISOString() }, resolvedPath: target };
 }
 function timestamp() { return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z'); }

@@ -195,6 +195,23 @@
       "author": "Resort Operations"
     },
     {
+      "id": "overworld-interactions",
+      "slug": "overworld-interactions",
+      "title": "Overworld interactions",
+      "category": "gameplay",
+      "tags": ["pokemon-resort", "overworld", "interactions", "dialogue", "charbin"],
+      "apps": ["pokemon-resort", "pokemon-resort-page"],
+      "summary": "Interaction sequences for NPCs and Pokémon: facing, text matching, global cooldowns, and charbin activity poses.",
+      "publishedAt": "2026-07-09",
+      "updatedAt": "2026-07-10",
+      "heroImage": {
+        "path": "assets/docs/article-placeholder.svg",
+        "caption": "Overworld interaction sequence authoring."
+      },
+      "featured": false,
+      "author": "Resort Operations"
+    },
+    {
       "id": "overworld-glb-models",
       "slug": "overworld-glb-models",
       "title": "Overworld GLB props pipeline",
