@@ -4,7 +4,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 
 const SCRIPT_ROOT_RELATIVE = 'pokemon-resort/config/gameplay/world3d/scripts';
 const INTERACTION_TEXT_RELATIVE = 'pokemon-resort/config/gameplay/world3d/interaction_text.json';
-const ACTIONS = new Set(['WAIT', 'FACE', 'FACE_PLAYER', 'FACE_AWAY', 'MOVE', 'WANDER', 'JUMP', 'TEXT', 'TEXT_LITERAL', 'TEXT_FREE', 'POKEMON_INTERACTION_SESSION', 'CRY', 'EMOTICON']);
+const ACTIONS = new Set(['WAIT', 'FACE', 'FACE_PLAYER', 'FACE_AWAY', 'MOVE', 'WANDER', 'JUMP', 'TEXT', 'TEXT_LITERAL', 'TEXT_FREE', 'POKEMON_INTERACTION_SESSION', 'DISABLE_ATTEND', 'ENABLE_ATTEND', 'EXIT_INTERACTION', 'CRY', 'EMOTICON']);
 const KINDS = new Set(['idle', 'interaction', 'npc']);
 
 function inside(child, parent) {

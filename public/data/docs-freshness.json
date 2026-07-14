@@ -1,10 +1,10 @@
 {
-  "computedAt": "2026-07-10T01:36:55.001Z",
+  "computedAt": "2026-07-13T18:54:50.979Z",
   "articles": {
     "writing-docs": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-09",
-      "newestCodeChange": "2026-07-10",
+      "newestCodeChange": "2026-07-13",
       "apps": [
         "pokemon-resort-page"
       ],
@@ -13,7 +13,7 @@
           "repo": "pokemon-resort-page",
           "path": "public/data/docs.json",
           "exists": true,
-          "modifiedAt": "2026-07-10"
+          "modifiedAt": "2026-07-13"
         },
         {
           "repo": "pokemon-resort-page",
@@ -53,7 +53,7 @@
     "charbin-schema": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-12",
-      "newestCodeChange": "2026-07-10",
+      "newestCodeChange": "2026-07-12",
       "apps": [
         "pokemon-resort",
         "spmk"
@@ -69,7 +69,7 @@
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/JsonOverworldLoader.cpp",
           "exists": true,
-          "modifiedAt": "2026-07-10"
+          "modifiedAt": "2026-07-12"
         },
         {
           "repo": "spmk",
@@ -128,8 +128,8 @@
     },
     "rtpks-format": {
       "status": "current",
-      "articleUpdatedAt": "2026-06-11",
-      "newestCodeChange": "2026-06-10",
+      "articleUpdatedAt": "2026-07-13",
+      "newestCodeChange": "2026-07-13",
       "apps": [
         "pokemon-ds-map-studio",
         "pokemon-resort",
@@ -146,7 +146,7 @@
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/RtpksTilePackageLoader.cpp",
           "exists": true,
-          "modifiedAt": "2026-06-10"
+          "modifiedAt": "2026-07-13"
         }
       ]
     },
@@ -243,9 +243,9 @@
       ]
     },
     "overworld-interactions": {
-      "status": "current",
+      "status": "stale",
       "articleUpdatedAt": "2026-07-10",
-      "newestCodeChange": "2026-07-10",
+      "newestCodeChange": "2026-07-12",
       "apps": [
         "pokemon-resort",
         "pokemon-resort-page"
@@ -261,13 +261,13 @@
           "repo": "pokemon-resort",
           "path": "config/gameplay/world3d/interaction_text.json",
           "exists": true,
-          "modifiedAt": "2026-07-10"
+          "modifiedAt": "2026-07-12"
         },
         {
           "repo": "pokemon-resort",
           "path": "assets/characters/CHARBIN_SCHEMA.md",
           "exists": true,
-          "modifiedAt": "2026-07-10"
+          "modifiedAt": "2026-07-12"
         }
       ]
     },

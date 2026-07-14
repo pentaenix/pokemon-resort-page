@@ -37,6 +37,12 @@ import {
 import { LIBRETRO_BASE } from '../lib/libretro-thumbnails.mjs';
 import { handleDataEditorApi } from './modules/dataeditor/server-api.mjs';
 import { handleScriptEngineApi } from './modules/scriptengine/server-api.mjs';
+import {
+  addTileToPack,
+  inspectTileBundle,
+  loadEditableTilePack,
+  saveTilePackDocument,
+} from './lib/tile-pack-authoring.mjs';
 
 loadProjectEnv();
 const root = resolve(new URL('../..', import.meta.url).pathname);
@@ -822,6 +828,11 @@ function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = nul
       meshPath,
       previewTexture: textureName,
       materialId,
+      name: String(metaTile.name || runtimeTile.name || entry.key || `Tile ${resortTileId}`),
+      tags: Array.isArray(metaTile.tags) ? metaTile.tags : (runtimeTile.tags || []),
+      properties: metaTile.properties || runtimeTile.properties || {},
+      animation: metaTile.animation || runtimeTile.animation || { type: 'none' },
+      collision: metaTile.collision || runtimeTile.collision || { mode: 'none', autoApply: false },
     });
   }
   tiles.sort((a, b) => a.resortTileId - b.resortTileId);
@@ -841,6 +852,7 @@ function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = nul
       name: material.name || `material_${material.materialId}`,
       textureName: material.textureName || '',
       alpha: Number(material.alpha ?? 255),
+      animation: material.animation || { type: 'none' },
     })),
     tiles,
   };
@@ -1315,6 +1327,88 @@ const server = http.createServer(async (req, res) => {
             gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', fileName),
           },
         });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/authoring') {
+      const settings = await readMapSettings();
+      try {
+        const fileName = sanitizeTilePackageFileName(url.searchParams.get('file'));
+        const { target } = resolveTilePackagesDirectory(settings, fileName);
+        const metaPath = `${target}.meta`;
+        if (!existsSync(target) || !existsSync(metaPath)) {
+          return json(res, 404, { ok: false, error: 'RTPKS package or editor sidecar not found.' });
+        }
+        if (req.method === 'GET') {
+          const editable = loadEditableTilePack(await readFile(target), await readFile(metaPath));
+          return json(res, 200, { ok: true, fileName, document: editable.document });
+        }
+        if (req.method === 'POST') {
+          const payload = JSON.parse(await readBody(req));
+          const result = saveTilePackDocument(await readFile(target), await readFile(metaPath), payload.document || payload);
+          await writeFile(target, result.packBytes);
+          await writeFile(metaPath, result.metaBytes);
+          const inspected = await inspectRtpksFile(target);
+          return json(res, 200, {
+            ok: true,
+            package: { ...inspected, fileName, gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', fileName) },
+          });
+        }
+        return json(res, 405, { ok: false, error: 'Method not allowed.' });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/tiles' && req.method === 'POST') {
+      const settings = await readMapSettings();
+      try {
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) throw new Error('Expected multipart tile upload.');
+        const parts = parseMultipart(await readRawBody(req, 160_000_000), contentType);
+        const metadataPart = parts.find((part) => part.name === 'metadata');
+        if (!metadataPart) throw new Error('Tile metadata is required.');
+        const payload = JSON.parse(Buffer.from(metadataPart.bytes).toString('utf8'));
+        const fileName = sanitizeTilePackageFileName(payload.fileName);
+        const { target } = resolveTilePackagesDirectory(settings, fileName);
+        const metaPath = `${target}.meta`;
+        if (!existsSync(target) || !existsSync(metaPath)) throw new Error('RTPKS package or sidecar not found.');
+        const glb = parts.find((part) => part.name === 'glb');
+        const tileBundle = parts.find((part) => part.name === 'tileBundle');
+        const texture = parts.find((part) => part.name === 'texture');
+        const frames = parts.filter((part) => part.name === 'frame').map((part) => part.bytes);
+        const result = addTileToPack(
+          await readFile(target),
+          await readFile(metaPath),
+          payload.tile || {},
+          {
+            glb: glb?.bytes,
+            tileBundle: tileBundle?.bytes,
+            texture: texture?.bytes,
+            textureName: texture?.filename,
+            frames,
+          },
+        );
+        await writeFile(target, result.packBytes);
+        await writeFile(metaPath, result.metaBytes);
+        const inspected = await inspectRtpksFile(target);
+        return json(res, 200, {
+          ok: true,
+          resortTileId: result.resortTileId,
+          package: { ...inspected, fileName, gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', fileName) },
+        });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/tile-packages/tile-bundles/inspect' && req.method === 'POST') {
+      try {
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) throw new Error('Expected multipart tile bundle upload.');
+        const parts = parseMultipart(await readRawBody(req, 160_000_000), contentType);
+        const tileBundle = parts.find((part) => part.name === 'tileBundle');
+        if (!tileBundle?.bytes?.length) throw new Error('Choose a .tile file.');
+        return json(res, 200, { ok: true, bundle: inspectTileBundle(tileBundle.bytes) });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }

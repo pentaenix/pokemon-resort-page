@@ -23,6 +23,13 @@
       "file": "testing-ground_west_west.owmap",
       "gridX": -2,
       "gridY": 0
+    },
+    {
+      "id": "testing-ground_east",
+      "name": "testing-ground east",
+      "file": "testing-ground_east.owmap",
+      "gridX": 1,
+      "gridY": 0
     }
   ],
   "tilePackages": [
@@ -35,7 +42,7 @@
   "defaultTilePackageId": "map_tiles",
   "pathSets": [],
   "editor": {
-    "activeMapId": "testing-ground_west_west",
+    "activeMapId": "testing-ground_east",
     "viewMode": "3d",
     "zoom": 1,
     "overlays": {

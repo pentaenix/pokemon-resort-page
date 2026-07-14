@@ -13,6 +13,7 @@ import {
   renderGlbThumbnail,
 } from '/shared/model-viewer.js';
 import { downloadRtpksTileGlb, mountMap3DView, mountRtpksTilePreview } from './map-3d-view.js';
+import { openTilePackEditor } from './tile-pack-editor.js';
 
 const LAYER_META = {
   height: { label: 'Height', min: 0, max: 255, default: 0 },
@@ -657,9 +658,25 @@ function setTileCell(map, x, y, resortTileId, layerIndex = map.tileLayers?.activ
   layer.cells[y][x] = resortTileId == null ? null : Number(resortTileId);
 }
 
+function applyTileCollision(editor, map, tileId, anchorX, anchorY, clearing = false) {
+  const tile = tileEntry(editor, tileId);
+  const rule = tile?.collision;
+  if (!rule || rule.mode === 'none' || (!clearing && rule.autoApply === false) || (clearing && rule.clearOnErase !== true)) return;
+  const fp = tileFootprint(tile);
+  for (let dy = 0; dy < fp.h; dy += 1) {
+    for (let dx = 0; dx < fp.w; dx += 1) {
+      const included = rule.mode === 'footprint' || Boolean(rule.mask?.[dy]?.[dx]);
+      if (included && inBounds(map, anchorX + dx, anchorY + dy)) {
+        map.terrain.collision[anchorY + dy][anchorX + dx] = clearing ? 0 : 1;
+      }
+    }
+  }
+}
+
 function clearTileAt(editor, map, x, y, layerIndex = map.tileLayers?.activeLayer || 0) {
   const hit = visibleTileFootprintAtLayer(editor, map, x, y, layerIndex);
   if (hit) {
+    applyTileCollision(editor, map, hit.tileId, hit.anchorX, hit.anchorY, true);
     setTileCell(map, hit.anchorX, hit.anchorY, null, layerIndex);
     return true;
   }
@@ -703,7 +720,7 @@ function deleteActiveTileLayer(editor) {
   return true;
 }
 
-function floodFillTile(map, x, y, target, replacement) {
+function floodFillTile(editor, map, x, y, target, replacement) {
   if (target === replacement) return;
   const w = map.grid.width;
   const h = map.grid.height;
@@ -715,7 +732,9 @@ function floodFillTile(map, x, y, target, replacement) {
     if (seen.has(key) || !inBounds(map, cx, cy)) continue;
     if (tileCellValue(map, cx, cy) !== target) continue;
     seen.add(key);
+    if (target != null) applyTileCollision(editor, map, target, cx, cy, true);
     setTileCell(map, cx, cy, replacement);
+    if (replacement != null) applyTileCollision(editor, map, replacement, cx, cy, false);
     stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
   }
 }
@@ -907,7 +926,7 @@ function applyToolAt(map, editor, x, y) {
       return;
     }
     if (tool === 'fill') {
-      floodFillTile(map, x, y, tileCellValue(map, x, y), editor.tileBrushId ?? null);
+      floodFillTile(editor, map, x, y, tileCellValue(map, x, y), editor.tileBrushId ?? null);
       return;
     }
     if (tool === 'erase') {
@@ -916,6 +935,7 @@ function applyToolAt(map, editor, x, y) {
     }
     if (tool === 'raise' || tool === 'lower') return;
     setTileCell(map, x, y, editor.tileBrushId ?? null);
+    applyTileCollision(editor, map, editor.tileBrushId, x, y, false);
     return;
   }
   if (brush === 'path') {
@@ -3180,6 +3200,7 @@ function tilePackagePickerHtml(editor, esc) {
       </select>
     </label>
     <button type="button" class="btn small" id="mapImportRtpks">Add RTPKS to C++ project…</button>
+    <button type="button" class="btn small map-edit-tile-pack" id="mapEditTilePack" ${editor.tilePackage ? '' : 'disabled'}>Edit tile pack…</button>
     <input type="file" id="mapImportRtpksInput" accept=".rtpks,.meta,application/zip" multiple hidden>
     ${editor.tilePackage
       ? `<p class="hint"><code>${esc(editor.tilePackage.gamePath || editor.map?.tilePackage?.path || editor.tilePackage.fileName)}</code></p>`
@@ -5389,6 +5410,37 @@ export function bindMapEditor(state, deps) {
       } finally {
         btn.disabled = false;
         btn.title = prevTitle;
+      }
+    };
+  }
+
+  const editTilePack = document.querySelector('#mapEditTilePack');
+  if (editTilePack) {
+    editTilePack.onclick = async () => {
+      try {
+        await openTilePackEditor(editor, {
+          log,
+          onSaved: (updatedPackage) => {
+            editor.tilePackage = updatedPackage;
+            editor.tilePackages = (editor.tilePackages || []).map((pkg) => pkg.fileName === updatedPackage.fileName
+              ? { ...pkg, ...updatedPackage }
+              : pkg);
+            const currentTab = editor.tileTabId;
+            if (!updatedPackage.tabs?.some((tab) => tab.id === currentTab)) {
+              editor.tileTabId = updatedPackage.tabs?.[0]?.id || '';
+            }
+            editor.tileBrushId = updatedPackage.tiles?.some((tile) => Number(tile.resortTileId) === Number(editor.tileBrushId))
+              ? editor.tileBrushId
+              : updatedPackage.tiles?.[0]?.resortTileId ?? null;
+            rtpksTileThumbUrlCache.clear();
+            rtpksTileMeshPreviewCache.clear();
+            rtpksTextureSamplerCache.clear();
+            refreshMapPreview(state);
+            render();
+          },
+        });
+      } catch (error) {
+        log?.(error.message || 'Could not open the Tile Pack Editor.', 'error');
       }
     };
   }

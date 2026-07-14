@@ -61,6 +61,7 @@ def empty_package(
         "metadata": {
             "originGame": "",
             "characterType": "npc",
+            "npcInteractionMode": "direct_dialogue",
             "description": "",
             "personality": [],
             "likes": [],

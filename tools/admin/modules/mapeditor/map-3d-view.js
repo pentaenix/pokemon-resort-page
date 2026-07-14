@@ -204,7 +204,7 @@ function materialForRtpks(fileName, packageInfo, materialId) {
   const meta = (packageInfo.materials || []).find((mat) => Number(mat.materialId) === Number(materialId));
   const texture = meta?.textureName ? loadRtpksTexture(fileName, meta.textureName) : null;
   const shadowLike = /shadow|kage|shade/i.test(`${meta?.name || ''} ${meta?.textureName || ''}`);
-  return new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshStandardMaterial({
     map: texture || null,
     color: texture ? 0xffffff : 0xd9f99d,
     roughness: 0.95,
@@ -219,6 +219,19 @@ function materialForRtpks(fileName, packageInfo, materialId) {
     polygonOffsetFactor: shadowLike ? -1 : 0,
     polygonOffsetUnits: shadowLike ? -1 : 0,
   });
+  const animation = meta?.animation;
+  if (animation?.type === 'frames' && Array.isArray(animation.frames) && animation.frames.length) {
+    const frames = animation.frames.map((name) => loadRtpksTexture(fileName, name));
+    const frameTime = Math.max(16, Number(animation.frameDurationMs) || 180);
+    material.onBeforeRender = () => {
+      const next = frames[Math.floor(performance.now() / frameTime) % frames.length];
+      if (next && material.map !== next) {
+        material.map = next;
+        material.needsUpdate = true;
+      }
+    };
+  }
+  return material;
 }
 
 function meshVerticalRange(mesh) {

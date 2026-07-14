@@ -1155,6 +1155,9 @@ function collectDetailForm() {
     metadata: {
       ...m,
       characterType: charType,
+      npcInteractionMode: isNpcCharType(charType)
+        ? ($('#pkgNpcInteractionMode')?.value === 'scripted' ? 'scripted' : 'direct_dialogue')
+        : m.npcInteractionMode,
       description: pokemon ? '' : ($('#pkgDesc')?.value || '').trim(),
       personality: (player || pokemon || object) ? [] : (chips.personality?.get() || []),
       partnerPokemon: (player || pokemon || object) ? null : partnerPokemon,
@@ -4245,6 +4248,14 @@ function pkgCharInfoPanel(p, m, profNames, hasPartner) {
     `<option value="${val}" ${val === charType ? 'selected' : ''}>${esc(label)}</option>`).join('')}
         </select></div>
         <div class="field"><label>Internal id</label><input class="input" id="pkgInternal" value="${esc(p.internalName || p.id)}"></div>
+      </div>
+      <div class="field pkg-npc-only${npcHidden}" data-npc-only>
+        <label>Interaction source</label>
+        <select class="select" id="pkgNpcInteractionMode">
+          <option value="direct_dialogue" ${(m.npcInteractionMode || 'direct_dialogue') !== 'scripted' ? 'selected' : ''}>Direct dialogue</option>
+          <option value="scripted" ${m.npcInteractionMode === 'scripted' ? 'selected' : ''}>Use scripts</option>
+        </select>
+        <p class="tiny">Use scripts asks the game runtime for an eligible interaction script. Script assignment is configured outside this editor.</p>
       </div>
       <div class="pkg-pokemon-fetch data-pokemon-only${pokemonHidden}" data-pokemon-only>
         <button type="button" class="btn primary" id="pkgFetchPokemon">Fetch from PokéAPI</button>
