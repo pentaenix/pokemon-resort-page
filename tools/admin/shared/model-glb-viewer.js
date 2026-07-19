@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { tuneGltfMaterials } from './model-texture-alpha.js';
+import { cloneGlbScene } from './model-scene-clone.js';
 
 const glbSceneCache = new Map();
 let activeGlbViewport = null;
@@ -139,7 +140,7 @@ export async function renderGlbThumbnail(glbUrl, options = {}) {
 export async function loadGlbScene(glbUrl) {
   const key = glbCacheKey(glbUrl);
   if (glbSceneCache.has(key)) {
-    return glbSceneCache.get(key).clone(true);
+    return cloneGlbScene(glbSceneCache.get(key));
   }
   const loader = new GLTFLoader();
   const gltf = await loader.loadAsync(glbUrl);
@@ -156,7 +157,7 @@ export async function loadGlbScene(glbUrl) {
   });
   tuneGltfMaterials(root);
   glbSceneCache.set(key, root);
-  return root.clone(true);
+  return cloneGlbScene(root);
 }
 
 export function clearGlbSceneCache() {

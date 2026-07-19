@@ -32,7 +32,8 @@ prop's **full rotated footprint** with a **roof-snapshot overlay** and a **place
 follows the cursor; (e) a **view-only 3D workspace** (`map-3d-view.js`) that renders the terrain
 mesh + the actual GLB models under an orbit camera; (f) in-game **two-pass cutout ordering** (fix
 "cut-off" banner sections) and a **configurable behind-distance** (`modelBehindBiasTiles`) so a
-building hides the character at the doorway instead of letting them draw over the roof.
+building hides the character at the doorway instead of letting them draw over the roof; (g)
+**skin-aware cached scene clones** so translated RAE/apicula props do not snap to world origin.
 
 ## Map Editor & orientation (later pass)
 
@@ -61,6 +62,11 @@ building hides the character at the doorway instead of letting them draw over th
   with hemisphere+key+fill lights. `syncWorkspace3DView` mounts/disposes it each render (render()
   rebuilds the DOM; `loadGlbScene` caches parsed GLBs so re-mount is cheap), and the render loop
   self-disposes if its canvas is detached (tab switch). Painting/placement stays in 2D.
+- **Skin-aware cached instances.** `model-glb-viewer.js` routes every cached-scene copy through
+  `model-scene-clone.js` and Three's `SkeletonUtils.clone`. A normal `clone(true)` duplicates
+  the hierarchy but leaves `SkinnedMesh.skeleton.bones` pointing at the cached source scene;
+  translated map instances then render from world origin even though the `.owmap` position is
+  correct. The skin-aware clone keeps Admin 3D placement faithful for RAE/apicula GLBs.
 - **Iso preview modal (`drawMapPreviewTopDown`).** The floating "Open 3D" dock still has its angled
   iso vs. top-down 2D snapshot toggle; left-drag pans in its 2D mode. This is independent of the new
   workspace 2D/3D toggle above.
@@ -77,7 +83,7 @@ Conversion (repo `pokemon-resort-page`):
 | `tools/admin/lib/mesh-to-glb.mjs` / `obj-to-glb.mjs` / `model-ingest.mjs` | Glue: zip → mesh → GLB → manifest |: |
 | `tools/admin/lib/reorient-glb.mjs` | **Bake** X/Y/Z rotation into a GLB (rotate verts+normals, recenter X/Z, re-seat to y=0) | `reorientGlbBuffer` |
 | `tools/admin/server.mjs` | `POST /api/overworld-models/reorient {id,rotX,rotY,rotZ}` → re-bake + re-ingest manifest; list now returns `modelHash`/`aabb` | reorient route, `listOverworldModels` |
-| `tools/admin/public/model-glb-viewer.js` | three.js preview, studio lighting; `setModelOrientation` (live bake preview), `renderGlbThumbnail` (cards + 2D roof) | `bindGlbWebGLViewport`, `renderGlbThumbnail` |
+| `tools/admin/shared/model-glb-viewer.js`, `model-scene-clone.js` | three.js preview, studio lighting, skin-aware cached scene clones; `setModelOrientation` (live bake preview), `renderGlbThumbnail` (cards + 2D roof) | `bindGlbWebGLViewport`, `renderGlbThumbnail`, `cloneGlbScene` |
 | `tools/admin/public/model-texture-alpha.js` | Preview material tuning (honours GLB alphaMode verbatim) | `tuneGltfMaterials` |
 | `tools/admin/public/map-editor.js` | Prop catalog + placement into `.owmap` `models[]`; **footprint cells + roof overlay + placement ghost** on the paint grid; **workspace 2D/3D toggle**; **orientation controls** in the model modal | `placedModelFootprint`, `refreshPropOverlays`, `syncWorkspace3DView`, `saveModelOrientation`, `applyPreviewOrientation` |
 | `tools/admin/public/map-3d-view.js` | **View-only 3D workspace**: InstancedMesh terrain + real GLB props (`loadGlbScene`) + OrbitControls | `mountMap3DView`, `buildTerrain` |
@@ -137,6 +143,9 @@ by the orange roof (opaque texels, kept) and the banner (transparent texels, cut
 6. **Unicode MTL filename.** The source zip references `Pokémon Center.mtl` but stores a
    differently-normalized filename; `asset-resolve.mjs` matches it and emits a warning.
    That warning is benign.
+7. **Do not clone skinned GLBs with `Object3D.clone(true)`.** It leaves skeleton bone references
+   attached to the cached original. The standalone thumbnail can look fine while a translated
+   map instance renders at `[0,0]`. Use the shared skin-aware clone helper.
 
 ## How to verify a conversion (repeatable)
 

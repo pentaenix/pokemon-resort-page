@@ -1,5 +1,5 @@
 import http, { request as httpRequest } from 'node:http';
-import { readFile, writeFile, readdir, rm, mkdir, copyFile } from 'node:fs/promises';
+import { readFile, writeFile, readdir, rm, mkdir, copyFile, stat } from 'node:fs/promises';
 import { existsSync, createReadStream } from 'node:fs';
 import { join, extname, resolve, relative, basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -20,6 +20,7 @@ import { saveUploadedAsset } from './lib/asset-upload.mjs';
 import { ingestGlbBuffer } from './lib/glb-ingest.mjs';
 import { replaceIslandModelGlb } from './lib/island-model.mjs';
 import { parseGlb } from './lib/glb-compile.mjs';
+import { pngTransparencyKind } from './lib/texture-alpha.mjs';
 import { reorientGlbBuffer } from './lib/reorient-glb.mjs';
 import { spawn, execSync } from 'node:child_process';
 import { loadProjectEnv } from '../lib/load-env.mjs';
@@ -39,6 +40,7 @@ import { handleDataEditorApi } from './modules/dataeditor/server-api.mjs';
 import { handleScriptEngineApi } from './modules/scriptengine/server-api.mjs';
 import {
   addTileToPack,
+  addTilesToPack,
   inspectTileBundle,
   loadEditableTilePack,
   saveTilePackDocument,
@@ -92,6 +94,29 @@ const characterEditorSettingsPath = join(characterEditorModuleRoot, 'settings.js
 const CHARACTER_EDITOR_HOST = '127.0.0.1';
 const CHARACTER_EDITOR_PORT = Number(process.env.CHARACTER_EDITOR_PORT || 8789);
 const repoRoot = resolve(root, '..');
+const rtpksArchiveCache = new Map();
+const rtpksInspectionCache = new Map();
+
+async function readRtpksArchive(filePath) {
+  const info = await stat(filePath);
+  const signature = `${info.size}:${info.mtimeMs}:${info.ctimeMs}`;
+  const cached = rtpksArchiveCache.get(filePath);
+  if (cached?.signature === signature) return cached.entries;
+
+  // Store the promise before file I/O finishes. Concurrent mesh/texture requests
+  // for one map then share a single read + unzip instead of each inflating the
+  // complete RTPKS archive independently.
+  const entries = readFile(filePath)
+    .then((bytes) => unzipSync(new Uint8Array(bytes)))
+    .catch((error) => {
+      if (rtpksArchiveCache.get(filePath)?.entries === entries) {
+        rtpksArchiveCache.delete(filePath);
+      }
+      throw error;
+    });
+  rtpksArchiveCache.set(filePath, { signature, entries });
+  return entries;
+}
 
 function resolveModulesFile(pathname) {
   const rel = pathname.replace(/^\/modules\//, '').replace(/\\/g, '/');
@@ -507,6 +532,7 @@ function normalizeProject(project, fallbackId = 'default') {
       file: basename(String(map.file || `${map.id || `map_${index + 1}`}.owmap`)),
       gridX: Number.isFinite(Number(map.gridX)) ? Number(map.gridX) : 0,
       gridY: Number.isFinite(Number(map.gridY)) ? Number(map.gridY) : 0,
+      linked: map.linked !== false,
     })),
     tilePackages: tilePackages.map((pkg) => ({
       id: String(pkg.id || pkg.file || pkg.fileName || '').trim(),
@@ -669,8 +695,9 @@ async function validateMapProjectEdges(settings, project) {
     }
   };
   const maps = project.maps || [];
-  const byCell = new Map(maps.map((entry) => [`${entry.gridX},${entry.gridY}`, entry]));
-  for (const entry of maps) {
+  const linkedMaps = maps.filter((entry) => entry.linked !== false);
+  const byCell = new Map(linkedMaps.map((entry) => [`${entry.gridX},${entry.gridY}`, entry]));
+  for (const entry of linkedMaps) {
     const map = await load(entry);
     if (!map) continue;
     const east = byCell.get(`${entry.gridX + 1},${entry.gridY}`);
@@ -744,6 +771,7 @@ function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = nul
     throw new Error('Invalid RTPKS editor sidecar. Expected pokemon_resort.rtpks.meta.');
   }
   const sourceHash = createHash('sha256').update(buffer).digest('hex');
+  const previewVersion = createHash('sha256').update(metaBuffer).digest('hex').slice(0, 12);
   if (metaManifest.sourceSha256 && metaManifest.sourceSha256 !== sourceHash) {
     throw new Error('RTPKS editor sidecar does not match this .rtpks file. Re-export both files from PDSMS.');
   }
@@ -819,7 +847,7 @@ function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = nul
       globalTexScale: Number(metaTile.globalTexScale || 1),
       preview: metaTile.preview || null,
       previewImage: metaTile.preview?.image
-        ? `/api/tile-packages/preview?file=${encodeURIComponent(basename(fileName))}&tileId=${encodeURIComponent(resortTileId)}`
+        ? `/api/tile-packages/preview?file=${encodeURIComponent(basename(fileName))}&tileId=${encodeURIComponent(resortTileId)}&v=${previewVersion}`
         : '',
       bounds,
       materialCount: Number(runtimeTile.materialCount || mesh?.textureIds?.length || 0),
@@ -837,6 +865,11 @@ function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = nul
   }
   tiles.sort((a, b) => a.resortTileId - b.resortTileId);
   const meshCount = Object.keys(entries).filter((name) => /^runtime\/meshes\/tile_\d+\.json$/.test(name)).length;
+  const textureAlphaByName = new Map((runtime.textures || []).map((texture) => {
+    const name = String(texture.name || '');
+    const bytes = entries[`runtime/textures/${name}`];
+    return [name, bytes?.length ? pngTransparencyKind(Buffer.from(bytes)) : 'opaque'];
+  }));
   return {
     fileName: basename(fileName),
     packId: manifest.packId || runtime.packId || basename(fileName, '.rtpks'),
@@ -851,8 +884,15 @@ function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = nul
       materialId: Number(material.materialId),
       name: material.name || `material_${material.materialId}`,
       textureName: material.textureName || '',
-      alpha: Number(material.alpha ?? 255),
+      alpha: Number(material.alpha ?? 31),
+      textureAlpha: textureAlphaByName.get(String(material.textureName || '')) || 'opaque',
+      sampler: material.sampler || {
+        wrapS: 'repeat', wrapT: 'repeat', magFilter: 'nearest', minFilter: 'nearest',
+      },
+      uvMapping: material.uvMapping || { mode: 'local', uPerTile: [0, 0], vPerTile: [0, 0] },
       animation: material.animation || { type: 'none' },
+      renderOrder: Number(material.renderOrder || 0),
+      layerRole: String(material.layerRole || 'surface'),
     })),
     tiles,
   };
@@ -860,8 +900,30 @@ function inspectRtpksBuffer(buffer, fileName = 'package.rtpks', metaBuffer = nul
 
 async function inspectRtpksFile(filePath) {
   const metaPath = `${filePath}.meta`;
-  const metaBuffer = existsSync(metaPath) ? await readFile(metaPath) : null;
-  return inspectRtpksBuffer(await readFile(filePath), basename(filePath), metaBuffer);
+  const [packInfo, metaInfo] = await Promise.all([
+    stat(filePath),
+    existsSync(metaPath) ? stat(metaPath) : null,
+  ]);
+  const signature = [
+    packInfo.size, packInfo.mtimeMs, packInfo.ctimeMs,
+    metaInfo?.size || 0, metaInfo?.mtimeMs || 0, metaInfo?.ctimeMs || 0,
+  ].join(':');
+  const cached = rtpksInspectionCache.get(filePath);
+  if (cached?.signature === signature) return cached.inspection;
+
+  const inspection = Promise.all([
+    readFile(filePath),
+    metaInfo ? readFile(metaPath) : null,
+  ])
+    .then(([packBuffer, metaBuffer]) => inspectRtpksBuffer(packBuffer, basename(filePath), metaBuffer))
+    .catch((error) => {
+      if (rtpksInspectionCache.get(filePath)?.inspection === inspection) {
+        rtpksInspectionCache.delete(filePath);
+      }
+      throw error;
+    });
+  rtpksInspectionCache.set(filePath, { signature, inspection });
+  return inspection;
 }
 
 async function listTilePackages(settings) {
@@ -1401,6 +1463,44 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { ok: false, error: error.message });
       }
     }
+    if (url.pathname === '/api/tile-packages/tiles/batch' && req.method === 'POST') {
+      const settings = await readMapSettings();
+      try {
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) throw new Error('Expected multipart tile upload.');
+        const parts = parseMultipart(await readRawBody(req, 240_000_000), contentType);
+        const metadataPart = parts.find((part) => part.name === 'metadata');
+        if (!metadataPart) throw new Error('Tile batch metadata is required.');
+        const payload = JSON.parse(Buffer.from(metadataPart.bytes).toString('utf8'));
+        const fileName = sanitizeTilePackageFileName(payload.fileName);
+        const { target } = resolveTilePackagesDirectory(settings, fileName);
+        const metaPath = `${target}.meta`;
+        if (!existsSync(target) || !existsSync(metaPath)) throw new Error('RTPKS package or sidecar not found.');
+        const tileBundles = parts.filter((part) => part.name === 'tileBundle' && part.bytes?.length);
+        if (!tileBundles.length) throw new Error('Choose at least one .tile bundle.');
+        const definition = payload.tile || {};
+        const result = addTilesToPack(
+          await readFile(target),
+          await readFile(metaPath),
+          tileBundles.map((part) => ({ definition, assets: { tileBundle: part.bytes } })),
+          {
+            tabId: definition.tabId,
+            replaceTab: payload.replaceTab === true,
+          },
+        );
+        await writeFile(target, result.packBytes);
+        await writeFile(metaPath, result.metaBytes);
+        const inspected = await inspectRtpksFile(target);
+        return json(res, 200, {
+          ok: true,
+          resortTileIds: result.resortTileIds,
+          deactivatedTileIds: result.deactivatedTileIds,
+          package: { ...inspected, fileName, gamePath: relativeGameAssetPath(settings, 'tilePackagesDirectory', fileName) },
+        });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
     if (url.pathname === '/api/tile-packages/tile-bundles/inspect' && req.method === 'POST') {
       try {
         const contentType = req.headers['content-type'] || '';
@@ -1491,7 +1591,7 @@ const server = http.createServer(async (req, res) => {
         if (!textureName || textureName.includes('..')) throw new Error('Invalid texture name.');
         const { target } = resolveTilePackagesDirectory(settings, fileName);
         if (!existsSync(target)) return json(res, 404, { ok: false, error: 'RTPKS package not found.' });
-        const entries = unzipSync(new Uint8Array(await readFile(target)));
+        const entries = await readRtpksArchive(target);
         const entryPath = normalizeZipEntryName(`runtime/textures/${textureName}`);
         const bytes = entries[entryPath];
         if (!bytes) return json(res, 404, { ok: false, error: 'Texture not found in RTPKS package.' });
@@ -1516,14 +1616,14 @@ const server = http.createServer(async (req, res) => {
         const { target } = resolveTilePackagesDirectory(settings, fileName);
         const metaPath = `${target}.meta`;
         if (!existsSync(metaPath)) return json(res, 404, { ok: false, error: 'RTPKS editor sidecar not found.' });
-        const entries = unzipSync(new Uint8Array(await readFile(metaPath)));
+        const entries = await readRtpksArchive(metaPath);
         const manifest = archiveJson(entries, 'manifest.json');
         const editorMeta = archiveJson(entries, manifest?.tileMetadata || 'editor/tile_metadata.json');
         const tile = (editorMeta?.tiles || []).find((item) => Number(item.resortTileId) === tileId);
         const previewPath = normalizeZipEntryName(tile?.preview?.image || `editor/previews/tile_${tileId}.png`);
         const bytes = entries[previewPath];
         if (!bytes) return json(res, 404, { ok: false, error: 'Preview not found in RTPKS editor sidecar.' });
-        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=3600' });
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, no-store' });
         res.end(Buffer.from(bytes));
         return;
       } catch (error) {
@@ -1539,7 +1639,7 @@ const server = http.createServer(async (req, res) => {
         if (!Number.isInteger(tileId) || tileId < 0) throw new Error('tileId must be a non-negative integer.');
         const { target } = resolveTilePackagesDirectory(settings, fileName);
         if (!existsSync(target)) return json(res, 404, { ok: false, error: 'RTPKS package not found.' });
-        const entries = unzipSync(new Uint8Array(await readFile(target)));
+        const entries = await readRtpksArchive(target);
         const entryPath = `runtime/meshes/tile_${tileId}.json`;
         const bytes = entries[entryPath];
         if (!bytes) return json(res, 404, { ok: false, error: 'Mesh not found in RTPKS package.' });
@@ -1636,7 +1736,7 @@ const server = http.createServer(async (req, res) => {
         if (!anchor) throw new Error('Add or save the current map to the project before creating adjacent maps.');
         const gridX = anchor.gridX + delta[0];
         const gridY = anchor.gridY + delta[1];
-        const existing = project.maps.find((map) => map.gridX === gridX && map.gridY === gridY);
+        const existing = project.maps.find((map) => map.linked !== false && map.gridX === gridX && map.gridY === gridY);
         let map;
         let isExisting = false;
         if (existing) {
@@ -1651,7 +1751,7 @@ const server = http.createServer(async (req, res) => {
             id = `${base}_${n}`;
             n += 1;
           }
-          map = { id, name: id.replace(/_/g, ' '), file: `${id}.owmap`, gridX, gridY };
+          map = { id, name: id.replace(/_/g, ' '), file: `${id}.owmap`, gridX, gridY, linked: true };
           project.maps.push(map);
           project.editor.activeMapId = id;
         }
@@ -1907,6 +2007,24 @@ const server = http.createServer(async (req, res) => {
       try {
         const result = await writeMapOwmap(settings, payload.fileName, payload.map);
         return json(res, 200, { ok: true, ...result });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/maps/delete' && (req.method === 'POST' || req.method === 'DELETE')) {
+      const settings = await readMapSettings();
+      try {
+        let fileName = url.searchParams.get('file');
+        if (!fileName) {
+          const payload = JSON.parse(await readBody(req));
+          fileName = payload.fileName || payload.file;
+        }
+        if (!fileName) throw new Error('fileName is required.');
+        const safe = basename(String(fileName));
+        const { target } = resolveMapsDirectory(settings, safe);
+        if (!existsSync(target)) return json(res, 404, { ok: false, error: 'Map file not found.' });
+        await rm(target, { force: true });
+        return json(res, 200, { ok: true, fileName: safe });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }

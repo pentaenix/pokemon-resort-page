@@ -80,6 +80,41 @@ function detectTextureFormat(bytes) {
   return 'png';
 }
 
+function materialOpacity(material) {
+  const factor = material?.pbrMetallicRoughness?.baseColorFactor;
+  const nitro = material?.extras?.rae?.nitro;
+  const raw = nitro?.alpha ?? (Array.isArray(factor) && factor.length >= 4 ? factor[3] : 1);
+  const value = Number(raw);
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1;
+}
+
+function gltfWrapMode(value) {
+  if (Number(value) === 33071) return 'clamp';
+  if (Number(value) === 33648) return 'mirror';
+  return 'repeat';
+}
+
+function gltfFilterMode(value) {
+  return [9728, 9984, 9986].includes(Number(value)) ? 'nearest' : 'linear';
+}
+
+export function materialSamplerRecords(gltf) {
+  return (gltf.materials || []).map((material, materialIndex) => {
+    const texInfo = material?.pbrMetallicRoughness?.baseColorTexture
+      || material?.extensions?.KHR_materials_pbrSpecularGlossiness?.diffuseTexture
+      || material?.normalTexture;
+    const texture = texInfo ? gltf.textures?.[texInfo.index] : null;
+    const sampler = texture ? gltf.samplers?.[texture.sampler] : null;
+    return {
+      material: String(material?.name || `mat_${materialIndex}`),
+      wrapS: gltfWrapMode(sampler?.wrapS),
+      wrapT: gltfWrapMode(sampler?.wrapT),
+      magFilter: gltfFilterMode(sampler?.magFilter),
+      minFilter: gltfFilterMode(sampler?.minFilter),
+    };
+  });
+}
+
 function imageDimensions(bytes, format) {
   if (format === 'png' && bytes.length > 24) {
     return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
@@ -161,6 +196,60 @@ function transformNormal(m, x, y, z) {
   const nz = m[2] * x + m[6] * y + m[10] * z;
   const len = Math.hypot(nx, ny, nz) || 1;
   return [nx / len, ny / len, nz / len];
+}
+
+function fitMaterialUvBasis(vertices, indices, triangleMaterials, materialSlot, tileSize) {
+  const samples = [];
+  for (let triangle = 0; triangle < triangleMaterials.length; triangle += 1) {
+    if (Number(triangleMaterials[triangle]) !== Number(materialSlot)) continue;
+    for (let corner = 0; corner < 3; corner += 1) {
+      const vertex = indices[triangle * 3 + corner] * 8;
+      samples.push({
+        x: vertices[vertex] / tileSize,
+        z: vertices[vertex + 2] / tileSize,
+        u: vertices[vertex + 6],
+        v: vertices[vertex + 7],
+      });
+    }
+  }
+  if (samples.length < 3) return null;
+  const mean = (key) => samples.reduce((sum, sample) => sum + sample[key], 0) / samples.length;
+  const mx = mean('x'); const mz = mean('z'); const mu = mean('u'); const mv = mean('v');
+  let xx = 0; let zz = 0; let xz = 0; let xu = 0; let zu = 0; let xv = 0; let zv = 0;
+  for (const sample of samples) {
+    const x = sample.x - mx; const z = sample.z - mz;
+    xx += x * x; zz += z * z; xz += x * z;
+    xu += x * (sample.u - mu); zu += z * (sample.u - mu);
+    xv += x * (sample.v - mv); zv += z * (sample.v - mv);
+  }
+  const determinant = xx * zz - xz * xz;
+  if (Math.abs(determinant) < 1e-9) return null;
+  const uPerTile = [
+    (xu * zz - zu * xz) / determinant,
+    (zu * xx - xu * xz) / determinant,
+  ];
+  const vPerTile = [
+    (xv * zz - zv * xz) / determinant,
+    (zv * xx - xv * xz) / determinant,
+  ];
+  const uOrigin = mu - uPerTile[0] * mx - uPerTile[1] * mz;
+  const vOrigin = mv - vPerTile[0] * mx - vPerTile[1] * mz;
+  let maxResidual = 0;
+  for (const sample of samples) {
+    const fittedU = uOrigin + uPerTile[0] * sample.x + uPerTile[1] * sample.z;
+    const fittedV = vOrigin + vPerTile[0] * sample.x + vPerTile[1] * sample.z;
+    maxResidual = Math.max(maxResidual, Math.hypot(sample.u - fittedU, sample.v - fittedV));
+  }
+  // World projection is safe only for one genuinely affine UV field. Shoreline
+  // meshes deliberately contain multiple UV islands; fitting one basis across
+  // those islands turns their authored foam/sand shapes into stretched blocks.
+  if (maxResidual > 1e-4) return null;
+  const clean = (value) => Math.abs(value) < 1e-9 ? 0 : Number(value.toFixed(9));
+  return {
+    mode: 'world',
+    uPerTile: uPerTile.map(clean),
+    vPerTile: vPerTile.map(clean),
+  };
 }
 
 export function buildMeshFromGltf(modelId, gltf, bin) {
@@ -288,10 +377,19 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
   }
 
   const TILE_SIZE = 16;
+  const samplersByMaterial = new Map(materialSamplerRecords(gltf).map(({ material, ...sampler }) => [material, sampler]));
   const prMaterials = materialOrder.map((name) => {
     const idx = gltf.materials?.findIndex((m) => (m.name || '') === name) ?? 0;
     const texIdx = textureForMaterial(idx >= 0 ? idx : 0);
-    return { name, textureIndex: texIdx === 255 ? 0 : texIdx };
+    return {
+      name,
+      textureIndex: texIdx === 255 ? 0 : texIdx,
+      opacity: materialOpacity(gltf.materials?.[idx >= 0 ? idx : 0]),
+      sampler: samplersByMaterial.get(name) || {
+        wrapS: 'repeat', wrapT: 'repeat', magFilter: 'linear', minFilter: 'linear',
+      },
+      uvMapping: fitMaterialUvBasis(vertices, indices, triangleMaterials, materialOrder.indexOf(name), TILE_SIZE),
+    };
   });
 
   if (!textures.length) {
@@ -313,6 +411,6 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
     textures,
     vertexCount: vertices.length / 8,
     triangleCount: indices.length / 3,
+    tileSurfaceOrigin: Number.isFinite(Number(gltf.extras?.rae?.tileBounds?.originY)),
   };
 }
-

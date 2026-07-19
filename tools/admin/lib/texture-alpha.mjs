@@ -133,6 +133,26 @@ export function pngHasMeaningfulTransparency(bytes, opts = {}) {
 }
 
 /**
+ * Classify PNG alpha for viewport/runtime material policy. `blend` means at
+ * least one genuinely translucent texel, while `cutout` contains transparent
+ * texels but no intermediate alpha values.
+ */
+export function pngTransparencyKind(bytes) {
+  const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  if (buf.length < 26 || !isPng(buf)) return 'opaque';
+  const decoded = decodePngAlpha(buf);
+  if (!decoded) return pngBufferHasAlpha(buf) ? 'cutout' : 'opaque';
+  if (!decoded.alpha) return decoded.trnsPresent ? 'cutout' : 'opaque';
+  let hasTransparent = false;
+  for (let i = 0; i < decoded.alpha.length; i += 1) {
+    const alpha = decoded.alpha[i];
+    if (alpha < 255) hasTransparent = true;
+    if (alpha > 0 && alpha < 255) return 'blend';
+  }
+  return hasTransparent ? 'cutout' : 'opaque';
+}
+
+/**
  * @param {{ format?: string, bytes?: Buffer } | null} tex
  * @returns {boolean} true when the texture should be exported as a MASK material.
  */

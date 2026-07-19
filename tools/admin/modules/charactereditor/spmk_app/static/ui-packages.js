@@ -2929,6 +2929,10 @@ function openPkgSheetModal(sheetId) {
   const html = `<div class="modal card pkg-sheet-modal">
     ${modalHead(`Sheet · ${esc(sheet.name || sheet.id)}`)}
     <p class="tiny">Embedded PNG and how it is sliced for animations. Frame size applies to this sheet only.</p>
+    <div class="pkg-sheet-modal-actions row wrap" style="align-items:center;gap:10px;margin:0 0 12px">
+      <button type="button" class="btn good" id="pkgSheetModalReplace" title="Swap the embedded PNG only — actions and animation frames stay as-is">Replace sheet</button>
+      <span class="tiny">Keeps actions and animation frames — swaps only the PNG.</span>
+    </div>
     <div class="pkg-sheet-modal-previews">
       <div class="pkg-sheet-modal-pane">
         <div class="section-title inline">Raw sheet</div>
@@ -2960,6 +2964,7 @@ function openPkgSheetModal(sheetId) {
       ${hasOverride ? '<label class="check"><input type="checkbox" id="pkgSheetModalResetCell"> Use profile default</label>' : ''}
     </div>
     ${modalFoot('<button type="button" class="btn" id="pkgSheetModalCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgSheetModalSave">Apply</button>')}
+    <input id="pkgSheetModalReplaceFile" type="file" accept="image/png,image/webp" hidden>
   </div>`;
 
   const m = mountModal(html, { backdropClose: true, warnDirty: true });
@@ -2976,9 +2981,34 @@ function openPkgSheetModal(sheetId) {
   const dimsEl = $('#pkgSheetModalDims', m.root);
   const detectedEl = $('#pkgSheetDetected', m.root);
   const resetChk = $('#pkgSheetModalResetCell', m.root);
+  const replaceBtn = $('#pkgSheetModalReplace', m.root);
+  const replaceInput = $('#pkgSheetModalReplaceFile', m.root);
 
   let loadedImg = null;
   let detected = null;
+
+  const applyLoadedPreview = (img) => {
+    loadedImg = img;
+    if (rawImg) {
+      rawImg.src = img.src;
+      rawImg.style.width = `${Math.min(320, img.width)}px`;
+    }
+    const cols = merged.columns || 4;
+    const rows = merged.rows || 4;
+    const detFw = Math.round(img.width / cols);
+    const detFh = Math.round(img.height / rows);
+    detected = { fw: detFw, fh: detFh };
+    if (dimsEl) dimsEl.textContent = `${img.width}×${img.height}px`;
+    if (detectedEl) {
+      const parts = [];
+      if (detFw !== def.fw || detFh !== def.fh) {
+        parts.push(`Detected: ${detFw}×${detFh}px (${cols}×${rows} grid).`);
+      }
+      detectedEl.textContent = parts.join(' ');
+    }
+    if (detectBtn) detectBtn.disabled = false;
+    refreshGrid();
+  };
 
   const isSeparate = () => !!separateChk?.checked;
 
@@ -3065,31 +3095,43 @@ function openPkgSheetModal(sheetId) {
   if (!sheet.assetId) {
     if (dimsEl) dimsEl.textContent = 'No PNG embedded on this sheet yet.';
     $('#pkgSheetModalSave', m.root).disabled = true;
+    if (replaceBtn) replaceBtn.disabled = true;
   } else {
     const img = new Image();
-    img.onload = () => {
-      loadedImg = img;
-      if (rawImg) {
-        rawImg.src = img.src;
-        rawImg.style.width = `${Math.min(320, img.width)}px`;
-      }
-      const cols = merged.columns || 4;
-      const rows = merged.rows || 4;
-      const detFw = Math.round(img.width / cols);
-      const detFh = Math.round(img.height / rows);
-      detected = { fw: detFw, fh: detFh };
-      if (dimsEl) dimsEl.textContent = `${img.width}×${img.height}px`;
-      if (detectedEl) {
-        const parts = [];
-        if (detFw !== def.fw || detFh !== def.fh) {
-          parts.push(`Detected: ${detFw}×${detFh}px (${cols}×${rows} grid).`);
-        }
-        detectedEl.textContent = parts.join(' ');
-      }
-      if (detectBtn) detectBtn.disabled = false;
-      refreshGrid();
-    };
+    img.onload = () => applyLoadedPreview(img);
     img.src = `${sheetAssetUrl(sheet)}?t=${Date.now()}`;
+  }
+
+  if (replaceBtn && replaceInput) {
+    replaceBtn.onclick = () => replaceInput.click();
+    replaceInput.onchange = async (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = '';
+      if (!f || !sheet.assetId) return;
+      setSave('uploading');
+      try {
+        const fd = new FormData();
+        fd.append('assetId', sheet.assetId);
+        fd.append('file', f);
+        fd.append('profile', sheet.profile || p?.baseProfile || 'character');
+        const res = await fetch('/api/packages/draft/asset', { method: 'POST', body: fd });
+        if (!res.ok) {
+          const err = await res.text().catch(() => '');
+          toast(err ? `Replace failed: ${err}` : 'Replace failed');
+          return;
+        }
+        const body = await res.json();
+        const img = new Image();
+        img.onload = () => {
+          applyLoadedPreview(img);
+          hydratePkgVisuals();
+        };
+        img.src = `${sheetAssetUrl(sheet)}?t=${Date.now()}`;
+        toast(body.prepare?.scaled ? 'Sheet replaced (scaled to profile)' : 'Sheet replaced');
+      } finally {
+        setSave('ready');
+      }
+    };
   }
 
   $('#pkgSheetModalCancel', m.root).onclick = m.tryClose;

@@ -133,7 +133,7 @@
       "apps": ["pokemon-ds-map-studio", "pokemon-resort", "pokemon-resort-page"],
       "summary": "RTPKS v2 tile packs with Map Editor authoring for tabs, smart paths, .tile bundles, imported meshes, animation, gameplay tags, collision, and C++ bgfx rendering.",
       "publishedAt": "2026-06-01",
-      "updatedAt": "2026-07-13",
+      "updatedAt": "2026-07-17",
       "heroImage": {
         "path": "media/docs/pdsms/pdsms-tile-selector.png",
         "caption": "PDSMS tile selector with RTPKS-backed stable resort tile ids.",
@@ -220,7 +220,7 @@
       "apps": ["pokemon-resort", "pokemon-resort-page"],
       "summary": "OBJ to GLB conversion, three.js preview, map editor placement, and C++ GlbModelLoader rendering. Covers alpha, footprint overlays, and common roof or banner pitfalls.",
       "publishedAt": "2026-06-01",
-      "updatedAt": "2026-06-09",
+      "updatedAt": "2026-07-16",
       "heroImage": {
         "path": "assets/docs/article-placeholder.svg",
         "caption": "Pokémon Center prop: OBJ rip → GLB → preview, placement, and in-game render."

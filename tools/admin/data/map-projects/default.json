@@ -4,32 +4,12 @@
   "name": "Default Project",
   "maps": [
     {
-      "id": "testing-ground",
-      "name": "tester",
-      "file": "testing.owmap",
+      "id": "0",
+      "name": "0",
+      "file": "0.owmap",
       "gridX": 0,
-      "gridY": 0
-    },
-    {
-      "id": "testing-ground_west",
-      "name": "testing-ground west",
-      "file": "testing-ground_west.owmap",
-      "gridX": -1,
-      "gridY": 0
-    },
-    {
-      "id": "testing-ground_west_west",
-      "name": "testing-ground west west",
-      "file": "testing-ground_west_west.owmap",
-      "gridX": -2,
-      "gridY": 0
-    },
-    {
-      "id": "testing-ground_east",
-      "name": "testing-ground east",
-      "file": "testing-ground_east.owmap",
-      "gridX": 1,
-      "gridY": 0
+      "gridY": 0,
+      "linked": true
     }
   ],
   "tilePackages": [
@@ -42,8 +22,8 @@
   "defaultTilePackageId": "map_tiles",
   "pathSets": [],
   "editor": {
-    "activeMapId": "testing-ground_east",
-    "viewMode": "3d",
+    "activeMapId": "0",
+    "viewMode": "2d",
     "zoom": 1,
     "overlays": {
       "values": true,

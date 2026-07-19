@@ -39,11 +39,6 @@ function rotationMatrix(rxDeg, ryDeg, rzDeg) {
   return mul3(Rz, mul3(Ry, Rx));
 }
 
-function isIdentityRotation(rx, ry, rz) {
-  const norm = (v) => ((v % 360) + 360) % 360;
-  return norm(rx) === 0 && norm(ry) === 0 && norm(rz) === 0;
-}
-
 /**
  * Bake a fixed X/Y/Z rotation into a GLB's geometry so every consumer (web preview, map
  * placement, the C++ game) sees the corrected orientation without per-instance transforms.
@@ -64,10 +59,6 @@ export function reorientGlbBuffer(buffer, rotation = {}, modelId = 'model') {
 
   const { json, bin } = parseGlb(Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer));
   const mesh = buildMeshFromGltf(modelId, json, bin);
-
-  if (isIdentityRotation(rotX, rotY, rotZ)) {
-    return writeGlbFromMesh(mesh);
-  }
 
   const R = rotationMatrix(rotX, rotY, rotZ);
   const v = mesh.vertices; // [px,py,pz, nx,ny,nz, u,v] × N

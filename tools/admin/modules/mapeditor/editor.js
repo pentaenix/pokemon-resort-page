@@ -12,8 +12,10 @@ import {
   closeModelViewport,
   renderGlbThumbnail,
 } from '/shared/model-viewer.js';
-import { downloadRtpksTileGlb, mountMap3DView, mountRtpksTilePreview } from './map-3d-view.js';
+import { downloadRtpksTileGlb, mountMap3DView, mountRtpksTilePreview, renderRtpksTileThumbnail } from './map-3d-view.js';
 import { openTilePackEditor } from './tile-pack-editor.js';
+import { bindProjectModal, openProjectModal, syncProjectModal } from './project-modal.js';
+import { footprintAnchorAt, overlappingFootprintAnchors } from './tile-footprint-edit.js';
 
 const LAYER_META = {
   height: { label: 'Height', min: 0, max: 255, default: 0 },
@@ -98,6 +100,8 @@ function tileCatalogFiltered(editor) {
   return list.filter((tile) => {
     const key = String(tile.key || '').toLowerCase();
     return key.includes(q)
+      || String(tile.name || '').toLowerCase().includes(q)
+      || (tile.tags || []).some((tag) => String(tag).toLowerCase().includes(q))
       || String(tile.localIndex).includes(q);
   });
 }
@@ -139,7 +143,7 @@ function tilePaintVisualUrl(editor, tileId) {
 
 function tilePreviewSource(editor, tileId) {
   const tile = tileEntry(editor, tileId);
-  return tile?.previewImage || '';
+  return tile?.previewImage || cachedRtpksTileThumb(editor, tileId) || '';
 }
 
 function tileHashColor(id) {
@@ -149,6 +153,12 @@ function tileHashColor(id) {
 }
 
 function iconHtml(name) {
+  if (name === 'undo' || name === 'redo') {
+    const path = name === 'undo'
+      ? 'M9 7H4m0 0 3-3M4 7l3 3m-3-3h7a5 5 0 0 1 5 5v1'
+      : 'M11 7h5m0 0-3-3m3 3-3 3m3-3H9a5 5 0 0 0-5 5v1';
+    return `<svg class="map-icon map-history-icon" viewBox="0 0 20 20" aria-hidden="true"><path d="${path}"/></svg>`;
+  }
   return `<span class="map-icon map-icon-${name}" aria-hidden="true"></span>`;
 }
 
@@ -232,8 +242,9 @@ function createDefaultProject(files = []) {
       id: file.name.replace(/\.(owmap|map\.json)$/i, ''),
       name: file.name.replace(/\.(owmap|map\.json)$/i, '').replace(/_/g, ' '),
       file: file.name,
-      gridX: index,
+      gridX: index * 2,
       gridY: 0,
+      linked: index === 0,
     })),
     tilePackages: [],
     defaultTilePackageId: '',
@@ -241,6 +252,39 @@ function createDefaultProject(files = []) {
     editor: { activeMapId: '', viewMode: '2d', zoom: 1, overlays: { values: true, neighbors: true } },
     export: {},
   };
+}
+
+/** Pull every .owmap on disk into the project so Map Studio can open maps that exist but are not listed yet. */
+function syncDiskMapsIntoProject(editor) {
+  if (!editor?.project) return [];
+  if (!Array.isArray(editor.project.maps)) editor.project.maps = [];
+  const known = new Set(editor.project.maps.map((entry) => entry.file));
+  const usedIds = new Set(editor.project.maps.map((entry) => entry.id));
+  const added = [];
+  for (const file of editor.files || []) {
+    if (!file?.name || known.has(file.name)) continue;
+    let id = file.name.replace(/\.(owmap|map\.json)$/i, '');
+    if (!id) id = 'map';
+    if (usedIds.has(id)) {
+      let n = 2;
+      while (usedIds.has(`${id}_${n}`)) n += 1;
+      id = `${id}_${n}`;
+    }
+    const entry = {
+      id,
+      name: id.replace(/_/g, ' '),
+      file: file.name,
+      gridX: 0,
+      gridY: 0,
+      linked: false,
+    };
+    editor.project.maps.push(entry);
+    usedIds.add(id);
+    known.add(file.name);
+    added.push(entry);
+  }
+  if (added.length) editor.projectDirty = true;
+  return added;
 }
 
 function ensureTerrainVisual(map) {
@@ -638,24 +682,25 @@ function visibleTileFootprintAtLayer(editor, map, x, y, layerIndex = map.tileLay
   ensureTileLayers(map);
   const layer = tileLayerAt(map, layerIndex);
   if (!layer || layer.visible === false) return null;
-  for (let ay = 0; ay <= y; ay += 1) {
-    for (let ax = 0; ax <= x; ax += 1) {
-      const value = layer.cells?.[ay]?.[ax];
-      if (value == null || value === '') continue;
-      const tile = tileEntry(editor, Number(value));
-      const fp = tileFootprint(tile);
-      if (x >= ax && x < ax + fp.w && y >= ay && y < ay + fp.h) {
-        return { tileId: Number(value), anchorX: ax, anchorY: ay, layerIndex, footprint: fp };
-      }
-    }
-  }
-  return null;
+  const hit = footprintAnchorAt(layer.cells || [], x, y, (tileId) => tileFootprint(tileEntry(editor, tileId)));
+  return hit ? { ...hit, layerIndex } : null;
 }
 
 function setTileCell(map, x, y, resortTileId, layerIndex = map.tileLayers?.activeLayer || 0) {
   if (!inBounds(map, x, y)) return;
   const layer = tileLayerAt(map, layerIndex);
   layer.cells[y][x] = resortTileId == null ? null : Number(resortTileId);
+}
+
+function markTileFootprintDirty(editor, map, anchorX, anchorY, footprint) {
+  if (!(editor?._tileDirtyCells instanceof Set)) return;
+  for (let dy = 0; dy < Math.max(1, Number(footprint?.h) || 1); dy += 1) {
+    for (let dx = 0; dx < Math.max(1, Number(footprint?.w) || 1); dx += 1) {
+      const x = anchorX + dx;
+      const y = anchorY + dy;
+      if (inBounds(map, x, y)) editor._tileDirtyCells.add(`${x},${y}`);
+    }
+  }
 }
 
 function applyTileCollision(editor, map, tileId, anchorX, anchorY, clearing = false) {
@@ -676,10 +721,12 @@ function applyTileCollision(editor, map, tileId, anchorX, anchorY, clearing = fa
 function clearTileAt(editor, map, x, y, layerIndex = map.tileLayers?.activeLayer || 0) {
   const hit = visibleTileFootprintAtLayer(editor, map, x, y, layerIndex);
   if (hit) {
+    markTileFootprintDirty(editor, map, hit.anchorX, hit.anchorY, hit.footprint);
     applyTileCollision(editor, map, hit.tileId, hit.anchorX, hit.anchorY, true);
     setTileCell(map, hit.anchorX, hit.anchorY, null, layerIndex);
     return true;
   }
+  markTileFootprintDirty(editor, map, x, y, { w: 1, h: 1 });
   setTileCell(map, x, y, null, layerIndex);
   return true;
 }
@@ -689,6 +736,28 @@ function clearTileAtAllLayers(editor, map, x, y) {
   for (let layerIndex = 0; layerIndex < map.tileLayers.layers.length; layerIndex += 1) {
     clearTileAt(editor, map, x, y, layerIndex);
   }
+}
+
+function placeTileAt(editor, map, x, y, tileId, layerIndex = map.tileLayers?.activeLayer || 0) {
+  if (!inBounds(map, x, y) || tileId == null) return false;
+  const layer = tileLayerAt(map, layerIndex);
+  const nextFootprint = tileFootprint(tileEntry(editor, tileId));
+  const overlapping = overlappingFootprintAnchors(
+    layer.cells || [],
+    x,
+    y,
+    nextFootprint,
+    (existingId) => tileFootprint(tileEntry(editor, existingId)),
+  );
+  for (const existing of overlapping) {
+    markTileFootprintDirty(editor, map, existing.anchorX, existing.anchorY, existing.footprint);
+    applyTileCollision(editor, map, existing.tileId, existing.anchorX, existing.anchorY, true);
+    setTileCell(map, existing.anchorX, existing.anchorY, null, layerIndex);
+  }
+  markTileFootprintDirty(editor, map, x, y, nextFootprint);
+  setTileCell(map, x, y, tileId, layerIndex);
+  applyTileCollision(editor, map, tileId, x, y, false);
+  return true;
 }
 
 function clearAllAt(editor, map, x, y) {
@@ -921,7 +990,7 @@ function applyToolAt(map, editor, x, y) {
   }
   if (brush === 'tile') {
     if (tool === 'eyedropper') {
-      editor.tileBrushId = tileCellValue(map, x, y);
+      editor.tileBrushId = visibleTileFootprintAtLayer(editor, map, x, y)?.tileId ?? tileCellValue(map, x, y);
       editor.tool = 'paint';
       return;
     }
@@ -934,8 +1003,7 @@ function applyToolAt(map, editor, x, y) {
       return;
     }
     if (tool === 'raise' || tool === 'lower') return;
-    setTileCell(map, x, y, editor.tileBrushId ?? null);
-    applyTileCollision(editor, map, editor.tileBrushId, x, y, false);
+    placeTileAt(editor, map, x, y, editor.tileBrushId ?? null);
     return;
   }
   if (brush === 'path') {
@@ -1290,7 +1358,7 @@ function drawPreviewTriangle(ctx, verts, sampler, fallbackColor) {
   ctx.fill();
 }
 
-async function renderRtpksTileCanvasThumbnail(editor, tileId, size = RTPKS_TILE_THUMB_SIZE) {
+async function renderLegacyRtpksTileCanvasThumbnail(editor, tileId, size = RTPKS_TILE_THUMB_SIZE) {
   const fileName = editor.tilePackage?.fileName;
   if (!fileName) return '';
   const mesh = await fetchRtpksPreviewMesh(fileName, tileId);
@@ -1340,6 +1408,20 @@ async function renderRtpksTileCanvasThumbnail(editor, tileId, size = RTPKS_TILE_
     }
   }
   return canvas.toDataURL('image/png');
+}
+
+async function renderRtpksTileCanvasThumbnail(editor, tileId, size = RTPKS_TILE_THUMB_SIZE) {
+  try {
+    return await renderRtpksTileThumbnail(
+      editor.tilePackage?.fileName,
+      editor.tilePackage,
+      tileId,
+      { size },
+    );
+  } catch (error) {
+    console.warn(`WebGL RTPKS thumbnail failed for tile ${tileId}; using the CPU fallback.`, error);
+    return renderLegacyRtpksTileCanvasThumbnail(editor, tileId, size);
+  }
 }
 
 function requestRtpksTileThumbnail(editor, tileId, { size = RTPKS_TILE_THUMB_SIZE, onReady } = {}) {
@@ -1405,7 +1487,10 @@ function roofThumbForModel(model, onReady) {
 function tilePreviewImage(editor, tileId, onReady) {
   const tile = tileEntry(editor, tileId);
   const url = cachedRtpksTileThumb(editor, tileId) || tile?.previewImage || '';
-  if (!url) return null;
+  if (!url) {
+    requestRtpksTileThumbnail(editor, tileId, { onReady });
+    return null;
+  }
   const key = `${editor.tilePackage?.fileName || ''}|${tileId}|${url}`;
   const cached = tilePreviewImageCache.get(key);
   if (cached instanceof Image) return cached;
@@ -1586,18 +1671,6 @@ function drawMapPreviewTopDown(canvas, map, cam = {}, opts = {}) {
       ctx.fillStyle = floorColor || `rgba(${r},${g},${b},.28)`;
       ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
       const tileStack = visibleTileStack(map, x, z);
-      if (editor && tileStack.length) {
-        for (const item of tileStack) {
-          const img = tilePreviewImage(editor, item.tileId, onTileReady);
-          if (img) {
-            ctx.imageSmoothingEnabled = false;
-            ctx.drawImage(img, ox + x * cell, oy + z * cell, cell, cell);
-          } else {
-            ctx.fillStyle = tileHashColor(item.tileId);
-            ctx.fillRect(ox + x * cell, oy + z * cell, cell, cell);
-          }
-        }
-      }
       const special = specials?.[z]?.[x] ?? 0;
       const eff = effectiveSpecial(special, heights, w, h, x, z);
       if (eff >= SPECIAL.RAMP_N && eff <= SPECIAL.CONCAVE_NW) {
@@ -1616,6 +1689,40 @@ function drawMapPreviewTopDown(canvas, map, cam = {}, opts = {}) {
         }
       }
     }
+  }
+
+  // Draw each tile once at its anchor and scale its orthographic snapshot over
+  // the authored footprint. Drawing the same full image into every covered cell
+  // made multi-cell shores and props look like repeated, unrelated fragments.
+  if (editor) {
+    ensureTileLayers(map);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(ox, oy, w * cell, h * cell);
+    ctx.clip();
+    for (const layer of map.tileLayers.layers) {
+      if (layer.visible === false) continue;
+      for (let z = 0; z < h; z += 1) {
+        for (let x = 0; x < w; x += 1) {
+          const tileId = layer.cells?.[z]?.[x];
+          if (tileId == null || tileId === '') continue;
+          const fp = tileFootprint(tileEntry(editor, tileId));
+          const drawX = ox + x * cell;
+          const drawY = oy + z * cell;
+          const drawW = fp.w * cell;
+          const drawH = fp.h * cell;
+          const img = tilePreviewImage(editor, Number(tileId), onTileReady);
+          if (img) {
+            ctx.imageSmoothingEnabled = false;
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          } else {
+            ctx.fillStyle = tileHashColor(tileId);
+            ctx.fillRect(drawX, drawY, drawW, drawH);
+          }
+        }
+      }
+    }
+    ctx.restore();
   }
 
   ctx.strokeStyle = 'rgba(102,138,170,.22)';
@@ -2046,7 +2153,8 @@ export function ensureMapEditorState(state) {
   if (!Array.isArray(state.mapEditor.undoStack)) state.mapEditor.undoStack = [];
   if (!Array.isArray(state.mapEditor.redoStack)) state.mapEditor.redoStack = [];
   if (state.mapEditor.placeModelId === undefined) state.mapEditor.placeModelId = null;
-  if (!state.mapEditor.leftTab) state.mapEditor.leftTab = 'project';
+  if (!state.mapEditor.projectModalOpen) state.mapEditor.projectModalOpen = false;
+  if (!state.mapEditor.projectModalTab) state.mapEditor.projectModalTab = 'layout';
   if (!state.mapEditor.sidebarTab || state.mapEditor.sidebarTab === 'project' || state.mapEditor.sidebarTab === 'maps') state.mapEditor.sidebarTab = 'tiles';
   if (!state.mapEditor.previewCam) {
     state.mapEditor.previewCam = { ...PREVIEW_CAM_DEFAULT };
@@ -2196,8 +2304,6 @@ export function mapEditorHtml(state, esc) {
     ? '<span class="map-dirty-badge">Project unsaved</span>'
     : '<span class="map-dirty-badge clean">Project saved</span>';
 
-  const fileList = mapDiskFileListHtml(editor, esc);
-
   let gridHtml = '';
   if (map) {
     const tsz = map.grid?.tileSize || TILE_SIZE;
@@ -2279,6 +2385,7 @@ export function mapEditorHtml(state, esc) {
         ${projectBadge}
         <button type="button" class="btn ghost map-history-btn" id="mapUndo" title="Undo" aria-label="Undo" ${editor.undoStack?.length ? '' : 'disabled'}>${iconHtml('undo')} Undo</button>
         <button type="button" class="btn ghost map-history-btn" id="mapRedo" title="Redo" aria-label="Redo" ${editor.redoStack?.length ? '' : 'disabled'}>${iconHtml('redo')} Redo</button>
+        <button type="button" class="btn ghost" id="mapOpenProjectModal">Project &amp; maps</button>
         <button type="button" class="btn ghost" id="mapRefreshList">Refresh</button>
         <button type="button" class="btn ghost" id="mapNew">New map</button>
         <button type="button" class="btn ghost" id="mapSaveProject">Save project</button>
@@ -2322,26 +2429,6 @@ export function mapEditorHtml(state, esc) {
     <section class="map-editor-layout">
       <aside class="panel map-sidebar map-left-panel">
         ${mapAuthoringLayersHtml(editor, esc)}
-        <div class="map-sidebar-tabs" role="tablist">
-          <button type="button" class="map-sidebar-tab ${editor.leftTab === 'project' ? 'active' : ''}" data-left-tab="project" role="tab">Project</button>
-          <button type="button" class="map-sidebar-tab ${editor.leftTab === 'maps' ? 'active' : ''}" data-left-tab="maps" role="tab">Maps</button>
-          <button type="button" class="map-sidebar-tab ${editor.leftTab === 'visuals' ? 'active' : ''}" data-left-tab="visuals" role="tab">Visuals</button>
-        </div>
-        <div class="map-sidebar-panel ${editor.leftTab === 'project' ? '' : 'hidden'}" id="mapSidebarProject" role="tabpanel">
-          <h3>${esc(editor.project?.name || 'Project')}</h3>
-          ${mapSizePanelHtml(map, esc)}
-          ${adjacentActionsHtml(map, esc)}
-          ${mapProjectRosterHtml(editor, esc)}
-          <div class="map-edge-box">${edgeValidationHtml(editor, esc)}</div>
-        </div>
-        <div class="map-sidebar-panel ${editor.leftTab === 'maps' ? '' : 'hidden'}" id="mapSidebarMaps" role="tabpanel">
-          <h3>Maps (.owmap)</h3>
-          <p class="hint">Click a map to load and edit terrain.</p>
-          <div class="list map-file-list" id="mapFileList">${fileList}</div>
-        </div>
-        <div class="map-sidebar-panel ${editor.leftTab === 'visuals' ? '' : 'hidden'}" id="mapSidebarVisuals" role="tabpanel">
-          ${map ? terrainVisualHtml(editor, esc) : '<p class="hint">Load a map to edit terrain visuals.</p>'}
-        </div>
       </aside>
       <div class="map-workspace">
         <section class="panel">
@@ -2646,6 +2733,7 @@ function applyMapSize(editor, log, render) {
   editor.map = readMetaFromDom(editor.map, { resize: true });
   commitMapHistory(editor);
   editor.dirty = true;
+  syncCurrentMapDimensions(editor);
   log(`Map resized ${before} → ${editor.map.grid.width}×${editor.map.grid.height}`, 'ok');
   render();
 }
@@ -2659,8 +2747,18 @@ function applyMapExpand(editor, log, render) {
   editor.map = expandMapLocal(editor.map, direction, amount);
   commitMapHistory(editor);
   editor.dirty = true;
+  syncCurrentMapDimensions(editor);
   log(`Map expanded ${direction} ${before} → ${editor.map.grid.width}×${editor.map.grid.height}`, 'ok');
   render();
+}
+
+function syncCurrentMapDimensions(editor) {
+  if (!editor?.map?.grid || !editor.currentFile) return;
+  editor.mapDimensionsByFile = editor.mapDimensionsByFile || {};
+  editor.mapDimensionsByFile[editor.currentFile] = {
+    width: editor.map.grid.width,
+    height: editor.map.grid.height,
+  };
 }
 
 // Mounts/disposes the view-only 3D workspace as the editor toggles between 2D and 3D. render()
@@ -2911,12 +3009,14 @@ function syncProjectFromEditor(editor) {
     const mapId = editor.map.id || editor.currentFile.replace(/\.owmap$/i, '');
     let entry = editor.project.maps.find((item) => item.file === editor.currentFile || item.id === mapId);
     if (!entry) {
+      const layoutMaps = editor.project.maps.filter((item) => item.linked !== false);
       entry = {
         id: mapId,
         name: editor.map.name || mapId,
         file: editor.currentFile.endsWith('.owmap') ? editor.currentFile : `${editor.currentFile}.owmap`,
-        gridX: editor.project.maps.length,
+        gridX: layoutMaps.length ? Math.max(...layoutMaps.map((item) => item.gridX), 0) + 2 : 0,
         gridY: 0,
+        linked: layoutMaps.length === 0,
       };
       editor.project.maps.push(entry);
     }
@@ -2987,6 +3087,7 @@ function directionLabel(direction) {
 
 function mapGridPositionLabel(map, maps) {
   if (!map) return '';
+  if (map.linked === false) return 'Separated map (no snapped connection)';
   const origin = maps.find((entry) => entry.gridX === 0 && entry.gridY === 0) || maps[0];
   if (!origin || map.id === origin.id) return 'Origin · grid 0,0';
   const dx = map.gridX - origin.gridX;
@@ -3013,24 +3114,27 @@ function mapCompassTag(map, origin) {
 
 async function refreshProjectMapDimensions(editor) {
   editor.mapDimensionsByFile = editor.mapDimensionsByFile || {};
-  const maps = editor.project?.maps || [];
-  await Promise.all(maps.map(async (entry) => {
-    if (!entry?.file) return;
+  const files = new Set([
+    ...(editor.project?.maps || []).map((entry) => entry?.file).filter(Boolean),
+    ...(editor.files || []).map((file) => file?.name).filter(Boolean),
+  ]);
+  await Promise.all([...files].map(async (fileName) => {
     try {
-      const res = await fetch(`/api/maps/file?file=${encodeURIComponent(entry.file)}`);
+      const res = await fetch(`/api/maps/file?file=${encodeURIComponent(fileName)}`);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok || !payload.map?.grid) {
-        editor.mapDimensionsByFile[entry.file] = { missing: true };
+        editor.mapDimensionsByFile[fileName] = { missing: true };
         return;
       }
-      editor.mapDimensionsByFile[entry.file] = {
+      editor.mapDimensionsByFile[fileName] = {
         width: payload.map.grid.width,
         height: payload.map.grid.height,
       };
     } catch {
-      editor.mapDimensionsByFile[entry.file] = { missing: true };
+      editor.mapDimensionsByFile[fileName] = { missing: true };
     }
   }));
+  syncCurrentMapDimensions(editor);
 }
 
 function mapDiskFileListHtml(editor, esc) {
@@ -3053,14 +3157,18 @@ function mapDiskFileListHtml(editor, esc) {
       ? (active ? '<span class="map-file-badge current">Current</span>' : '<span class="map-file-badge">In project</span>')
       : '<span class="map-file-badge orphan">Not in project</span>';
     const title = inProj ? esc(entry.name || entry.id) : esc(file.name);
-    return `<button type="button" class="map-file-row ${active}" data-map-file="${esc(file.name)}">
-      ${badge}
-      <span class="map-file-row-main">
-        <strong>${title}</strong>
-        <span>${subtitle}</span>
-        ${inProj ? `<code class="map-file-row-code">${esc(file.name)}</code>` : ''}
-      </span>
-    </button>`;
+    const addBtn = inProj ? '' : `<button type="button" class="btn small map-file-add" data-add-orphan-map="${esc(file.name)}">Add separated</button>`;
+    return `<div class="map-file-row-wrap ${active}">
+      <button type="button" class="map-file-row ${active}" data-map-file="${esc(file.name)}">
+        ${badge}
+        <span class="map-file-row-main">
+          <strong>${title}</strong>
+          <span>${subtitle}</span>
+          ${inProj ? `<code class="map-file-row-code">${esc(file.name)}</code>` : ''}
+        </span>
+      </button>
+      ${addBtn}
+    </div>`;
   };
   const projectRows = inProject.map(({ file, entry }) => renderRow(file, entry, true)).join('');
   const otherRows = other.map((file) => renderRow(file, null, false)).join('');
@@ -3110,6 +3218,8 @@ export async function loadMapEditorListing(state, api) {
   if (!editor.project.maps?.length && editor.files?.length) {
     editor.project = createDefaultProject(editor.files);
     editor.projectDirty = true;
+  } else {
+    syncDiskMapsIntoProject(editor);
   }
   try {
     await refreshProjectMapDimensions(editor);
@@ -3360,8 +3470,8 @@ function mapSizePanelHtml(map, esc) {
   if (!map) {
     return '<p class="hint">Load a map to edit size.</p>';
   }
-  const w = map.grid?.width || 16;
-  const h = map.grid?.height || 16;
+  const w = map.grid?.width || 32;
+  const h = map.grid?.height || 32;
   return `<div class="map-size-panel">
     <h4>Map size</h4>
     <div class="map-size-fields">
@@ -4000,6 +4110,23 @@ function dataUrlHasVisiblePixels(dataUrl) {
 function refreshSelectedAssetPreview(editor) {
   const frame = document.querySelector('#mapSelectedPreviewFrame');
   if (!frame) return;
+  const preview = frame.closest('.map-selected-preview');
+  const heading = preview?.querySelector('header strong');
+  const meta = preview?.querySelector('header span');
+  if (editor.sidebarTab === 'props' && editor.placeModelId) {
+    const model = catalogEntry(editor, editor.placeModelId);
+    const fp = modelAuthoringFootprint(model);
+    if (heading) heading.textContent = model?.displayName || editor.placeModelId;
+    if (meta) meta.textContent = `${fp.w}x${fp.d} footprint`;
+  } else if (editor.tileBrushId != null) {
+    const fp = tileFootprint(tileEntry(editor, editor.tileBrushId));
+    const size = tileSizeLabel(fp);
+    if (heading) heading.textContent = 'Selected tile';
+    if (meta) meta.textContent = size ? `${size} footprint` : '1x1 tile';
+  } else {
+    if (heading) heading.textContent = 'Selected preview';
+    if (meta) meta.textContent = 'Pick a tile or prop to preview it before placement.';
+  }
   if (editor.sidebarTab === 'props' && editor.placeModelId) {
     disposeSelectedAssetPreview(editor, frame);
     const model = catalogEntry(editor, editor.placeModelId);
@@ -4525,6 +4652,37 @@ export function bindMapEditor(state, deps) {
   }
   const render = editor._wrappedRender;
 
+  const projectModalDeps = {
+    ...deps,
+    render,
+    ensureMapEditorState,
+    syncProjectFromEditor,
+    saveProject,
+    refreshProjectMapDimensions,
+    syncDiskMapsIntoProject,
+    loadMapFileIntoEditor,
+    loadMapEditorListing,
+    bindTerrainVisualInputs: null,
+    bindProjectPanelInputs: null,
+    onNewBlankMap: (st, d) => {
+      const ed = ensureMapEditorState(st);
+      ed.map = emptyMapLocal(32, 32);
+      if (ed.tilePackage) {
+        ed.map.tilePackage = {
+          file: ed.tilePackage.fileName,
+          packId: ed.tilePackage.packId,
+          name: ed.tilePackage.name,
+          path: ed.tilePackage.gamePath,
+        };
+      }
+      ed.currentFile = 'new_map.owmap';
+      ed.dirty = true;
+      clearMapHistory(ed);
+      log('New 32×32 map ready.', 'ok');
+      render();
+    },
+  };
+
   if (!editor._workstationDelegatesReady) {
     editor._workstationDelegatesReady = true;
     document.addEventListener('keydown', (event) => {
@@ -4715,75 +4873,6 @@ export function bindMapEditor(state, deps) {
     };
   }
 
-  document.querySelectorAll('[data-project-map]').forEach((btn) => {
-    btn.onclick = async (event) => {
-      if (event.target.closest('[data-project-map-name]')) return;
-      const entry = editor.project?.maps?.find((map) => map.id === btn.dataset.projectMap);
-      if (!entry?.file) return;
-      try {
-        await loadMapFileIntoEditor(state, deps, entry.file);
-      } catch (e) { /* api logs */ }
-    };
-  });
-
-  document.querySelectorAll('[data-project-map-name]').forEach((input) => {
-    const commitName = () => {
-      const id = input.dataset.projectMapName;
-      const entry = editor.project?.maps?.find((map) => map.id === id);
-      if (!entry) return;
-      const name = input.value.trim() || entry.id;
-      entry.name = name;
-      if (editor.map && (editor.map.id === id || editor.currentFile === entry.file)) {
-        editor.map.name = name;
-      }
-      editor.projectDirty = true;
-      render();
-    };
-    input.onchange = commitName;
-    input.onblur = commitName;
-    input.onclick = (event) => event.stopPropagation();
-    input.onkeydown = (event) => event.stopPropagation();
-  });
-
-  document.querySelectorAll('[data-create-adjacent]').forEach((btn) => {
-    btn.onclick = async () => {
-      if (!editor.map) return;
-      try {
-        syncProjectFromEditor(editor);
-        const payload = await fetch('/api/map-projects/create-adjacent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: editor.project?.id || 'default',
-            activeMapId: editor.map.id,
-            direction: btn.dataset.createAdjacent,
-            anchorWidth: editor.map?.grid?.width,
-            anchorHeight: editor.map?.grid?.height,
-            anchorFile: editor.currentFile,
-          }),
-        }).then((res) => res.json().then((body) => ({ status: res.status, body })));
-        if (payload.status >= 400 || !payload.body.ok) throw new Error(payload.body.error || 'Could not create adjacent map.');
-        editor.project = payload.body.project;
-        editor.projectId = editor.project.id;
-        const validation = await fetchJsonQuiet(`/api/map-projects/validate?id=${encodeURIComponent(editor.project.id)}`);
-        editor.projectValidation = validation?.validation || null;
-        const entry = payload.body.map;
-        await refreshProjectMapDimensions(editor);
-        await loadMapFileIntoEditor(state, deps, entry.file);
-        editor.projectDirty = false;
-        const dims = payload.body.dimensions;
-        const dir = btn.dataset.createAdjacent;
-        const sizeLabel = dims ? ` (${dims.width}×${dims.height})` : '';
-        if (payload.body.existing && !payload.body.fileCreated) {
-          log(`Opened ${directionLabel(dir)} map ${entry.file}${sizeLabel}`, 'ok');
-        } else {
-          log(`Created ${directionLabel(dir)} map ${entry.file}${sizeLabel}`, 'ok');
-        }
-      } catch (e) {
-        log(e.message || 'Could not create adjacent map.', 'error');
-      }
-    };
-  });
 
   const pathSetSelect = document.querySelector('#mapPathSetSelect');
   if (pathSetSelect) {
@@ -4867,8 +4956,8 @@ export function bindMapEditor(state, deps) {
     };
   });
 
-  const bindVisual = (selector, apply) => {
-    const el = document.querySelector(selector);
+  const bindVisual = (selector, apply, root = document) => {
+    const el = root.querySelector(selector);
     if (!el) return;
     el.onchange = () => {
       if (!editor.map) return;
@@ -4881,40 +4970,129 @@ export function bindMapEditor(state, deps) {
       render();
     };
   };
-  bindVisual('#mapFloorHeightScale', (el, visual) => { visual.floorHeightScale = Math.max(1, Math.min(64, Number(el.value) || TILE_SIZE)); });
-  bindVisual('#mapFloorRecolorEnabled', (el, visual) => { visual.floorRecolorEnabled = el.checked; });
-  bindVisual('#mapFloorColor1', (el, visual) => { visual.floorColors[1] = el.value || '#d84f5f'; });
-  bindVisual('#mapRampRecolorEnabled', (el, visual) => { visual.rampRecolorEnabled = el.checked; });
-  bindVisual('#mapRampColor', (el, visual) => { visual.rampColor = el.value || '#f4d03f'; });
-  const clampNumber = (value, fallback, min, max) => Math.max(min, Math.min(max, Number(value) || fallback));
-  const ensureRampReadability = (visual) => {
-    if (!visual.rampReadability || typeof visual.rampReadability !== 'object') {
-      visual.rampReadability = { enabled: true, lowShade: 0.88, highShade: 1.10, bandCount: 5, bandStrength: 0.12, bandSoftness: 0.32 };
-    }
-    return visual.rampReadability;
-  };
-  bindVisual('#mapRampReadabilityEnabled', (el, visual) => { ensureRampReadability(visual).enabled = el.checked; });
-  bindVisual('#mapRampReadabilityLow', (el, visual) => { ensureRampReadability(visual).lowShade = clampNumber(el.value, 0.88, 0, 4); });
-  bindVisual('#mapRampReadabilityHigh', (el, visual) => { ensureRampReadability(visual).highShade = clampNumber(el.value, 1.10, 0, 4); });
-  bindVisual('#mapRampReadabilityBands', (el, visual) => { ensureRampReadability(visual).bandCount = clampNumber(el.value, 5, 0, 64); });
-  bindVisual('#mapRampReadabilityBandStrength', (el, visual) => { ensureRampReadability(visual).bandStrength = clampNumber(el.value, 0.12, 0, 1); });
-  bindVisual('#mapRampReadabilityBandSoftness', (el, visual) => { ensureRampReadability(visual).bandSoftness = clampNumber(el.value, 0.32, 0.03, 0.49); });
-  bindVisual('#mapLightPreset', (el, visual) => {
-    visual.lightPreset = el.value || 'day';
-    const presets = {
-      day: { yaw: 38, pitch: 58 },
-      sunset: { yaw: -42, pitch: 26 },
-      night: { yaw: 25, pitch: 48 },
+  const bindTerrainVisualInputs = (st, d, root = document) => {
+    bindVisual('#mapFloorHeightScale', (el, visual) => { visual.floorHeightScale = Math.max(1, Math.min(64, Number(el.value) || TILE_SIZE)); }, root);
+    bindVisual('#mapFloorRecolorEnabled', (el, visual) => { visual.floorRecolorEnabled = el.checked; }, root);
+    bindVisual('#mapFloorColor1', (el, visual) => { visual.floorColors[1] = el.value || '#d84f5f'; }, root);
+    bindVisual('#mapRampRecolorEnabled', (el, visual) => { visual.rampRecolorEnabled = el.checked; }, root);
+    bindVisual('#mapRampColor', (el, visual) => { visual.rampColor = el.value || '#f4d03f'; }, root);
+    const clampNumber = (value, fallback, min, max) => Math.max(min, Math.min(max, Number(value) || fallback));
+    const ensureRampReadability = (visual) => {
+      if (!visual.rampReadability || typeof visual.rampReadability !== 'object') {
+        visual.rampReadability = { enabled: true, lowShade: 0.88, highShade: 1.10, bandCount: 5, bandStrength: 0.12, bandSoftness: 0.32 };
+      }
+      return visual.rampReadability;
     };
-    const preset = presets[visual.lightPreset] || presets.day;
-    visual.lightYawDeg = preset.yaw;
-    visual.lightPitchDeg = preset.pitch;
-  });
-  bindVisual('#mapLightYaw', (el, visual) => { visual.lightYawDeg = Math.max(-180, Math.min(180, Number(el.value) || 0)); });
-  bindVisual('#mapLightPitch', (el, visual) => { visual.lightPitchDeg = Math.max(5, Math.min(85, Number(el.value) || 45)); });
+    bindVisual('#mapRampReadabilityEnabled', (el, visual) => { ensureRampReadability(visual).enabled = el.checked; }, root);
+    bindVisual('#mapRampReadabilityLow', (el, visual) => { ensureRampReadability(visual).lowShade = clampNumber(el.value, 0.88, 0, 4); }, root);
+    bindVisual('#mapRampReadabilityHigh', (el, visual) => { ensureRampReadability(visual).highShade = clampNumber(el.value, 1.10, 0, 4); }, root);
+    bindVisual('#mapRampReadabilityBands', (el, visual) => { ensureRampReadability(visual).bandCount = clampNumber(el.value, 5, 0, 64); }, root);
+    bindVisual('#mapRampReadabilityBandStrength', (el, visual) => { ensureRampReadability(visual).bandStrength = clampNumber(el.value, 0.12, 0, 1); }, root);
+    bindVisual('#mapRampReadabilityBandSoftness', (el, visual) => { ensureRampReadability(visual).bandSoftness = clampNumber(el.value, 0.32, 0.03, 0.49); }, root);
+    bindVisual('#mapLightPreset', (el, visual) => {
+      visual.lightPreset = el.value || 'day';
+      const presets = {
+        day: { yaw: 38, pitch: 58 },
+        sunset: { yaw: -42, pitch: 26 },
+        night: { yaw: 25, pitch: 48 },
+      };
+      const preset = presets[visual.lightPreset] || presets.day;
+      visual.lightYawDeg = preset.yaw;
+      visual.lightPitchDeg = preset.pitch;
+    }, root);
+    bindVisual('#mapLightYaw', (el, visual) => { visual.lightYawDeg = Math.max(-180, Math.min(180, Number(el.value) || 0)); }, root);
+    bindVisual('#mapLightPitch', (el, visual) => { visual.lightPitchDeg = Math.max(5, Math.min(85, Number(el.value) || 45)); }, root);
+  };
+
+  const projectModalBuilders = () => {
+    const m = editor.map;
+    return {
+      filesHtml: () => mapDiskFileListHtml(editor, esc),
+      projectHtml: () => `${mapSizePanelHtml(m, esc)}${adjacentActionsHtml(m, esc)}${edgeValidationHtml(editor, esc)}`,
+      visualsHtml: () => terrainVisualHtml(editor, esc),
+    };
+  };
+
+  const bindProjectPanelInputs = (st, d, root = document) => {
+    const resizeBtn = root.querySelector('#mapApplySize');
+    if (resizeBtn) resizeBtn.onclick = () => applyMapSize(editor, log, render);
+    root.querySelectorAll('#mapWidth, #mapHeight').forEach((input) => {
+      input.onkeydown = (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        applyMapSize(editor, log, render);
+      };
+    });
+    const expandBtn = root.querySelector('#mapExpandSize');
+    if (expandBtn) expandBtn.onclick = () => applyMapExpand(editor, log, render);
+    const expandAmount = root.querySelector('#mapExpandAmount');
+    if (expandAmount) {
+      expandAmount.onkeydown = (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        applyMapExpand(editor, log, render);
+      };
+    }
+    root.querySelectorAll('[data-create-adjacent]').forEach((btn) => {
+      btn.onclick = async () => {
+        if (!editor.map) return;
+        try {
+          syncProjectFromEditor(editor);
+          const payload = await fetch('/api/map-projects/create-adjacent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: editor.project?.id || 'default',
+              activeMapId: editor.map.id,
+              direction: btn.dataset.createAdjacent,
+              anchorWidth: editor.map?.grid?.width,
+              anchorHeight: editor.map?.grid?.height,
+              anchorFile: editor.currentFile,
+            }),
+          }).then((res) => res.json().then((body) => ({ status: res.status, body })));
+          if (payload.status >= 400 || !payload.body.ok) throw new Error(payload.body.error || 'Could not create adjacent map.');
+          editor.project = payload.body.project;
+          editor.projectId = editor.project.id;
+          const validation = await fetchJsonQuiet(`/api/map-projects/validate?id=${encodeURIComponent(editor.project.id)}`);
+          editor.projectValidation = validation?.validation || null;
+          const entry = payload.body.map;
+          await refreshProjectMapDimensions(editor);
+          await loadMapFileIntoEditor(state, deps, entry.file);
+          editor.projectDirty = false;
+          const dims = payload.body.dimensions;
+          const dir = btn.dataset.createAdjacent;
+          const sizeLabel = dims ? ` (${dims.width}×${dims.height})` : '';
+          log(payload.body.existing && !payload.body.fileCreated
+            ? `Opened ${directionLabel(dir)} map ${entry.file}${sizeLabel}`
+            : `Created ${directionLabel(dir)} map ${entry.file}${sizeLabel}`, 'ok');
+          if (editor.projectModalOpen) syncProjectModal(editor, esc, projectModalBuilders);
+          render();
+        } catch (e) {
+          log(e.message || 'Could not create adjacent map.', 'error');
+        }
+      };
+    });
+  };
+
+  bindTerrainVisualInputs(state, deps, document);
+
+  projectModalDeps.bindTerrainVisualInputs = bindTerrainVisualInputs;
+  projectModalDeps.bindProjectPanelInputs = bindProjectPanelInputs;
+  bindProjectModal(state, projectModalDeps, projectModalBuilders);
+  if (editor.projectModalOpen) {
+    syncProjectModal(editor, esc, projectModalBuilders);
+    bindProjectPanelInputs(state, projectModalDeps, document.getElementById('mapProjectModalHost') || document);
+    bindTerrainVisualInputs(state, projectModalDeps, document.getElementById('mapProjectModalHost') || document);
+  }
+
+  const openProjectBtn = document.querySelector('#mapOpenProjectModal');
+  if (openProjectBtn) {
+    openProjectBtn.onclick = () => openProjectModal(state, projectModalDeps, projectModalBuilders);
+  }
 
   const stampPaint = (x, y, { light = false } = {}) => {
     if (!editor.map) return;
+    editor._tileDirtyCells = editor.brush === 'tile' || editor.tool === 'clear' ? new Set() : null;
     const useLight = editor.brush !== 'path' && editor.tool !== 'fill' &&
       (light || editor.tool === 'paint' || editor.tool === 'erase' ||
         editor.tool === 'raise' || editor.tool === 'lower');
@@ -4946,17 +5124,25 @@ export function bindMapEditor(state, deps) {
       editor._paintUsedLightUpdates = true;
       const size = editor.brushSize;
       const half = Math.floor(size / 2);
+      const dirtyCells = new Set(editor._tileDirtyCells || []);
       for (let dy = -half; dy <= half; dy += 1) {
         for (let dx = -half; dx <= half; dx += 1) {
           const tx = x + dx;
           const ty = y + dy;
-          const btn = paintGrid?.querySelector(`[data-cell="${tx},${ty}"]`);
-          syncCellButton(btn, editor.map, tx, ty, editor);
+          dirtyCells.add(`${tx},${ty}`);
         }
       }
+      for (const key of dirtyCells) {
+        const [tx, ty] = key.split(',').map(Number);
+        const btn = paintGrid?.querySelector(`[data-cell="${tx},${ty}"]`);
+        syncCellButton(btn, editor.map, tx, ty, editor);
+      }
+      if (editor.brush === 'tile' || editor.tool === 'clear') refreshPropOverlays(editor);
+      editor._tileDirtyCells = null;
       refreshMapPreview(state);
       return;
     }
+    editor._tileDirtyCells = null;
     editor._paintUsedLightUpdates = false;
     refreshMapPreview(state);
     render();
@@ -5599,33 +5785,6 @@ export function bindMapEditor(state, deps) {
   initPreviewModalDelegates(state, { render });
   bindPreviewResizeObserver(state);
 
-  const mapApplySize = document.querySelector('#mapApplySize');
-  if (mapApplySize) mapApplySize.onclick = () => applyMapSize(editor, log, render);
-
-  const mapWidth = document.querySelector('#mapWidth');
-  const mapHeight = document.querySelector('#mapHeight');
-  const onSizeInput = (event) => {
-    if (event.key === 'Enter') applyMapSize(editor, log, render);
-  };
-  if (mapWidth) {
-    mapWidth.onchange = () => applyMapSize(editor, log, render);
-    mapWidth.onkeydown = onSizeInput;
-  }
-  if (mapHeight) {
-    mapHeight.onchange = () => applyMapSize(editor, log, render);
-    mapHeight.onkeydown = onSizeInput;
-  }
-
-  const mapExpandSize = document.querySelector('#mapExpandSize');
-  if (mapExpandSize) mapExpandSize.onclick = () => applyMapExpand(editor, log, render);
-
-  const mapExpandAmount = document.querySelector('#mapExpandAmount');
-  if (mapExpandAmount) {
-    mapExpandAmount.onkeydown = (event) => {
-      if (event.key === 'Enter') applyMapExpand(editor, log, render);
-    };
-  }
-
   document.querySelectorAll('.map-tool').forEach((btn) => {
     btn.onclick = () => {
       editor.tool = btn.dataset.tool;
@@ -5778,13 +5937,6 @@ export function bindMapEditor(state, deps) {
     };
   });
 
-  document.querySelectorAll('[data-left-tab]').forEach((btn) => {
-    btn.onclick = () => {
-      editor.leftTab = btn.dataset.leftTab;
-      render();
-    };
-  });
-
   const openWizardBtn = document.querySelector('#mapOpenCompileWizard');
   if (openWizardBtn) openWizardBtn.onclick = openCompileWizard;
 
@@ -5902,7 +6054,7 @@ export function bindMapEditor(state, deps) {
   const mapNew = document.querySelector('#mapNew');
   if (mapNew) {
     mapNew.onclick = () => {
-      editor.map = emptyMapLocal(16, 16);
+      editor.map = emptyMapLocal(32, 32);
       if (editor.tilePackage) {
         editor.map.tilePackage = {
           file: editor.tilePackage.fileName,
@@ -5914,7 +6066,7 @@ export function bindMapEditor(state, deps) {
       editor.currentFile = 'new_map.owmap';
       editor.dirty = true;
       clearMapHistory(editor);
-      log('New 16×16 map ready.', 'ok');
+      log('New 32×32 map ready.', 'ok');
       render();
     };
   }

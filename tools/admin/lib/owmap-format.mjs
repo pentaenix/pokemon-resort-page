@@ -16,7 +16,7 @@
 const MAGIC = 0x4f574d31; // 'OWM1'
 const VERSION = 1;
 
-export function emptyMap(width = 16, height = 16) {
+export function emptyMap(width = 32, height = 32) {
   const h = createGrid(height, width, 0);
   const s = createGrid(height, width, 0);
   const c = createGrid(height, width, 0);
@@ -26,7 +26,7 @@ export function emptyMap(width = 16, height = 16) {
     type: 'exterior',
     visual: { mesh: '', format: 'none', material: '', textureDirectory: '', origin: [0, 0, 0], scale: 1 },
     grid: { enabled: true, tileSize: 16, width, height },
-    player: { character: 'assets/overworld/characters/watanabe.character.json', spawnTile: [Math.floor(width / 2), Math.floor(height / 2)], spawnHeight: 0, facing: 'south' },
+    player: { character: 'assets/characters/playable/haru.charbin', spawnTile: [Math.floor(width / 2), Math.floor(height / 2)], spawnHeight: 0, facing: 'south' },
     camera: { preset: 'gen4_platinum_default_exterior' },
     lighting: { preset: 'gen4_default_exterior', brightness: 0.95, tint: [1, 1, 1] },
     collision: { enabled: false },
