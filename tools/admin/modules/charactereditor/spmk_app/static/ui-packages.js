@@ -2963,7 +2963,7 @@ function openPkgSheetModal(sheetId) {
       <p class="tiny">Profile default is <b>${def.fw}×${def.fh}px</b>. <span id="pkgSheetDetected"></span></p>
       ${hasOverride ? '<label class="check"><input type="checkbox" id="pkgSheetModalResetCell"> Use profile default</label>' : ''}
     </div>
-    ${modalFoot('<button type="button" class="btn" id="pkgSheetModalCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgSheetModalSave">Apply</button>')}
+    ${modalFoot('<button type="button" class="btn" id="pkgSheetModalCancel">Cancel</button>', `${isHumanCharPackage(p) && sheet.assetId ? '<button type="button" class="btn good" id="pkgSheetModalAddAnim">New animation</button>' : ''}<button type="button" class="btn primary" id="pkgSheetModalSave">Apply</button>`)}
     <input id="pkgSheetModalReplaceFile" type="file" accept="image/png,image/webp" hidden>
   </div>`;
 
@@ -3135,6 +3135,9 @@ function openPkgSheetModal(sheetId) {
   }
 
   $('#pkgSheetModalCancel', m.root).onclick = m.tryClose;
+  $('#pkgSheetModalAddAnim', m.root)?.addEventListener('click', () => {
+    openPkgSheetAddAnimationModal(sheetId);
+  });
   $('#pkgSheetModalSave', m.root).onclick = async () => {
     const useDefault = !!resetChk?.checked;
     const { fw, fh } = useDefault ? def : previewFrameSize();
@@ -3164,6 +3167,19 @@ function openPkgSheetModal(sheetId) {
   };
 }
 
+function isPkgLocomotionStance(action) {
+  if (!action || action.type === 'activity' || action.movementDriven) return false;
+  const id = String(action.id || '').toLowerCase();
+  if (id === 'idle' || id.startsWith('idle_')) return true;
+  const anim = String(action.animationName || '').toLowerCase();
+  return anim === 'idle' && id === 'idle';
+}
+
+function pkgActionSheetLabel(action, p = pkg()) {
+  const sheet = (p?.spriteSheets || []).find((s) => s.id === action?.sheetId);
+  return sheet?.name || action?.sheetId || actionSheetBehavior(action);
+}
+
 function pkgActionDisplayName(action) {
   if (!action) return '';
   if (isObjectCharType(pkg()?.metadata?.characterType)) {
@@ -3172,10 +3188,10 @@ function pkgActionDisplayName(action) {
   if (action.type === 'activity') {
     return action.id || 'activity';
   }
-  const sheetBeh = actionSheetBehavior(action);
-  const isStance = !action.movementDriven || action.type === 'idle' || (action.behavior || '') === 'idle';
-  if (isStance) return `idle (${sheetBeh})`;
-  return String(action.animationName || action.id || sheetBeh);
+  if (isPkgLocomotionStance(action)) {
+    return `idle (${actionSheetBehavior(action)})`;
+  }
+  return String(action.animationName || action.id || actionSheetBehavior(action));
 }
 
 function pkgAnimGroupHeader(action) {
@@ -3205,9 +3221,22 @@ function pkgAnimGroupHeader(action) {
   } else if (pokemonMode && isStance && ['walk', 'swim', 'eating'].includes(sheetBeh)) {
     hint = `same ${sheetBeh} animation`;
   } else if (action.movementDriven) {
-    hint = `loops on ${sheetBeh} sheet`;
-  } else {
+    hint = `loops on ${pkgActionSheetLabel(action)} sheet`;
+  } else if (isPkgLocomotionStance(action)) {
     hint = `frame 0 on ${sheetBeh} sheet`;
+  } else {
+    const sheet = (pkg()?.spriteSheets || []).find((s) => s.id === action.sheetId);
+    const spec = sheet ? pkgEffectiveAnimSpec(sheet, action.animationName || action.id) : {};
+    const frames = spec.frames || [0];
+    const ms = Number(spec.frameTimeMs) || 0;
+    const sheetLabel = pkgActionSheetLabel(action);
+    if (frames.length > 1) {
+      hint = spec.loop === false
+        ? `${frames.length} frames on ${sheetLabel} sheet · ${ms} ms · plays once`
+        : `${frames.length} frames on ${sheetLabel} sheet · ${ms} ms · loops`;
+    } else {
+      hint = `frame 0 on ${sheetLabel} sheet`;
+    }
   }
   return `<div class="pkg-anim-group-head">
     <span class="section-title inline">${esc(action.id || name)}</span>
@@ -3247,37 +3276,76 @@ function parseFrameList(raw) {
     .filter((n) => Number.isInteger(n) && n >= 0);
 }
 
-async function removeObjectAnimation(actionId) {
+function animationNamesUsedByAction(action) {
+  if (action?.type === 'activity') {
+    const names = new Set();
+    const phases = action.phases || {};
+    for (const phase of Object.values(phases)) {
+      if (phase?.animationName) names.add(phase.animationName);
+    }
+    if (action.activityKind === 'session') {
+      ['enter', 'stay', 'exit'].forEach((n) => names.add(n));
+    }
+    return [...names];
+  }
+  const name = (action?.animationName || action?.id || '').trim();
+  return name ? [name] : [];
+}
+
+function otherActionsUseSheetAnim(actions, sheetId, animName, excludeId) {
+  return (actions || []).some((a) => {
+    if (a.id === excludeId || a.sheetId !== sheetId) return false;
+    return animationNamesUsedByAction(a).includes(animName);
+  });
+}
+
+function pkgActionDeletable(action, p) {
+  if (!action || !p) return false;
+  if (isObjectCharType(p?.metadata?.characterType)) return true;
+  if (!isHumanCharPackage(p)) return false;
+  if (action.sheetId === 'walk' && (action.id === 'idle' || action.id === 'walk')) return false;
+  return true;
+}
+
+async function removePkgAnimation(actionId) {
   const p = pkg();
-  if (!p || !isObjectCharType(p?.metadata?.characterType)) return;
+  if (!p) return;
   const action = (p.actions || []).find((a) => a.id === actionId);
-  if (!action) return;
-  const animName = (action.animationName || action.id || '').trim();
+  if (!action || !pkgActionDeletable(action, p)) return;
+  const label = action.id || animationNamesUsedByAction(action)[0] || 'animation';
+  if (!confirm(`Delete animation "${label}"?`)) return;
   const sheetId = action.sheetId;
-  const label = action.id || animName;
-  if (!confirm(`Remove animation "${label}" from this appearance?`)) return;
+  const animNames = animationNamesUsedByAction(action);
   const nextActions = (p.actions || []).filter((a) => a.id !== actionId);
   const nextSheets = (p.spriteSheets || []).map((s) => {
     if (s.id !== sheetId) return { ...s };
     const out = { ...s };
     const suppressed = [...(out.suppressedAnimations || [])];
-    if (animName && !suppressed.includes(animName)) suppressed.push(animName);
-    out.suppressedAnimations = suppressed;
     if (out.animations) {
       const anims = { ...out.animations };
-      delete anims[animName];
+      for (const animName of animNames) {
+        if (otherActionsUseSheetAnim(nextActions, sheetId, animName, actionId)) continue;
+        delete anims[animName];
+        if (animName && !suppressed.includes(animName)) suppressed.push(animName);
+      }
       if (Object.keys(anims).length) out.animations = anims;
       else delete out.animations;
     }
+    if (suppressed.length) out.suppressedAnimations = suppressed;
+    else delete out.suppressedAnimations;
     return out;
   });
   try {
     await saveDraft({ actions: nextActions, spriteSheets: nextSheets });
-    toast(`Removed ${label}`);
+    toast(`Deleted ${label}`);
     renderCharDetail();
   } catch (err) {
     toast(String(err.message || err));
   }
+}
+
+async function removeObjectAnimation(actionId) {
+  await removePkgAnimation(actionId);
 }
 
 function pkgActivityTimingClipNames(action) {
@@ -3373,6 +3441,7 @@ function openPkgActionMetaModal(actionId) {
   const animOpts = (sheet ? pkgSheetAnimNames(sheet) : [animName]).map((n) =>
     `<option value="${esc(n)}" ${n === animName ? 'selected' : ''}>${esc(n)}</option>`).join('');
   const isActivity = action.type === 'activity';
+  const canDelete = pkgActionDeletable(action, p);
   const timingFields = buildPkgActionTimingHtml({
     sheet, animName, animSpec, hasOverride, objectMode, isActivity, action,
   });
@@ -3435,7 +3504,7 @@ function openPkgActionMetaModal(actionId) {
     ${standardFields}
     ${activityFields}
     ${timingFields}
-    ${modalFoot(`${objectMode ? '<button type="button" class="btn bad" id="pkgActDelete">Delete</button>' : ''}<button type="button" class="btn" id="pkgActCancel">Cancel</button>`, '<button type="button" class="btn primary" id="pkgActSave">Apply</button>')}
+    ${modalFoot(`${canDelete ? '<button type="button" class="btn bad" id="pkgActDelete">Delete</button>' : ''}<button type="button" class="btn" id="pkgActCancel">Cancel</button>`, '<button type="button" class="btn primary" id="pkgActSave">Apply</button>')}
   </div>`;
 
   const m = mountModal(html, { backdropClose: true, warnDirty: true });
@@ -3475,10 +3544,10 @@ function openPkgActionMetaModal(actionId) {
     else if (names.length) sel.value = names[0];
   });
   $('#pkgActCancel', m.root).onclick = m.tryClose;
-  if (objectMode) {
+  if (canDelete) {
     $('#pkgActDelete', m.root).onclick = async () => {
       m.close();
-      await removeObjectAnimation(actionId);
+      await removePkgAnimation(actionId);
     };
   }
   $('#pkgActSave', m.root).onclick = async () => {
@@ -3590,7 +3659,7 @@ function bindPkgActionInfoButtons(root) {
   (root || document).querySelectorAll('[data-pkg-action-del]').forEach((btn) => {
     btn.onclick = async (e) => {
       e.stopPropagation();
-      await removeObjectAnimation(btn.dataset.pkgActionDel);
+      await removePkgAnimation(btn.dataset.pkgActionDel);
     };
   });
 }
@@ -3662,6 +3731,111 @@ function refreshObjectSheetPreview() {
   if (grid) grid.innerHTML = renderPkgAnimationsHtml(actions);
   hydratePkgVisuals();
   bindPkgActionInfoButtons($('#view'));
+}
+
+function isHumanCharPackage(p) {
+  const t = normalizeCharType(p?.metadata?.characterType);
+  return isNpcCharType(t) || isPlayerCharType(t);
+}
+
+async function appendHumanSheetAnimation(p, sheetId, spec) {
+  const animName = spec.animName;
+  const frames = spec.frames;
+  const frameTimeMs = spec.frameTimeMs;
+  const loop = spec.loop;
+  const movementDriven = spec.movementDriven;
+  const southOnly = spec.southOnly !== false && !movementDriven;
+  const actions = [...(p.actions || [])];
+  if (actions.some((a) => a.id === animName)) {
+    throw new Error(`Action "${animName}" already exists`);
+  }
+  const existing = (p.spriteSheets || []).find((s) => s.id === sheetId);
+  if (existing?.animations?.[animName]) {
+    throw new Error(`Animation "${animName}" already exists on this sheet`);
+  }
+  const nextSheets = (p.spriteSheets || []).map((s) => {
+    if (s.id !== sheetId) return { ...s, animations: { ...(s.animations || {}) } };
+    const anims = { ...(s.animations || {}) };
+    anims[animName] = { frames, frameTimeMs, ...(loop ? {} : { loop: false }) };
+    const suppressed = (s.suppressedAnimations || []).filter((x) => x !== animName);
+    const out = { ...s, animations: anims };
+    if (suppressed.length) out.suppressedAnimations = suppressed;
+    else delete out.suppressedAnimations;
+    return out;
+  });
+  const newAction = {
+    id: animName,
+    type: movementDriven ? 'movement' : 'idle',
+    sheetId,
+    animationName: animName,
+    movementDriven: !!movementDriven,
+    ...(southOnly ? { facingMode: 'south_only' } : {}),
+  };
+  await saveDraft({ spriteSheets: nextSheets, actions: [...actions, newAction] });
+  return animName;
+}
+
+function openPkgSheetAddAnimationModal(sheetId, opts = {}) {
+  const p = pkg();
+  const sheet = (p?.spriteSheets || []).find((s) => s.id === sheetId);
+  if (!p || !sheet?.assetId) {
+    toast('Add a sprite sheet first');
+    return;
+  }
+  const html = `<div class="modal card">
+    ${modalHead('New animation')}
+    <p class="tiny">Adds a separate clip on <b>${esc(sheet.name || sheet.id)}</b> — same PNG, new action. Existing animations are unchanged.</p>
+    <div class="field"><label>Name</label>
+      <input class="input" id="pkgSheetAnimName" placeholder="wave"></div>
+    <div class="grid cols2">
+      <div class="field"><label>Frame columns</label>
+        <input class="input" id="pkgSheetAnimFrames" value="0, 1, 2, 3" placeholder="0, 1, 2, 3">
+        <p class="tiny">Column indices on each direction row (south = row 0).</p></div>
+      <div class="field"><label>ms / frame</label>
+        <input class="input" id="pkgSheetAnimMs" type="number" min="0" value="120"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="pkgSheetAnimLoop" checked> Loop</label>
+    <label class="check"><input type="checkbox" id="pkgSheetAnimSouthOnly" checked> South row only (single-facing strip)</label>
+    <label class="check"><input type="checkbox" id="pkgSheetAnimMovement"> Movement (4-direction walk cycle)</label>
+    ${modalFoot('<button type="button" class="btn" id="pkgSheetAnimCancel">Cancel</button>', '<button type="button" class="btn primary" id="pkgSheetAnimSave">Create animation</button>')}
+  </div>`;
+  const m = mountModal(html, { backdropClose: true });
+  const southOnlyEl = $('#pkgSheetAnimSouthOnly', m.root);
+  $('#pkgSheetAnimMovement', m.root)?.addEventListener('change', (e) => {
+    if (e.target.checked && southOnlyEl) southOnlyEl.checked = false;
+  });
+  $('#pkgSheetAnimCancel', m.root).onclick = () => m.close();
+  $('#pkgSheetAnimSave', m.root).onclick = async () => {
+    const animName = ($('#pkgSheetAnimName', m.root)?.value || '').trim().toLowerCase().replace(/\s+/g, '_');
+    if (!animName) {
+      toast('Enter an animation name');
+      return;
+    }
+    if (!/^[a-z][a-z0-9_]*$/.test(animName)) {
+      toast('Name must start with a letter and use only a-z, 0-9, _');
+      return;
+    }
+    const frames = parseFrameList($('#pkgSheetAnimFrames', m.root)?.value || '0');
+    if (!frames.length) {
+      toast('Enter at least one frame column');
+      return;
+    }
+    const frameTimeMs = Math.max(0, Number($('#pkgSheetAnimMs', m.root)?.value) || 0);
+    const loop = !!$('#pkgSheetAnimLoop', m.root)?.checked;
+    const southOnly = !!$('#pkgSheetAnimSouthOnly', m.root)?.checked;
+    const movementDriven = !!$('#pkgSheetAnimMovement', m.root)?.checked;
+    try {
+      const label = await appendHumanSheetAnimation(p, sheetId, {
+        animName, frames, frameTimeMs, loop, movementDriven, southOnly,
+      });
+      toast(`Added ${label}`);
+      m.close();
+      opts.onAdded?.();
+      renderCharDetail();
+    } catch (err) {
+      toast(String(err.message || err));
+    }
+  };
 }
 
 function openObjectAddAnimationModal() {
@@ -3754,10 +3928,14 @@ function pkgSpriteSlot(label, hasSheet) {
 function pkgDirectionAnimCard(action, dirKey, dirTitle) {
   const animKey = action.animationName || action.id;
   const name = pkgActionDisplayName(action);
+  const singleDir = pkgAnimDirectionsForAction(action).length === 1;
+  const title = singleDir ? name : `${name} · ${dirTitle}`;
+  const kind = action.movementDriven ? 'movement' : (isPkgLocomotionStance(action) ? 'idle' : 'clip');
+  const subtitle = singleDir ? kind : `${dirTitle} · ${kind}`;
   return `<div class="card sidecard animation-card pkg-dir-anim" data-pkg-anim="${esc(action.id)}" data-anim-name="${esc(animKey)}" data-dir="${esc(dirKey)}">
     <canvas class="anim-card-canvas checker" width="96" height="96"></canvas>
-    <h3 class="truncate">${esc(name)} · ${esc(dirTitle)}</h3>
-    <p class="tiny">${esc(dirTitle)} · ${action.movementDriven ? 'movement' : 'idle'}</p>
+    <h3 class="truncate">${esc(title)}</h3>
+    <p class="tiny">${esc(subtitle)}</p>
   </div>`;
 }
 
@@ -4216,6 +4394,12 @@ function pkgAnimDirectionsForAction(action) {
   if (anim === 'sleep' || aid === 'sleep' || aid.startsWith('sleep_')) {
     return [['south', 'Down']];
   }
+  if (action?.facingMode === 'south_only') {
+    return [['south', 'Down']];
+  }
+  if (action?.sheetId && action.sheetId !== 'walk' && !action?.movementDriven && action?.type !== 'activity') {
+    return [['south', 'Down']];
+  }
   return PKG_DIR_DISPLAY;
 }
 
@@ -4486,12 +4670,21 @@ function playPkgAnimOnCanvas(canvas, sheet, profileName, animName, direction = '
   return () => { stopped = true; };
 }
 
-/** Pokémon idle uses the same looping clip as walk/swim; NPC idle holds frame 0. */
+/** Pokémon idle uses the same looping clip as walk/swim; walk-sheet idle holds frame 0. */
 function pkgPreviewHoldFrame(action, p) {
   if (isPokemonCharType(p?.metadata?.characterType)) return false;
   if (isObjectCharType(p?.metadata?.characterType)) return false;
   if (action?.type === 'activity') return false;
-  return !action?.movementDriven;
+  if (action?.movementDriven) return false;
+  const sheet = resolveActionPreviewSheet(action, p);
+  const profileName = p?.baseProfile || 'character';
+  const animName = pkgPreviewAnimName(action, sheet, profileName);
+  const prof = sheet ? pkgMergedProf(sheet, profileName) : null;
+  const spec = sheet && prof ? pkgAnimSpec(sheet, prof, animName) : null;
+  const frames = spec?.frames || [0];
+  if (frames.length > 1) return false;
+  const animId = (action?.animationName || action?.id || '').toLowerCase();
+  return animId === 'idle' && action?.sheetId === 'walk';
 }
 
 function hydratePkgVisuals() {
