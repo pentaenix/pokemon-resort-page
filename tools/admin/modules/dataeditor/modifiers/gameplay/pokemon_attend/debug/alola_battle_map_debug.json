@@ -43,6 +43,12 @@
     },
     "activeFloor": {
       "label": "Active Alola map",
+      "widget": "select",
+      "optionsFromFile": {
+        "file": "gameplay/pokemon_attend/environments/alola_battle_maps.json",
+        "path": "floors",
+        "keys": true
+      },
       "group": "scene",
       "order": 3
     },

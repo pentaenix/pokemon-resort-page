@@ -10,6 +10,14 @@
       "gridX": 0,
       "gridY": 0,
       "linked": true
+    },
+    {
+      "id": "0_south",
+      "name": "0 south",
+      "file": "0_south.owmap",
+      "gridX": 0,
+      "gridY": 1,
+      "linked": true
     }
   ],
   "tilePackages": [
@@ -22,7 +30,7 @@
   "defaultTilePackageId": "map_tiles",
   "pathSets": [],
   "editor": {
-    "activeMapId": "0",
+    "activeMapId": "0_south",
     "viewMode": "2d",
     "zoom": 1,
     "overlays": {

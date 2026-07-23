@@ -2,6 +2,48 @@ import { mountRtpksTilePreview } from './map-3d-view.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 
+const SURFACE_TAG_OPTIONS = [
+  ['surface.rock', 'Rock / mountain'],
+  ['surface.grass', 'Grass'],
+  ['surface.sand', 'Sand'],
+  ['surface.beach', 'Beach / shoreline'],
+  ['surface.water', 'Water'],
+  ['surface.dry_grass', 'Dry grass'],
+  ['surface.dirt', 'Dirt'],
+  ['surface.stone', 'Stone'],
+  ['surface.wood', 'Wood'],
+  ['surface.snow', 'Snow'],
+  ['surface.ice', 'Ice'],
+  ['surface.mud', 'Mud / marsh'],
+];
+
+function normalizeTag(tag) {
+  return String(tag || '').trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function addTileTag(tile, rawTag, { replaceSurface = false } = {}) {
+  const tag = normalizeTag(rawTag);
+  if (!tag) return false;
+  const tags = Array.isArray(tile.tags) ? tile.tags.map(normalizeTag).filter(Boolean) : [];
+  const next = replaceSurface ? tags.filter((item) => !item.startsWith('surface.')) : tags;
+  if (!next.includes(tag)) next.push(tag);
+  tile.tags = next;
+  return true;
+}
+
+function tileTagsEditor(tile) {
+  const currentSurface = tile.tags.find((tag) => tag.startsWith('surface.')) || '';
+  return `<div class="wide tpe-tags-field">
+    <span class="tpe-field-label">Gameplay tags</span>
+    <div class="tpe-tag-chips">${tile.tags.length ? tile.tags.map((tag) => `<span class="tpe-tag-chip">${esc(tag)}<button type="button" data-tpe-remove-tag="${esc(tag)}" aria-label="Remove ${esc(tag)}">×</button></span>`).join('') : '<span class="tpe-tag-empty">No tags yet</span>'}</div>
+    <div class="tpe-tag-controls">
+      <select data-tpe-surface-tag aria-label="Surface type"><option value="">Choose surface…</option>${SURFACE_TAG_OPTIONS.map(([tag, label]) => `<option value="${tag}" ${currentSurface === tag ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select>
+      <div class="tpe-custom-tag"><input autocomplete="off" data-tpe-custom-tag placeholder="custom tag, e.g. effect.flowers"><button type="button" class="btn tiny" data-tpe-add-custom-tag aria-label="Add custom tag">＋</button></div>
+    </div>
+    <small>Surface is the tile type used by gameplay. Extra tags can describe traversal, effects, audio, or custom rules.</small>
+  </div>`;
+}
+
 async function api(url, options) {
   const response = await fetch(url, options);
   const payload = await response.json().catch(() => ({}));
@@ -69,7 +111,7 @@ function tilePanel(state) {
       <div class="tpe-form-grid">
         <label>Name<input data-tpe-tile-name value="${esc(tile.name)}"></label>
         <label>Palette tab<select data-tpe-tile-tab>${state.document.tabs.map((tab) => `<option value="${esc(tab.id)}" ${tab.id === selectedTab ? 'selected' : ''}>${esc(tab.name)}</option>`).join('')}</select></label>
-        <label class="wide">Gameplay tags<input autocomplete="off" data-tpe-tile-tags value="${esc(tile.tags.join(', '))}" placeholder="surface.water, audio.footstep.splash"></label>
+        ${tileTagsEditor(tile)}
         <label>Animation behavior<select data-tpe-animation-type><option value="none" ${tile.animation.type === 'none' ? 'selected' : ''}>None</option><option value="frames" ${tile.animation.type === 'frames' ? 'selected' : ''} ${tile.animation.type !== 'frames' ? 'disabled' : ''}>Frame animation</option><option value="uvScroll" ${tile.animation.type === 'uvScroll' ? 'selected' : ''}>UV scroll metadata</option><option value="sway" ${tile.animation.type === 'sway' ? 'selected' : ''}>Foliage sway metadata</option></select></label>
         <label>Frame time (ms)<input type="number" min="16" data-tpe-frame-ms value="${esc(tile.animation.frameDurationMs || 180)}" ${tile.animation.type === 'frames' ? '' : 'disabled'}></label>
         <label>Automatic collision<select data-tpe-collision-mode><option value="none" ${tile.collision.mode === 'none' ? 'selected' : ''}>None</option><option value="footprint" ${tile.collision.mode === 'footprint' ? 'selected' : ''}>Entire footprint</option><option value="mask" ${tile.collision.mode === 'mask' ? 'selected' : ''}>Custom mask</option></select></label>
@@ -143,7 +185,6 @@ function syncInspector(root, state) {
   const tile = state.document.tiles.find((item) => Number(item.resortTileId) === Number(state.selectedTileId));
   if (!tile) return;
   tile.name = root.querySelector('[data-tpe-tile-name]')?.value.trim() || tile.name;
-  tile.tags = (root.querySelector('[data-tpe-tile-tags]')?.value || '').split(',').map((tag) => tag.trim()).filter(Boolean);
   tile.animation = { ...tile.animation, type: root.querySelector('[data-tpe-animation-type]')?.value || 'none', frameDurationMs: Number(root.querySelector('[data-tpe-frame-ms]')?.value) || 180 };
   tile.collision = { ...tile.collision, mode: root.querySelector('[data-tpe-collision-mode]')?.value || 'none', autoApply: root.querySelector('[data-tpe-collision-auto]')?.checked === true, clearOnErase: root.querySelector('[data-tpe-collision-clear]')?.checked === true };
   const nextTab = root.querySelector('[data-tpe-tile-tab]')?.value;
@@ -216,6 +257,27 @@ export async function openTilePackEditor(editor, { onSaved, log } = {}) {
     overlay.querySelectorAll('[data-tpe-view]').forEach((button) => button.onclick = () => { if (state.view === 'tiles') { try { syncInspector(overlay, state); } catch (error) { return message(error.message, 'error'); } } state.view = button.dataset.tpeView; render(); });
     overlay.querySelectorAll('[data-tpe-select-tile]').forEach((button) => button.onclick = () => { try { syncInspector(overlay, state); state.selectedTileId = Number(button.dataset.tpeSelectTile); state.previewing = false; render(); } catch (error) { message(error.message, 'error'); } });
     overlay.querySelector('[data-tpe-animation-play]')?.addEventListener('click', () => { state.previewing = !state.previewing; render(); });
+    overlay.querySelector('[data-tpe-surface-tag]')?.addEventListener('change', (event) => {
+      try { syncInspector(overlay, state); } catch (error) { return message(error.message, 'error'); }
+      const tile = normalizeTile(state.document.tiles.find((item) => Number(item.resortTileId) === Number(state.selectedTileId)));
+      if (event.target.value && addTileTag(tile, event.target.value, { replaceSurface: true })) render();
+    });
+    overlay.querySelectorAll('[data-tpe-remove-tag]').forEach((button) => button.addEventListener('click', () => {
+      try { syncInspector(overlay, state); } catch (error) { return message(error.message, 'error'); }
+      const tile = normalizeTile(state.document.tiles.find((item) => Number(item.resortTileId) === Number(state.selectedTileId)));
+      tile.tags = tile.tags.filter((tag) => tag !== button.dataset.tpeRemoveTag);
+      render();
+    }));
+    const addCustomTag = () => {
+      try { syncInspector(overlay, state); } catch (error) { return message(error.message, 'error'); }
+      const input = overlay.querySelector('[data-tpe-custom-tag]');
+      const tile = normalizeTile(state.document.tiles.find((item) => Number(item.resortTileId) === Number(state.selectedTileId)));
+      if (input && addTileTag(tile, input.value)) render();
+    };
+    overlay.querySelector('[data-tpe-add-custom-tag]')?.addEventListener('click', addCustomTag);
+    overlay.querySelector('[data-tpe-custom-tag]')?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); addCustomTag(); }
+    });
     const search = overlay.querySelector('[data-tpe-tile-search]'); if (search) search.oninput = () => { state.search = search.value; render(); };
     overlay.querySelector('[data-tpe-collision-mode]')?.addEventListener('change', (event) => overlay.querySelector('[data-tpe-mask-wrap]')?.classList.toggle('hidden', event.target.value !== 'mask'));
     overlay.querySelectorAll('[data-tpe-mask]').forEach((button) => button.onclick = () => { const tile = normalizeTile(state.document.tiles.find((item) => item.resortTileId === state.selectedTileId)); const [x,y] = button.dataset.tpeMask.split(',').map(Number); tile.collision.mask[y] ||= []; tile.collision.mask[y][x] = !tile.collision.mask[y][x]; button.classList.toggle('active', tile.collision.mask[y][x]); });

@@ -52,6 +52,12 @@
       "widget": "path",
       "group": "files",
       "order": 4
+    },
+    "files.routing": {
+      "label": "Scene routing file",
+      "widget": "path",
+      "group": "files",
+      "order": 5
     }
   }
 }

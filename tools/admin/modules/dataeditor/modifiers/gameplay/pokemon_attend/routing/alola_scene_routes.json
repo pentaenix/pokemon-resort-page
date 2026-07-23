@@ -1,0 +1,29 @@
+{
+  "title": "Attend Routing: Alola Scenes",
+  "description": "Chooses an Attend environment from event, Pokemon, tile tag, and weighted surface-pool rules.",
+  "matches": ["gameplay/pokemon_attend/routing/*.json"],
+  "tags": ["attend", "routing", "pokemon", "terrain"],
+  "groups": [
+    {"id": "fallback", "label": "Fallback", "order": 1},
+    {"id": "events", "label": "Event routes", "order": 10},
+    {"id": "pokemon", "label": "Pokemon routes", "order": 20},
+    {"id": "groups", "label": "Pokemon groups", "order": 30},
+    {"id": "tiles", "label": "Tile tag routes", "order": 40},
+    {"id": "pools", "label": "Surface pools", "order": 50},
+    {"id": "manual", "label": "Manual-only scenes", "order": 60}
+  ],
+  "fields": {
+    "fallbackScene": {"label": "Fallback scene", "group": "fallback", "order": 1},
+    "manualOnlyScenes": {"label": "Manual/debug scenes", "group": "manual", "order": 1}
+  },
+  "patterns": {
+    "eventRoutes.*": {"group": "events"},
+    "pokemonRoutes.*": {"group": "pokemon"},
+    "pokemonGroups.*.*": {"group": "groups"},
+    "pokemonGroups.*.species.*": {"group": "groups"},
+    "tileTagRoutes.*": {"group": "tiles"},
+    "surfacePools.*.*": {"group": "pools"},
+    "surfacePools.*.*.*": {"group": "pools"},
+    "manualOnlyScenes.*": {"group": "manual"}
+  }
+}

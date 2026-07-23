@@ -1,5 +1,5 @@
 {
-  "computedAt": "2026-07-18T02:54:32.041Z",
+  "computedAt": "2026-07-21T18:41:35.471Z",
   "articles": {
     "writing-docs": {
       "status": "stale",
@@ -53,7 +53,7 @@
     "charbin-schema": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-12",
-      "newestCodeChange": "2026-07-12",
+      "newestCodeChange": "2026-07-20",
       "apps": [
         "pokemon-resort",
         "spmk"
@@ -69,7 +69,7 @@
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/JsonOverworldLoader.cpp",
           "exists": true,
-          "modifiedAt": "2026-07-12"
+          "modifiedAt": "2026-07-20"
         },
         {
           "repo": "spmk",
@@ -81,7 +81,7 @@
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/characters/SpriteSheetAnimator.cpp",
           "exists": true,
-          "modifiedAt": "2026-07-09"
+          "modifiedAt": "2026-07-20"
         },
         {
           "repo": "spmk",
@@ -94,7 +94,7 @@
     "owmap-format": {
       "status": "stale",
       "articleUpdatedAt": "2026-06-11",
-      "newestCodeChange": "2026-07-15",
+      "newestCodeChange": "2026-07-20",
       "apps": [
         "pokemon-resort",
         "pokemon-resort-page"
@@ -104,13 +104,13 @@
           "repo": "pokemon-resort-page",
           "path": "tools/admin/lib/owmap-format.mjs",
           "exists": true,
-          "modifiedAt": "2026-07-15"
+          "modifiedAt": "2026-07-18"
         },
         {
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/OwmapOverworldLoader.cpp",
           "exists": true,
-          "modifiedAt": "2026-05-31"
+          "modifiedAt": "2026-07-20"
         },
         {
           "repo": "pokemon-resort-page",
@@ -122,14 +122,14 @@
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/SceneMetadataParser.cpp",
           "exists": true,
-          "modifiedAt": "2026-07-05"
+          "modifiedAt": "2026-07-19"
         }
       ]
     },
     "rtpks-format": {
-      "status": "current",
+      "status": "stale",
       "articleUpdatedAt": "2026-07-17",
-      "newestCodeChange": "2026-07-13",
+      "newestCodeChange": "2026-07-19",
       "apps": [
         "pokemon-ds-map-studio",
         "pokemon-resort",
@@ -146,7 +146,7 @@
           "repo": "pokemon-resort",
           "path": "src/gameplay/world3d/data/RtpksTilePackageLoader.cpp",
           "exists": true,
-          "modifiedAt": "2026-07-13"
+          "modifiedAt": "2026-07-19"
         }
       ]
     },
@@ -245,7 +245,7 @@
     "overworld-interactions": {
       "status": "stale",
       "articleUpdatedAt": "2026-07-10",
-      "newestCodeChange": "2026-07-15",
+      "newestCodeChange": "2026-07-20",
       "apps": [
         "pokemon-resort",
         "pokemon-resort-page"
@@ -267,7 +267,7 @@
           "repo": "pokemon-resort",
           "path": "assets/characters/CHARBIN_SCHEMA.md",
           "exists": true,
-          "modifiedAt": "2026-07-15"
+          "modifiedAt": "2026-07-20"
         }
       ]
     },
@@ -290,7 +290,7 @@
           "repo": "pokemon-resort-page",
           "path": "tools/admin/lib/texture-alpha.mjs",
           "exists": true,
-          "modifiedAt": "2026-06-22"
+          "modifiedAt": "2026-07-18"
         },
         {
           "repo": "pokemon-resort-page",

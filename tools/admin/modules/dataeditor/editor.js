@@ -770,6 +770,48 @@ function columnLayoutHtml(meta, fieldsByPath, current, esc) {
   return `<div class="data-column-matrix" style="--matrix-cols:${columns.length}"><div class="data-column-matrix-table">${header}${body}</div></div>`;
 }
 
+function objectCardsHtml(meta, fields, current, esc, expandCards = false) {
+  const layout = meta?.objectCards;
+  const rootPath = String(layout?.rootPath || '').replace(/\.$/, '');
+  if (!rootPath) return { html: '', consumed: new Set() };
+  const rootPaths = [rootPath, ...(Array.isArray(layout.additionalRoots) ? layout.additionalRoots : [])]
+    .map((value) => String(value || '').replace(/\.$/, ''))
+    .filter(Boolean);
+  const cards = new Map();
+  const consumed = new Set();
+  for (const field of fields) {
+    const matchedRoot = rootPaths.find((root) => field.path.startsWith(`${root}.`));
+    if (!matchedRoot) continue;
+    const remainder = field.path.slice(matchedRoot.length + 1);
+    const split = remainder.indexOf('.');
+    if (split <= 0) continue;
+    const id = remainder.slice(0, split);
+    if (!cards.has(id)) cards.set(id, []);
+    cards.get(id).push(field);
+    consumed.add(field.path);
+  }
+  if (!cards.size) return { html: '', consumed };
+
+  const labelKey = String(layout.labelKey || 'label');
+  const configuredOrder = Array.isArray(layout.order) ? layout.order.map(String) : [];
+  const orderIndex = new Map(configuredOrder.map((id, index) => [id, index]));
+  const entries = [...cards.entries()].sort(([a], [b]) => {
+    const ai = orderIndex.has(a) ? orderIndex.get(a) : Number.MAX_SAFE_INTEGER;
+    const bi = orderIndex.has(b) ? orderIndex.get(b) : Number.MAX_SAFE_INTEGER;
+    return ai - bi || a.localeCompare(b);
+  });
+  const cardHtml = entries.map(([id, cardFields]) => {
+    cardFields.sort((a, b) => (a.mod.order ?? 1000) - (b.mod.order ?? 1000) || a.path.localeCompare(b.path));
+    const labelTemplate = String(layout.labelPath || `${rootPath}.{id}.${labelKey}`);
+    const labelPath = labelTemplate.replaceAll('{id}', id);
+    const labelField = fields.find((field) => field.path === labelPath);
+    const title = String(labelField?.value || getAtPath(current?.data, labelPath, '') || prettyLabel(id));
+    const open = expandCards || layout.expandedDefault ? ' open' : '';
+    return `<details class="data-object-card" data-object-root="${esc(rootPath)}" data-object-id="${esc(id)}"${open}><summary><span><strong>${esc(title)}</strong><code>${esc(id)}</code></span><b>${cardFields.length}</b></summary><div class="data-field-grid">${cardFields.map((field) => fieldHtml(field, current, esc)).join('')}</div></details>`;
+  }).join('');
+  return { html: `<div class="data-object-card-grid">${cardHtml}</div>`, consumed };
+}
+
 function formHtml(de, esc) {
   const current = de.current;
   if (!current) return '';
@@ -808,10 +850,11 @@ function formHtml(de, esc) {
     const open = q || !collapsed ? ' open' : '';
     const matrixPaths = columnLayoutPaths(meta);
     const matrixFieldsByPath = new Map(fields.filter((f) => matrixPaths.has(f.path)).map((f) => [f.path, f]));
-    const gridFields = fields.filter((f) => !matrixPaths.has(f.path));
+    const objectCards = objectCardsHtml(meta, fields, current, esc, Boolean(q));
+    const gridFields = fields.filter((f) => !matrixPaths.has(f.path) && !objectCards.consumed.has(f.path));
     const matrixHtml = matrixPaths.size ? columnLayoutHtml(meta, matrixFieldsByPath, current, esc) : '';
     const gridHtml = gridFields.length ? `<div class="data-field-grid">${gridFields.map((f) => fieldHtml(f, current, esc)).join('')}</div>` : '';
-    const sectionBody = matrixHtml || gridHtml ? `${matrixHtml}${gridHtml}` : '<p class="hint">No visible fields in this section.</p>';
+    const sectionBody = matrixHtml || gridHtml || objectCards.html ? `${matrixHtml}${gridHtml}${objectCards.html}` : '<p class="hint">No visible fields in this section.</p>';
     const sectionHtml = `<details class="data-section"${open}><summary><span><strong>${esc(meta.label || meta.id)}</strong>${meta.description ? `<small>${esc(meta.description)}</small>` : ''}</span><b>${fields.length}</b></summary>${sectionBody}</details>`;
     return sectionHtml + utilityBlocksAfterGroupHtml(current, meta.id, esc);
   }).join('');

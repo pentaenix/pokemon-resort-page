@@ -1,6 +1,6 @@
 {
   "title": "Attend Environment: Alola Battle Maps",
-  "description": "Ripped Alola battle map models, large-map extensions, weather material filters, and sky/light presets.",
+  "description": "Lossless RAE Alola environment GLBZ catalog with source-authored material motion, named time/weather states, and surface anchors.",
   "matches": [
     "gameplay/pokemon_attend/environments/*.json"
   ],
@@ -18,7 +18,13 @@
     {
       "id": "floor",
       "label": "Alola map catalog",
-      "order": 10
+      "description": "Open a map card to edit its asset, default state, Pokémon routing, and base placement.",
+      "order": 10,
+      "objectCards": {
+        "rootPath": "floors",
+        "labelKey": "label",
+        "additionalRoots": ["mapPlacementOverrides"]
+      }
     },
     {
       "id": "floorPlacement",
@@ -65,7 +71,12 @@
     {
       "id": "sky",
       "label": "Sky presets",
-      "order": 40
+      "description": "Named sky and lighting states used by the time selector.",
+      "order": 40,
+      "objectCards": {
+        "rootPath": "skyPresets",
+        "labelKey": "label"
+      }
     },
     {
       "id": "sceneVisuals",
@@ -82,6 +93,11 @@
   "fields": {
     "activeFloor": {
       "label": "Active Alola map",
+      "widget": "select",
+      "optionsFrom": {
+        "path": "floors",
+        "keys": true
+      },
       "group": "active",
       "order": 1
     },
@@ -128,17 +144,131 @@
     }
   },
   "patterns": {
-    "floorDefaults.modelPlacement.*": {
-      "group": "floorPlacement"
+    "floorDefaults.*": {
+      "group": "weather",
+      "advanced": true
     },
-    "floors.*": {
-      "group": "floor"
+    "floorDefaults.modelPlacement.*": {
+      "group": "floorPlacement",
+      "advanced": false
     },
     "floors.*.*": {
       "group": "floor"
     },
+    "floors.*.id": {
+      "label": "Runtime map ID",
+      "description": "Must continue matching the map's catalog key and routing ID.",
+      "group": "floor",
+      "order": 1
+    },
+    "floors.*.label": {
+      "label": "Display name",
+      "group": "floor",
+      "order": 2
+    },
+    "floors.*.model": {
+      "label": "Environment GLBZ",
+      "description": "Lossless RAE environment package used by Attend.",
+      "widget": "asset",
+      "group": "floor",
+      "order": 3
+    },
+    "floors.*.timeOfDay": {
+      "label": "Default time",
+      "widget": "select",
+      "options": ["dawn", "day", "sunset", "night"],
+      "group": "floor",
+      "order": 5
+    },
+    "floors.*.weather": {
+      "label": "Default weather",
+      "widget": "select",
+      "options": ["clear", "cloudy", "rain", "snow"],
+      "group": "floor",
+      "order": 6
+    },
+    "floors.*.appearsForPokemon": {
+      "label": "Appears for Pokémon",
+      "description": "One normalized species ID per line. These Pokémon automatically route to this environment unless an event overrides it.",
+      "widget": "list",
+      "rows": 3,
+      "placeholder": "ho-oh\ncelebi",
+      "group": "floor",
+      "order": 4
+    },
+    "floors.*.modelPlacement.x": {
+      "label": "Base X",
+      "widget": "number",
+      "step": 0.01,
+      "group": "floor",
+      "order": 10
+    },
+    "floors.*.modelPlacement.y": {
+      "label": "Base height",
+      "widget": "number",
+      "step": 0.001,
+      "group": "floor",
+      "order": 11
+    },
+    "floors.*.modelPlacement.z": {
+      "label": "Base depth",
+      "widget": "number",
+      "step": 0.01,
+      "group": "floor",
+      "order": 12
+    },
+    "floors.*.modelPlacement.yawDegrees": {
+      "label": "Base rotation",
+      "widget": "number",
+      "step": 1,
+      "unit": " deg",
+      "group": "floor",
+      "order": 13
+    },
+    "floors.*.modelPlacement.scale": {
+      "label": "Base scale",
+      "widget": "number",
+      "step": 0.001,
+      "group": "floor",
+      "order": 14
+    },
     "floors.*.extensions.*": {
-      "group": "floor"
+      "group": "floor",
+      "advanced": true,
+      "order": 80
+    },
+    "mapPlacementOverrides.*.position.x": {
+      "label": "X offset",
+      "description": "Added after this map's base/exported placement.",
+      "group": "floor",
+      "order": 30,
+      "step": 0.01
+    },
+    "mapPlacementOverrides.*.position.y": {
+      "label": "Height offset",
+      "group": "floor",
+      "order": 31,
+      "step": 0.001
+    },
+    "mapPlacementOverrides.*.position.z": {
+      "label": "Depth offset",
+      "group": "floor",
+      "order": 32,
+      "step": 0.01
+    },
+    "mapPlacementOverrides.*.rotation.yawDegrees": {
+      "label": "Rotation offset",
+      "group": "floor",
+      "order": 33,
+      "step": 1,
+      "unit": " deg"
+    },
+    "mapPlacementOverrides.*.scale": {
+      "label": "Scale offset",
+      "description": "Added to the base uniform scale. Zero keeps the exported/default scale.",
+      "group": "floor",
+      "order": 34,
+      "step": 0.001
     },
     "floorDefaults.weather*": {
       "group": "weather",
@@ -157,17 +287,44 @@
     "background.*": {
       "group": "sceneVisuals"
     },
-    "skyPresetOrder.*": {
+    "skyPresetOrder": {
+      "label": "Sky cycle order",
+      "description": "One sky preset ID per line.",
+      "widget": "list",
+      "group": "sky",
+      "order": 1
+    },
+    "skyPresets.*.*": {
       "group": "sky"
+    },
+    "skyPresets.*.id": {
+      "label": "Preset ID",
+      "group": "sky",
+      "order": 1
     },
     "skyPresets.*.label": {
-      "group": "sky"
+      "label": "Display name",
+      "group": "sky",
+      "order": 2
     },
-    "skyPresets.*.gradientColors.*.*": {
-      "group": "sky"
+    "skyPresets.*.edgeDarkening": {
+      "label": "Edge darkening",
+      "widget": "number",
+      "step": 0.01,
+      "group": "sky",
+      "order": 3
+    },
+    "skyPresets.*.gradientColors": {
+      "label": "Gradient stops",
+      "description": "Ordered sky gradient stop objects.",
+      "widget": "json",
+      "rows": 8,
+      "group": "sky",
+      "order": 10
     },
     "skyPresets.*.lighting.*": {
-      "group": "sky"
+      "group": "sky",
+      "order": 20
     },
     "skyDefaults.*": {
       "group": "skyAdvanced",

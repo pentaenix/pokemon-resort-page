@@ -176,6 +176,25 @@ Groups may opt into being collapsed when the editor opens:
 
 The section still opens automatically while the user searches. Use this for rare/debug-heavy controls such as manual camera fallback, clipping, raw button styling, or exporter dictionaries.
 
+## Object-card groups
+
+Large object catalogs can render one collapsible card per direct child instead of flattening every field into a single grid. Set `objectCards.rootPath` on the group. `labelKey` names a field inside each catalog item, while `labelPath` can reference another object using `{id}`.
+
+```json
+{
+  "id": "maps",
+  "label": "Maps",
+  "objectCards": {
+    "rootPath": "floors",
+    "labelKey": "label"
+  }
+}
+```
+
+Cards remain collapsed initially and expand automatically during field search. Use `expandedDefault: true` only for small catalogs. An optional `order` array controls card order; otherwise cards sort by id.
+
+Use `additionalRoots` when related objects share the same child IDs and belong in the same card. For example, `additionalRoots: ["mapPlacementOverrides"]` places each map's override fields beside its catalog fields.
+
 Tools still live in the `utilities/` folder for backwards compatibility with older patches, but the UI should call them **inline tools**.
 
 Example:
