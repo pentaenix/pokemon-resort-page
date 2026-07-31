@@ -103,6 +103,7 @@ function tilePanel(state) {
   const matches = state.document.tiles.filter((item) => !state.search || `${item.name} ${item.key} ${item.resortTileId}`.toLowerCase().includes(state.search.toLowerCase()));
   const visibleTiles = matches.slice(0, 200);
   const animated = tile.animation?.type !== 'none';
+  const doorTile = tile.properties?.['interaction.kind'] === 'door' || tile.tags.includes('interaction.door');
   return `<section class="tpe-tile-layout">
     <aside class="tpe-tile-list"><input data-tpe-tile-search placeholder="Search tiles" value="${esc(state.search)}"><small>${matches.length > visibleTiles.length ? `Showing ${visibleTiles.length} of ${matches.length}. Search to narrow the list.` : `${matches.length} tiles`}</small><div>${visibleTiles.map((item) => `<button class="${item.resortTileId === tile.resortTileId ? 'active' : ''}" data-tpe-select-tile="${item.resortTileId}"><img src="/api/tile-packages/preview?file=${encodeURIComponent(state.fileName)}&tileId=${item.resortTileId}&v=${state.previewVersion}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><strong>${esc(item.name || item.key)}</strong><span>#${item.resortTileId}</span></button>`).join('')}</div></aside>
     <div class="tpe-panel tpe-inspector">
@@ -117,6 +118,11 @@ function tilePanel(state) {
         <label>Automatic collision<select data-tpe-collision-mode><option value="none" ${tile.collision.mode === 'none' ? 'selected' : ''}>None</option><option value="footprint" ${tile.collision.mode === 'footprint' ? 'selected' : ''}>Entire footprint</option><option value="mask" ${tile.collision.mode === 'mask' ? 'selected' : ''}>Custom mask</option></select></label>
         <label class="tpe-check"><input type="checkbox" data-tpe-collision-auto ${tile.collision.autoApply ? 'checked' : ''}> Apply when painting</label>
         <label class="tpe-check"><input type="checkbox" data-tpe-collision-clear ${tile.collision.clearOnErase ? 'checked' : ''}> Clear when erasing</label>
+        <label class="tpe-check wide"><input type="checkbox" data-tpe-door ${doorTile ? 'checked' : ''}> Triggerable door tile</label>
+        <label>Local front<select data-tpe-door-front ${doorTile ? '' : 'disabled'}>${['north','east','south','west'].map((direction) => `<option value="${direction}" ${tile.properties?.['door.front'] === direction ? 'selected' : ''}>${direction}</option>`).join('')}</select></label>
+        <label>Open clip<input data-tpe-door-open value="${esc(tile.properties?.['door.animation.open'] || '')}" ${doorTile ? '' : 'disabled'}></label>
+        <label>Close behavior<select data-tpe-door-close ${doorTile ? '' : 'disabled'}><option value="reverse_open" ${tile.properties?.['door.animation.close'] !== 'named_clip' ? 'selected' : ''}>Reverse opening</option><option value="named_clip" ${tile.properties?.['door.animation.close'] === 'named_clip' ? 'selected' : ''}>Named close clip</option></select></label>
+        <label>Close clip<input data-tpe-door-close-clip value="${esc(tile.properties?.['door.animation.closeClip'] || '')}" ${doorTile && tile.properties?.['door.animation.close'] === 'named_clip' ? '' : 'disabled'}></label>
       </div>
       <div data-tpe-mask-wrap class="${tile.collision.mode === 'mask' ? '' : 'hidden'}"><strong>Collision mask</strong>${collisionMask(tile)}</div>
       <details><summary>Typed gameplay properties</summary><textarea data-tpe-properties rows="6" spellcheck="false">${esc(JSON.stringify(tile.properties, null, 2))}</textarea></details>
@@ -191,6 +197,19 @@ function syncInspector(root, state) {
   if (nextTab) { for (const tab of state.document.tabs) tab.tileIds = tab.tileIds.filter((id) => id !== tile.resortTileId); state.document.tabs.find((tab) => tab.id === nextTab)?.tileIds.push(tile.resortTileId); }
   const props = root.querySelector('[data-tpe-properties]')?.value;
   if (props != null) tile.properties = JSON.parse(props || '{}');
+  const doorEnabled = root.querySelector('[data-tpe-door]')?.checked === true;
+  tile.tags = (tile.tags || []).filter((tag) => tag !== 'interaction.door');
+  if (doorEnabled) {
+    tile.tags.push('interaction.door');
+    tile.properties['interaction.kind'] = 'door';
+    tile.properties['door.front'] = root.querySelector('[data-tpe-door-front]')?.value || 'south';
+    tile.properties['door.animation.open'] = root.querySelector('[data-tpe-door-open]')?.value.trim() || 'open';
+    tile.properties['door.animation.close'] = root.querySelector('[data-tpe-door-close]')?.value || 'reverse_open';
+    tile.properties['door.animation.closeClip'] = root.querySelector('[data-tpe-door-close-clip]')?.value.trim() || '';
+    tile.animation = { ...tile.animation, phase: 'trigger', loop: false };
+  } else {
+    for (const key of Object.keys(tile.properties)) if (key === 'interaction.kind' || key.startsWith('door.')) delete tile.properties[key];
+  }
 }
 
 export async function openTilePackEditor(editor, { onSaved, log } = {}) {
@@ -257,6 +276,8 @@ export async function openTilePackEditor(editor, { onSaved, log } = {}) {
     overlay.querySelectorAll('[data-tpe-view]').forEach((button) => button.onclick = () => { if (state.view === 'tiles') { try { syncInspector(overlay, state); } catch (error) { return message(error.message, 'error'); } } state.view = button.dataset.tpeView; render(); });
     overlay.querySelectorAll('[data-tpe-select-tile]').forEach((button) => button.onclick = () => { try { syncInspector(overlay, state); state.selectedTileId = Number(button.dataset.tpeSelectTile); state.previewing = false; render(); } catch (error) { message(error.message, 'error'); } });
     overlay.querySelector('[data-tpe-animation-play]')?.addEventListener('click', () => { state.previewing = !state.previewing; render(); });
+    overlay.querySelector('[data-tpe-door]')?.addEventListener('change', () => { try { syncInspector(overlay, state); render(); } catch (error) { message(error.message, 'error'); } });
+    overlay.querySelector('[data-tpe-door-close]')?.addEventListener('change', (event) => { const input = overlay.querySelector('[data-tpe-door-close-clip]'); if (input) input.disabled = event.target.value !== 'named_clip'; });
     overlay.querySelector('[data-tpe-surface-tag]')?.addEventListener('change', (event) => {
       try { syncInspector(overlay, state); } catch (error) { return message(error.message, 'error'); }
       const tile = normalizeTile(state.document.tiles.find((item) => Number(item.resortTileId) === Number(state.selectedTileId)));

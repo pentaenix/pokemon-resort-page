@@ -209,7 +209,7 @@ function normalizeAnimation(animation) {
       columns: finiteInt(animation.columns, 1, 1, 64),
       rows: finiteInt(animation.rows, 1, 1, 64),
       frameCount: finiteInt(animation.frameCount, 1, 1, 4096),
-      phase: ['global', 'position', 'random'].includes(animation.phase) ? animation.phase : 'global',
+      phase: ['global', 'position', 'random', 'trigger'].includes(animation.phase) ? animation.phase : 'global',
       loop: animation.loop !== false,
     };
   }
@@ -490,7 +490,7 @@ function planeMesh(width, height, materialId, animation) {
   };
 }
 
-function glbMeshPayload(compiled, materialIds, authoredWidth, authoredHeight) {
+function glbMeshPayload(compiled, materialIds, authoredWidth, authoredHeight, restClipName = '') {
   const groups = materialIds.map(() => []);
   for (let tri = 0; tri < compiled.triangleCount; tri += 1) {
     const material = compiled.triangleMaterials[tri] || 0;
@@ -500,22 +500,51 @@ function glbMeshPayload(compiled, materialIds, authoredWidth, authoredHeight) {
   const uvs = [];
   const colors = [];
   const ranges = [];
+  const vertexAnimations = (compiled.vertexAnimations || []).map((clip) => ({
+    name: clip.name,
+    frameDurationMs: clip.frameDurationMs,
+    frames: clip.frames.map(() => []),
+  }));
   let triStart = 0;
+  const restClip = (compiled.vertexAnimations || []).find((clip) => clip.name === restClipName);
+  const restPositions = restClip?.frames?.[0];
   for (let slot = 0; slot < groups.length; slot += 1) {
     for (const tri of groups[slot]) {
       for (let corner = 0; corner < 3; corner += 1) {
-        const vi = compiled.indices[tri * 3 + corner] * 8;
+        const vertexIndex = compiled.indices[tri * 3 + corner];
+        const vi = vertexIndex * 8;
+        const restIndex = vertexIndex * 3;
+        const px = restPositions?.[restIndex] ?? compiled.vertices[vi];
+        const py = restPositions?.[restIndex + 1] ?? compiled.vertices[vi + 1];
+        const pz = restPositions?.[restIndex + 2] ?? compiled.vertices[vi + 2];
         const preserveSurface = compiled.tileSurfaceOrigin === true;
         const x = preserveSurface
-          ? (compiled.vertices[vi] / TILE_SIZE) + (authoredWidth / 2)
-          : (compiled.vertices[vi] - compiled.aabb.min[0]) / TILE_SIZE;
+          ? (px / TILE_SIZE) + (authoredWidth / 2)
+          : (px - compiled.aabb.min[0]) / TILE_SIZE;
         const z = preserveSurface
-          ? (authoredHeight / 2) - (compiled.vertices[vi + 2] / TILE_SIZE)
-          : compiled.footprint.d - ((compiled.vertices[vi + 2] - compiled.aabb.min[2]) / TILE_SIZE);
+          ? (authoredHeight / 2) - (pz / TILE_SIZE)
+          : compiled.footprint.d - ((pz - compiled.aabb.min[2]) / TILE_SIZE);
         const y = preserveSurface
-          ? compiled.vertices[vi + 1] / TILE_SIZE
-          : (compiled.vertices[vi + 1] - compiled.aabb.min[1]) / TILE_SIZE;
+          ? py / TILE_SIZE
+          : (py - compiled.aabb.min[1]) / TILE_SIZE;
         triangles.push(x, z, y);
+        for (let clipIndex = 0; clipIndex < vertexAnimations.length; clipIndex += 1) {
+          const clip = compiled.vertexAnimations[clipIndex];
+          for (let frameIndex = 0; frameIndex < clip.frames.length; frameIndex += 1) {
+            const frame = clip.frames[frameIndex];
+            const source = compiled.indices[tri * 3 + corner] * 3;
+            const frameX = preserveSurface
+              ? (frame[source] / TILE_SIZE) + (authoredWidth / 2)
+              : (frame[source] - compiled.aabb.min[0]) / TILE_SIZE;
+            const frameZ = preserveSurface
+              ? (authoredHeight / 2) - (frame[source + 2] / TILE_SIZE)
+              : compiled.footprint.d - ((frame[source + 2] - compiled.aabb.min[2]) / TILE_SIZE);
+            const frameY = preserveSurface
+              ? frame[source + 1] / TILE_SIZE
+              : (frame[source + 1] - compiled.aabb.min[1]) / TILE_SIZE;
+            vertexAnimations[clipIndex].frames[frameIndex].push(frameX, frameZ, frameY);
+          }
+        }
         uvs.push(compiled.vertices[vi + 6], compiled.vertices[vi + 7]);
         colors.push(1, 1, 1);
       }
@@ -529,6 +558,7 @@ function glbMeshPayload(compiled, materialIds, authoredWidth, authoredHeight) {
     width: compiled.footprint.w, height: compiled.footprint.d, xOffset: 0, yOffset: 0,
     triangles, quads: [], texCoordsTri: uvs, texCoordsQuad: [], colorsTri: colors, colorsQuad: [],
     textureIds: materialIds, materialRanges: ranges,
+    ...(vertexAnimations.length ? { vertexAnimations } : {}),
   };
 }
 
@@ -578,8 +608,22 @@ function addTileToEditablePack(pack, definition, assets, contentIndex = runtimeT
     width = finiteInt(tileInput.width, compiled.footprint.w, 1, 32);
     height = finiteInt(tileInput.height, compiled.footprint.d, 1, 32);
     const materialIds = compiled.materials.map((_, index) => nextMaterial + index);
-    mesh = glbMeshPayload(compiled, materialIds, width, height);
-    const animationByMaterial = new Map((tileAssets.materialAnimations || []).map((item) => [String(item.material).toLowerCase(), item]));
+    mesh = glbMeshPayload(
+      compiled,
+      materialIds,
+      width,
+      height,
+      String(tileInput.properties?.['door.animation.open'] || ''),
+    );
+    // RAE door bundles may carry an opening track followed by its exact closing
+    // reverse for the same material. RTPKS stores one triggerable material
+    // timeline and the placed-door runtime reverses it for close, so retain the
+    // first (opening) track instead of Map's usual last-value-wins behavior.
+    const animationByMaterial = new Map();
+    for (const item of tileAssets.materialAnimations || []) {
+      const materialName = String(item.material).toLowerCase();
+      if (!animationByMaterial.has(materialName)) animationByMaterial.set(materialName, item);
+    }
     const uvMappingByMaterial = new Map((tileAssets.materialUvMappings || []).map(({ material, ...mapping }) => [String(material).toLowerCase(), mapping]));
     const compiledMaterialNames = new Set(compiled.materials.map((item) => String(item.name || '').toLowerCase()));
     const missingAnimationMaterials = [...animationByMaterial.keys()].filter((name) => !compiledMaterialNames.has(name));

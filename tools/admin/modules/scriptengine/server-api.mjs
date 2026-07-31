@@ -4,8 +4,8 @@ import { dirname, join, relative, resolve } from 'node:path';
 
 const SCRIPT_ROOT_RELATIVE = 'pokemon-resort/config/gameplay/world3d/scripts';
 const INTERACTION_TEXT_RELATIVE = 'pokemon-resort/config/gameplay/world3d/interaction_text.json';
-const ACTIONS = new Set(['WAIT', 'FACE', 'FACE_PLAYER', 'FACE_AWAY', 'MOVE', 'WANDER', 'JUMP', 'TEXT', 'TEXT_LITERAL', 'TEXT_FREE', 'POKEMON_INTERACTION_SESSION', 'DISABLE_ATTEND', 'ENABLE_ATTEND', 'EXIT_INTERACTION', 'CRY', 'EMOTICON']);
-const KINDS = new Set(['idle', 'interaction', 'npc']);
+const ACTIONS = new Set(['WAIT', 'FACE', 'FACE_PLAYER', 'FACE_AWAY', 'MOVE', 'WANDER', 'JUMP', 'TEXT', 'TEXT_LITERAL', 'TEXT_FREE', 'POKEMON_INTERACTION_SESSION', 'DISABLE_ATTEND', 'ENABLE_ATTEND', 'EXIT_INTERACTION', 'CRY', 'EMOTICON', 'PLAY_TILE_ANIMATION', 'TRANSITION_CLOSE', 'TRANSITION_OPEN', 'TELEPORT_TO_LINK', 'MOVE_PLAYER']);
+const KINDS = new Set(['idle', 'interaction', 'npc', 'door']);
 
 function inside(child, parent) {
   const rel = relative(resolve(parent), resolve(child));
@@ -20,7 +20,8 @@ function validate(script) {
   const issues = [];
   if (!script || typeof script !== 'object') return ['Script must be an object.'];
   if (!/^[a-z][a-z0-9_]{1,63}$/.test(String(script.id || ''))) issues.push('id must use lowercase letters, numbers, and underscores.');
-  if (!KINDS.has(String(script.kind || ''))) issues.push('kind must be idle, interaction, or npc.');
+  if (!KINDS.has(String(script.kind || ''))) issues.push('kind must be idle, interaction, npc, or door.');
+  if (script.kind === 'door' && script.trigger !== 'MOVE_TOWARD') issues.push('Door scripts must use the MOVE_TOWARD trigger.');
   if (!Array.isArray(script.actions) || !script.actions.length) issues.push('A script needs at least one action.');
   for (const action of script.actions || []) {
     if (!ACTIONS.has(String(action?.action || '').toUpperCase())) issues.push(`Unknown action: ${action?.action || '(empty)'}.`);

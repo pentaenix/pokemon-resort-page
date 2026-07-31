@@ -497,6 +497,44 @@ function archiveJson(entries, path) {
   return text ? JSON.parse(text) : null;
 }
 
+async function importInteriorKitArchive(settings, buffer) {
+  const entries = unzipSync(new Uint8Array(buffer));
+  const manifest = archiveJson(entries, 'interior-kit.json');
+  if (!manifest || manifest.format !== 'rae.gen5InteriorKit' || Number(manifest.version) !== 1) {
+    throw new Error('Not a supported RAE Gen 5 interior kit archive.');
+  }
+  if (!Array.isArray(manifest.parts) || !manifest.parts.length) {
+    throw new Error('The interior kit manifest contains no reusable parts.');
+  }
+  const sourceIndex = String(manifest.source?.mapFileIndex || 'map');
+  const imported = [];
+  for (const part of manifest.parts) {
+    if (!part?.id || !part?.role || !part?.glb) throw new Error('Interior kit part is missing id, role, or GLB path.');
+    const bytes = entries[part.glb] || entries[`parts/${basename(String(part.glb))}`];
+    if (!bytes?.length) throw new Error(`Interior kit is missing ${part.glb}.`);
+    const suffix = String(part.id).toLowerCase().replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+    const modelId = sanitizeModelId(`interior_${sourceIndex}_${suffix}`);
+    if (!isValidModelId(modelId)) throw new Error(`Interior kit produced an invalid model id: ${modelId}`);
+    const displayName = `Interior ${sourceIndex} ${part.role}: ${part.sourceMaterial || part.id}`;
+    const result = ingestGlbUpload(Buffer.from(bytes), modelId, basename(String(part.glb)), {
+      displayName,
+      defaultYawDeg: 0,
+      defaultScale: 1,
+    });
+    await writeIngestedModel(settings, result);
+    imported.push({
+      id: part.id,
+      role: part.role,
+      sourceMaterial: part.sourceMaterial || '',
+      modelId,
+      mapPlacement: part.mapPlacement || [0, 0, 0],
+      footprint: part.footprint || [1, 1],
+      collisionHint: part.collisionHint || '',
+    });
+  }
+  return { manifest, parts: imported };
+}
+
 function sanitizeTilePackageFileName(name) {
   const file = basename(String(name || '').trim());
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]*\.rtpks$/i.test(file)) {
@@ -546,6 +584,15 @@ function normalizeProject(project, fallbackId = 'default') {
       packageId: String(set.packageId || '').trim(),
       tiles: typeof set.tiles === 'object' && set.tiles ? { ...set.tiles } : {},
     })),
+    interiorKits: (Array.isArray(project?.interiorKits) ? project.interiorKits : []).map((kit) => ({
+      id: String(kit.id || '').trim(),
+      source: typeof kit.source === 'object' && kit.source ? { ...kit.source } : {},
+      parts: (Array.isArray(kit.parts) ? kit.parts : []).map((part) => ({
+        ...part,
+        mapPlacement: Array.isArray(part.mapPlacement) ? [...part.mapPlacement] : [0, 0, 0],
+        footprint: Array.isArray(part.footprint) ? [...part.footprint] : [1, 1],
+      })),
+    })).filter((kit) => kit.id),
     editor: {
       activeMapId: String(project?.editor?.activeMapId || '').trim(),
       viewMode: project?.editor?.viewMode === '3d' ? '3d' : '2d',
@@ -1933,6 +1980,22 @@ const server = http.createServer(async (req, res) => {
         }
         const check = inspectUploadArchive(archive);
         return json(res, 200, { ok: true, ...check });
+      } catch (error) {
+        return json(res, 400, { ok: false, error: error.message });
+      }
+    }
+    if (url.pathname === '/api/overworld-models/import-interior-kit' && req.method === 'POST') {
+      const settings = await readMapSettings();
+      try {
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+          return json(res, 400, { ok: false, error: 'Expected multipart upload' });
+        }
+        const parts = parseMultipart(await readRawBody(req, 240_000_000), contentType);
+        const { archive } = groupFolderUpload(parts);
+        if (!archive?.length) return json(res, 400, { ok: false, error: 'Upload the interior-kit.zip created by RAE.' });
+        const result = await importInteriorKitArchive(settings, archive);
+        return json(res, 200, { ok: true, ...result });
       } catch (error) {
         return json(res, 400, { ok: false, error: error.message });
       }

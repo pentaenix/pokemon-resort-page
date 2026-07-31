@@ -41,7 +41,7 @@ export function createGrid(rows, cols, fill = 0) {
 }
 
 export function resizeMap(map, width, height) {
-  const next = emptyMap(width, height);
+  const next = { ...emptyMap(width, height), ...map };
   const copyLayer = (src, fill = 0) => {
     const out = createGrid(height, width, fill);
     for (let y = 0; y < height; y += 1) {
@@ -62,6 +62,20 @@ export function resizeMap(map, width, height) {
   next.collision = { ...map.collision };
   next.characters = [...(map.characters || [])];
   next.models = [...(map.models || [])];
+  next.environment = map.environment ? { ...map.environment } : undefined;
+  next.interior = map.interior ? {
+    ...map.interior,
+    gridOrigin: [...(map.interior.gridOrigin || [0, 0])],
+    openings: (map.interior.openings || []).map((opening) => ({ ...opening })),
+  } : undefined;
+  next.anchors = (map.anchors || []).map((anchor) => ({ ...anchor, tile: [...(anchor.tile || [0, 0])] }));
+  next.links = (map.links || []).map((link) => ({ ...link }));
+  next.doorTriggers = (map.doorTriggers || []).map((trigger) => ({
+    ...trigger,
+    tile: [...(trigger.tile || [0, 0])],
+    allowedDirections: [...(trigger.allowedDirections || [])],
+    visual: trigger.visual ? { ...trigger.visual, tile: [...(trigger.visual.tile || trigger.tile || [0, 0])] } : null,
+  }));
   next.terrain.height = copyLayer(map.terrain?.height, 0);
   next.terrain.special = copyLayer(map.terrain?.special, 0);
   next.terrain.collision = copyLayer(map.terrain?.collision, 0);

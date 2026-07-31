@@ -1,10 +1,11 @@
 import { basename } from 'node:path';
+import { buildVertexAnimationClips } from './glb-vertex-animation.mjs';
 
 const GLB_MAGIC = 0x46546c67;
 const CHUNK_JSON = 0x4e4f534a;
 const CHUNK_BIN = 0x004e4942;
 
-const TYPE_COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+const TYPE_COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
 const COMPONENT_BYTES = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
 
 export function parseGlb(buffer) {
@@ -52,11 +53,19 @@ function readAccessor(gltf, bin, accessorIndex) {
     const tuple = [];
     for (let c = 0; c < numComp; c += 1) {
       const o = base + c * compBytes;
-      if (acc.componentType === 5126) tuple.push(view.getFloat32(o, true));
-      else if (acc.componentType === 5123) tuple.push(view.getUint16(o, true));
-      else if (acc.componentType === 5125) tuple.push(view.getUint32(o, true));
-      else if (acc.componentType === 5121) tuple.push(view.getUint8(o));
-      else tuple.push(view.getInt16(o, true));
+      let value;
+      if (acc.componentType === 5126) value = view.getFloat32(o, true);
+      else if (acc.componentType === 5123) value = view.getUint16(o, true);
+      else if (acc.componentType === 5125) value = view.getUint32(o, true);
+      else if (acc.componentType === 5121) value = view.getUint8(o);
+      else if (acc.componentType === 5120) value = view.getInt8(o);
+      else value = view.getInt16(o, true);
+      if (acc.normalized && acc.componentType !== 5126) {
+        const divisors = { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535, 5125: 4294967295 };
+        value = value / divisors[acc.componentType];
+        if ([5120, 5122].includes(acc.componentType)) value = Math.max(-1, value);
+      }
+      tuple.push(value);
     }
     out.push(tuple);
   }
@@ -261,6 +270,7 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
   const textures = [];
   const texByImage = new Map();
   const vertMap = new Map();
+  const vertexBindings = [];
 
   function ensureMaterial(name) {
     if (!materialIndex.has(name)) {
@@ -290,7 +300,7 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
     return texByImage.get(imgIdx);
   }
 
-  function addPrimitive(primitive, worldMat, matName) {
+  function addPrimitive(primitive, worldMat, matName, nodeIndex, skinIndex) {
     const posAcc = primitive.attributes?.POSITION;
     if (posAcc === undefined) return;
     const positions = readAccessor(gltf, bin, posAcc);
@@ -299,6 +309,12 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
       : null;
     const uvs = primitive.attributes.TEXCOORD_0 !== undefined
       ? readAccessor(gltf, bin, primitive.attributes.TEXCOORD_0)
+      : null;
+    const joints = primitive.attributes.JOINTS_0 !== undefined
+      ? readAccessor(gltf, bin, primitive.attributes.JOINTS_0)
+      : null;
+    const weights = primitive.attributes.WEIGHTS_0 !== undefined
+      ? readAccessor(gltf, bin, primitive.attributes.WEIGHTS_0)
       : null;
     const matSlot = ensureMaterial(matName);
     const texIdx = textureForMaterial(primitive.material ?? 0);
@@ -327,10 +343,12 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
         const v = uv[1] ?? 0;
         const ti = 0;
         const ni = 0;
-        const key = `${tp[0].toFixed(4)},${tp[1].toFixed(4)},${tp[2].toFixed(4)}|${u},${v}|${matName}`;
+        const bindingKey = `${nodeIndex}|${skinIndex ?? ''}|${(joints?.[pi] || []).join(',')}|${(weights?.[pi] || []).join(',')}`;
+        const key = `${tp[0].toFixed(4)},${tp[1].toFixed(4)},${tp[2].toFixed(4)}|${u},${v}|${matName}|${bindingKey}`;
         if (!vertMap.has(key)) {
           const base = vertices.length / 8;
           vertices.push(tp[0], tp[1], tp[2], tn[0], tn[1], tn[2], u, v);
+          vertexBindings.push({ position: [...p], joints: joints?.[pi], weights: weights?.[pi], nodeIndex, skinIndex });
           vertMap.set(key, base);
         }
         triIndices.push(vertMap.get(key));
@@ -348,7 +366,7 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
       for (let p = 0; p < mesh.primitives.length; p += 1) {
         const prim = mesh.primitives[p];
         const matName = gltf.materials?.[prim.material ?? 0]?.name || `mat_${prim.material ?? 0}`;
-        addPrimitive(prim, world, matName);
+        addPrimitive(prim, world, matName, nodeIndex, node.skin);
       }
     }
     for (const child of node.children || []) walkNode(child, world);
@@ -396,6 +414,12 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
     throw new Error('GLB has no embeddable base-color textures.');
   }
 
+  const vertexAnimations = buildVertexAnimationClips(
+    gltf,
+    vertexBindings,
+    (accessorIndex) => readAccessor(gltf, bin, accessorIndex),
+  );
+
   return {
     id: modelId,
     aabb: { min: [minX, minY, minZ], max: [maxX, maxY, maxZ] },
@@ -409,6 +433,7 @@ export function buildMeshFromGltf(modelId, gltf, bin) {
     triangleMaterials: new Uint8Array(triangleMaterials),
     materials: prMaterials,
     textures,
+    vertexAnimations,
     vertexCount: vertices.length / 8,
     triangleCount: indices.length / 3,
     tileSurfaceOrigin: Number.isFinite(Number(gltf.extras?.rae?.tileBounds?.originY)),
