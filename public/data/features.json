@@ -192,6 +192,51 @@
       }
     },
     {
+      "id": "feature-model-library",
+      "title": "3D model and submodel library",
+      "stage": "Boarding Soon",
+      "priority": "High",
+      "progress": 40,
+      "summary": "A place to track the master island model and submodels for dock, paths, buildings, props, and vegetation.",
+      "linkedBugs": [],
+      "tasks": [
+        {
+          "done": true,
+          "label": "Add Model Library page"
+        },
+        {
+          "done": true,
+          "label": "Define main island model path"
+        },
+        {
+          "done": false,
+          "label": "Add real island GLB model"
+        },
+        {
+          "done": false,
+          "label": "Add first submodel records"
+        }
+      ],
+      "area": "Models",
+      "linkedRoutes": [],
+      "images": [],
+      "dossier": {
+        "overview": "",
+        "map": {
+          "pinId": "ferry-dock",
+          "label": "Ferry Dock",
+          "note": "",
+          "position": [
+            "-1.9",
+            "0.22",
+            "1.35"
+          ]
+        },
+        "researchMilestones": [],
+        "sections": []
+      }
+    },
+    {
       "id": "feature-characters",
       "title": "Characters and animated visitors",
       "stage": "Boarding Soon",
