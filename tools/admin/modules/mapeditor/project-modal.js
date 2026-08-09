@@ -1,4 +1,5 @@
 import { clearMapPlanThumbCache, drawMapPlanThumb, paintMapPlanThumb } from './map-plan-thumb.js';
+import { createReusedMapEntry, otherEntriesUsingFile } from './map-project-reuse.js';
 
 const MAP_WORLD_ORIGIN_X = 1800;
 const MAP_WORLD_ORIGIN_Y = 1400;
@@ -109,12 +110,12 @@ function ensureProjectModalHost() {
 }
 
 function layoutGridHtml(editor, esc, maps) {
-  const activeId = editor.map?.id || editor.project?.editor?.activeMapId || '';
+  const activeId = editor.project?.editor?.activeMapId || editor.map?.id || '';
   const { positions, sizes } = connectedMapPositions(editor, maps);
   const cards = maps.map((map) => {
     const size = sizes.get(map.id);
     const position = positions.get(map.id);
-    const active = map.id === activeId || map.file === editor.currentFile ? ' active' : '';
+    const active = map.id === activeId ? ' active' : '';
     const separated = map.linked === false ? ' separated' : '';
     return `<article class="map-layout-card${active}${separated}" data-layout-map="${esc(map.id)}"
       data-grid-x="${map.gridX}" data-grid-y="${map.gridY}"
@@ -123,6 +124,7 @@ function layoutGridHtml(editor, esc, maps) {
       <div class="map-layout-label">
         <strong>${esc(map.name || map.id)}</strong>
         <span>${esc(size.label)}</span>
+        ${map.sourceMapId ? `<em>Reuses ${esc(map.sourceMapId)}</em>` : ''}
         ${map.linked === false ? '<em>Separated</em>' : ''}
       </div>
     </article>`;
@@ -147,6 +149,7 @@ function layoutGridHtml(editor, esc, maps) {
     </div>
     <div class="map-layout-context hidden" id="mapLayoutContextMenu" role="menu">
       <button type="button" data-context-open-map>Open map</button>
+      <button type="button" data-context-reuse-map>Reuse map</button>
       <button type="button" data-context-standalone-map>Separate map</button>
       <button type="button" class="danger" data-context-delete-map>Delete map…</button>
     </div>
@@ -227,11 +230,14 @@ async function deleteMapFile(fileName) {
 function removeMapEntry(editor, mapId, { deleteFile = false } = {}) {
   const entry = editor.project?.maps?.find((m) => m.id === mapId);
   if (!entry || !editor.project) return null;
+  const activeId = editor.project.editor?.activeMapId || '';
+  const wasCurrent = activeId
+    ? activeId === mapId
+    : editor.map?.id === mapId || editor.currentFile === entry.file;
   editor.project.maps = editor.project.maps.filter((m) => m.id !== mapId);
   if (editor.project.editor?.activeMapId === mapId) {
     editor.project.editor.activeMapId = editor.project.maps[0]?.id || '';
   }
-  const wasCurrent = editor.map?.id === mapId || editor.currentFile === entry.file;
   editor.projectDirty = true;
   clearMapPlanThumbCache(entry.file);
   return { entry, wasCurrent, deleteFile };
@@ -293,7 +299,7 @@ export function bindProjectModal(state, deps, getBuilders) {
           ? `Remove all ${count} maps from this project and delete their .owmap files? This cannot be undone.`
           : `Remove all ${count} maps from this project? Map files will stay on disk.`;
         if (!window.confirm(msg)) return;
-        const files = [...(editor.project.maps || [])].map((m) => m.file);
+        const files = [...new Set((editor.project.maps || []).map((m) => m.file))];
         editor.project.maps = [];
         editor.project.editor.activeMapId = '';
         editor.map = null;
@@ -325,9 +331,12 @@ export function bindProjectModal(state, deps, getBuilders) {
           : `Remove "${entry.name || entry.id}" from the project?`;
         if (!window.confirm(msg)) return;
         const result = removeMapEntry(editor, id);
-        if (alsoFile && result?.entry?.file) {
+        const sharedBy = otherEntriesUsingFile(editor.project, entry);
+        if (alsoFile && result?.entry?.file && !sharedBy.length) {
           try { await deleteMapFile(result.entry.file); } catch (err) { log(err.message, 'error'); }
           editor.files = (editor.files || []).filter((file) => file.name !== result.entry.file);
+        } else if (alsoFile && sharedBy.length) {
+          log(`${entry.file} was kept because another map instance still uses it.`, 'ok');
         }
         if (result?.wasCurrent) {
           editor.map = null;
@@ -348,7 +357,7 @@ export function bindProjectModal(state, deps, getBuilders) {
         const entry = editor.project?.maps?.find((m) => m.id === contextMapId);
         if (!entry?.file) return;
         try {
-          await deps.loadMapFileIntoEditor?.(state, deps, entry.file);
+          await deps.loadMapFileIntoEditor?.(state, deps, entry.file, entry.id);
           editor.projectModalOpen = false;
           host.classList.add('hidden');
           render();
@@ -368,17 +377,34 @@ export function bindProjectModal(state, deps, getBuilders) {
         return;
       }
 
+      const contextReuse = e.target.closest('[data-context-reuse-map]');
+      if (contextReuse && contextMapId) {
+        const instance = createReusedMapEntry(editor.project, contextMapId);
+        if (!instance) return;
+        editor.project.maps.push(instance);
+        editor.projectDirty = true;
+        syncProjectModal(editor, esc, getBuilders);
+        log(`Added ${instance.name}. Drag it beside another map to connect it.`, 'ok');
+        return;
+      }
+
       const contextDelete = e.target.closest('[data-context-delete-map]');
       if (contextDelete && contextMapId) {
         const entry = editor.project?.maps?.find((m) => m.id === contextMapId);
         if (!entry) return;
-        if (!window.confirm(`Delete "${entry.name || entry.id}" and its file ${entry.file}? This cannot be undone.`)) return;
+        const sharedBy = otherEntriesUsingFile(editor.project, entry);
+        const prompt = sharedBy.length
+          ? `Remove "${entry.name || entry.id}"? Its shared source ${entry.file} will be kept for ${sharedBy.length} other map instance${sharedBy.length === 1 ? '' : 's'}.`
+          : `Delete "${entry.name || entry.id}" and its file ${entry.file}? This cannot be undone.`;
+        if (!window.confirm(prompt)) return;
         const result = removeMapEntry(editor, contextMapId);
-        try {
-          await deleteMapFile(entry.file);
-          editor.files = (editor.files || []).filter((file) => file.name !== entry.file);
-        } catch (err) {
-          log(err.message || 'Could not delete map file.', 'error');
+        if (!sharedBy.length) {
+          try {
+            await deleteMapFile(entry.file);
+            editor.files = (editor.files || []).filter((file) => file.name !== entry.file);
+          } catch (err) {
+            log(err.message || 'Could not delete map file.', 'error');
+          }
         }
         if (result?.wasCurrent) {
           editor.map = null;

@@ -571,6 +571,7 @@ function normalizeProject(project, fallbackId = 'default') {
       gridX: Number.isFinite(Number(map.gridX)) ? Number(map.gridX) : 0,
       gridY: Number.isFinite(Number(map.gridY)) ? Number(map.gridY) : 0,
       linked: map.linked !== false,
+      ...(map.sourceMapId ? { sourceMapId: String(map.sourceMapId).trim() } : {}),
     })),
     tilePackages: tilePackages.map((pkg) => ({
       id: String(pkg.id || pkg.file || pkg.fileName || '').trim(),

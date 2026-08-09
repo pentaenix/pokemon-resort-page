@@ -3061,7 +3061,8 @@ function syncProjectFromEditor(editor) {
   if (!editor.project) return;
   if (editor.map && editor.currentFile) {
     const mapId = editor.map.id || editor.currentFile.replace(/\.owmap$/i, '');
-    let entry = editor.project.maps.find((item) => item.file === editor.currentFile || item.id === mapId);
+    let entry = editor.project.maps.find((item) => item.id === editor.project.editor?.activeMapId)
+      || editor.project.maps.find((item) => item.file === editor.currentFile || item.id === mapId);
     if (!entry) {
       const layoutMaps = editor.project.maps.filter((item) => item.linked !== false);
       entry = {
@@ -3074,10 +3075,12 @@ function syncProjectFromEditor(editor) {
       };
       editor.project.maps.push(entry);
     }
-    entry.id = mapId;
-    entry.name = editor.map.name || mapId;
-    entry.file = editor.currentFile.endsWith('.owmap') ? editor.currentFile : `${editor.currentFile}.owmap`;
-    editor.project.editor.activeMapId = mapId;
+    if (!entry.sourceMapId) {
+      entry.id = mapId;
+      entry.name = editor.map.name || mapId;
+      entry.file = editor.currentFile.endsWith('.owmap') ? editor.currentFile : `${editor.currentFile}.owmap`;
+    }
+    editor.project.editor.activeMapId = entry.id;
   }
   if (editor.tilePackage) rememberProjectTilePackage(editor, editor.tilePackage);
   editor.project.editor.viewMode = editor.workspaceView;
@@ -3551,7 +3554,7 @@ function mapSizePanelHtml(map, esc) {
 
 function mapProjectRosterHtml(editor, esc) {
   const maps = [...(editor.project?.maps || [])].sort((a, b) => a.gridY - b.gridY || a.gridX - b.gridX);
-  const activeId = editor.map?.id || editor.project?.editor?.activeMapId || '';
+  const activeId = editor.project?.editor?.activeMapId || editor.map?.id || '';
   const origin = maps.find((entry) => entry.gridX === 0 && entry.gridY === 0) || maps[0];
   if (!maps.length) {
     return `<div class="map-roster-empty">
@@ -3559,7 +3562,7 @@ function mapProjectRosterHtml(editor, esc) {
     </div>`;
   }
   const cards = maps.map((map) => {
-    const active = map.id === activeId || map.file === editor.currentFile;
+    const active = map.id === activeId;
     const dims = editor.mapDimensionsByFile?.[map.file];
     const sizeText = dims?.missing ? 'file missing' : dims ? `${dims.width}×${dims.height}` : '…';
     return `<button type="button" class="map-roster-card${active ? ' active' : ''}" data-project-map="${esc(map.id)}">
@@ -3584,7 +3587,7 @@ function mapProjectRosterHtml(editor, esc) {
 
 function mapCompassGridHtml(editor, esc, maps, origin) {
   if (!maps.length) return '';
-  const activeId = editor.map?.id || editor.project?.editor?.activeMapId || '';
+  const activeId = editor.project?.editor?.activeMapId || editor.map?.id || '';
   const minX = Math.min(...maps.map((map) => map.gridX), 0);
   const maxX = Math.max(...maps.map((map) => map.gridX), 0);
   const minY = Math.min(...maps.map((map) => map.gridY), 0);
@@ -3598,7 +3601,7 @@ function mapCompassGridHtml(editor, esc, maps, origin) {
       if (!map) {
         cells.push('<span class="map-matrix-cell empty" aria-hidden="true"></span>');
       } else {
-        const active = map.id === activeId || map.file === editor.currentFile ? 'active' : '';
+        const active = map.id === activeId ? 'active' : '';
         const dims = editor.mapDimensionsByFile?.[map.file];
         const sizeText = dims && !dims.missing ? `${dims.width}×${dims.height}` : '?';
         cells.push(`<button type="button" class="map-matrix-cell ${active}" data-project-map="${esc(map.id)}" title="${esc(map.name || map.id)} · ${esc(map.file)}">
@@ -3615,7 +3618,7 @@ function mapCompassGridHtml(editor, esc, maps, origin) {
 
 function mapMatrixHtml(editor, esc) {
   const maps = editor.project?.maps || [];
-  const activeId = editor.map?.id || editor.project?.editor?.activeMapId || '';
+  const activeId = editor.project?.editor?.activeMapId || editor.map?.id || '';
   if (!maps.length) {
     return `<div class="map-matrix-empty">
       <p class="hint">Save this map to add it to the project matrix.</p>
@@ -3634,7 +3637,7 @@ function mapMatrixHtml(editor, esc) {
       if (!map) {
         cells.push('<span class="map-matrix-cell empty"></span>');
       } else {
-        const active = map.id === activeId || map.file === editor.currentFile ? 'active' : '';
+        const active = map.id === activeId ? 'active' : '';
         cells.push(`<button type="button" class="map-matrix-cell ${active}" data-project-map="${esc(map.id)}" title="${esc(map.file)}">
           <strong>${esc(map.name || map.id)}</strong>
           <span>${esc(map.file)}</span>
@@ -3656,7 +3659,8 @@ function validateMapEdges(editor) {
   const project = editor.project;
   const active = editor.map;
   if (!project || !active) return [];
-  const entry = project.maps.find((map) => map.id === active.id || map.file === editor.currentFile);
+  const entry = project.maps.find((map) => map.id === project.editor?.activeMapId)
+    || project.maps.find((map) => map.id === active.id || map.file === editor.currentFile);
   if (!entry) return [];
   const warnings = [];
   const neighborAt = (dx, dy) => project.maps.find((map) => map.gridX === entry.gridX + dx && map.gridY === entry.gridY + dy);
@@ -4760,7 +4764,7 @@ function initModelModalDelegates(state, { render, log, api }) {
   });
 }
 
-async function loadMapFileIntoEditor(state, deps, fileName) {
+async function loadMapFileIntoEditor(state, deps, fileName, projectEntryId = '') {
   const { api, log, render } = deps;
   const editor = ensureMapEditorState(state);
   const payload = await api(`/api/maps/file?file=${encodeURIComponent(fileName)}`);
@@ -4776,7 +4780,8 @@ async function loadMapFileIntoEditor(state, deps, fileName) {
     width: editor.map.grid.width,
     height: editor.map.grid.height,
   };
-  const projectEntry = editor.project?.maps?.find((map) => map.file === editor.currentFile || map.id === editor.map.id);
+  const projectEntry = editor.project?.maps?.find((map) => map.id === projectEntryId)
+    || editor.project?.maps?.find((map) => map.file === editor.currentFile || map.id === editor.map.id);
   if (projectEntry) editor.project.editor.activeMapId = projectEntry.id;
   editor.activePathSetId = editor.map.pathLayer?.activeSetId || editor.activePathSetId || editor.project?.pathSets?.[0]?.id || '';
   if (editor.map.tilePackage?.file) {
@@ -4984,7 +4989,7 @@ export function bindMapEditor(state, deps) {
         editor.projectId = editor.project.id;
         const active = editor.project.maps.find((map) => map.id === editor.project.editor?.activeMapId)
           || editor.project.maps[0];
-        if (active?.file) await loadMapFileIntoEditor(state, deps, active.file);
+        if (active?.file) await loadMapFileIntoEditor(state, deps, active.file, active.id);
         log(`Loaded project ${editor.project.name || editor.project.id}`, 'ok');
         render();
       } catch (e) {
@@ -5210,7 +5215,7 @@ export function bindMapEditor(state, deps) {
           editor.projectValidation = validation?.validation || null;
           const entry = payload.body.map;
           await refreshProjectMapDimensions(editor);
-          await loadMapFileIntoEditor(state, deps, entry.file);
+          await loadMapFileIntoEditor(state, deps, entry.file, entry.id);
           editor.projectDirty = false;
           const dims = payload.body.dimensions;
           const dir = btn.dataset.createAdjacent;
