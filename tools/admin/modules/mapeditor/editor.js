@@ -15,16 +15,24 @@ import {
 import { downloadRtpksTileGlb, mountMap3DView, mountRtpksTilePreview, renderRtpksTileThumbnail } from './map-3d-view.js';
 import { openTilePackEditor } from './tile-pack-editor.js';
 import { bindProjectModal, openProjectModal, syncProjectModal } from './project-modal.js';
-import { footprintAnchorAt, overlappingFootprintAnchors } from './tile-footprint-edit.js';
+import { buildVisibleFootprintIndex, footprintAnchorAt, overlappingFootprintAnchors } from './tile-footprint-edit.js';
 import { createMapFromRaeInterior, validateRaeInteriorMetadata } from './interior-import.js';
+import { clearMapPlanThumbCache } from './map-plan-thumb.js';
+import { resolveTerrainTransitionUpdates } from './terrain-transitions.js';
+import { worldTilePreviewStyle } from './world-tile-preview.js';
 import {
   bindDoorAuthoring,
+  buildDoorVisualIndex,
   buildDoorTriggerIndex,
   doorAuthoringHtml,
   doorTriggerAt,
+  doorVisualAt,
   ensureDoorAuthoring,
+  moveSelectedDoorVisual,
   offsetDoorAuthoring,
   placeSelectedDoorTrigger,
+  removeDoorsAt,
+  selectDoorAt,
 } from './door-authoring.js';
 
 const LAYER_META = {
@@ -44,6 +52,7 @@ const DEFAULT_TILE_LAYERS = [
   { id: 'overlay', name: 'Overlay' },
 ];
 const MAX_TILE_LAYERS = 7;
+const TILE_CATALOG_PAGE_SIZE = 120;
 
 const BRUSHES = [
   { id: 'height', label: 'Height', layer: 'height', color: '#74d4e5' },
@@ -55,6 +64,7 @@ const BRUSHES = [
 ];
 
 const TOOLS = [
+  { id: 'move', label: 'Move', icon: 'move', title: 'Inspect the map and drag to pan without editing' },
   { id: 'paint', label: 'Paint', icon: 'brush', title: 'Paint on the active layer' },
   { id: 'erase', label: 'Erase', icon: 'eraser', title: 'Erase only the active layer' },
   { id: 'clear', label: 'Clear Cell', icon: 'clear-cell', title: 'Clear this cell across all map layers' },
@@ -729,16 +739,32 @@ function applyTileCollision(editor, map, tileId, anchorX, anchorY, clearing = fa
   }
 }
 
+function resolveTerrainTransitions(editor, map, changedCells, layerIndex = map.tileLayers?.activeLayer || 0) {
+  const updates = resolveTerrainTransitionUpdates({
+    tiles: editor.tilePackage?.tiles || [],
+    changedCells,
+    width: map.grid.width,
+    height: map.grid.height,
+    tileIdAt: (x, y) => tileCellValueAtLayer(map, x, y, layerIndex),
+  });
+  for (const update of updates) {
+    markTileFootprintDirty(editor, map, update.x, update.y, { w: 1, h: 1 });
+    setTileCell(map, update.x, update.y, update.tileId, layerIndex);
+  }
+}
+
 function clearTileAt(editor, map, x, y, layerIndex = map.tileLayers?.activeLayer || 0) {
   const hit = visibleTileFootprintAtLayer(editor, map, x, y, layerIndex);
   if (hit) {
     markTileFootprintDirty(editor, map, hit.anchorX, hit.anchorY, hit.footprint);
     applyTileCollision(editor, map, hit.tileId, hit.anchorX, hit.anchorY, true);
     setTileCell(map, hit.anchorX, hit.anchorY, null, layerIndex);
+    resolveTerrainTransitions(editor, map, [[hit.anchorX, hit.anchorY]], layerIndex);
     return true;
   }
   markTileFootprintDirty(editor, map, x, y, { w: 1, h: 1 });
   setTileCell(map, x, y, null, layerIndex);
+  resolveTerrainTransitions(editor, map, [[x, y]], layerIndex);
   return true;
 }
 
@@ -760,24 +786,43 @@ function placeTileAt(editor, map, x, y, tileId, layerIndex = map.tileLayers?.act
     nextFootprint,
     (existingId) => tileFootprint(tileEntry(editor, existingId)),
   );
+  const transitionChanged = [];
   for (const existing of overlapping) {
     markTileFootprintDirty(editor, map, existing.anchorX, existing.anchorY, existing.footprint);
     applyTileCollision(editor, map, existing.tileId, existing.anchorX, existing.anchorY, true);
     setTileCell(map, existing.anchorX, existing.anchorY, null, layerIndex);
+    transitionChanged.push([existing.anchorX, existing.anchorY]);
   }
   markTileFootprintDirty(editor, map, x, y, nextFootprint);
   setTileCell(map, x, y, tileId, layerIndex);
   applyTileCollision(editor, map, tileId, x, y, false);
+  transitionChanged.push([x, y]);
+  resolveTerrainTransitions(editor, map, transitionChanged, layerIndex);
   return true;
 }
 
 function clearAllAt(editor, map, x, y) {
   clearTerrainCell(map, x, y);
-  clearTileAtAllLayers(editor, map, x, y);
   setPathCell(map, x, y, 0);
+  clearTileAtAllLayers(editor, map, x, y);
+  for (const layer of map.tileLayers?.layers || []) {
+    if (layer.cells?.[y]) layer.cells[y][x] = null;
+  }
   if (map.player?.spawnTile?.[0] === x && map.player?.spawnTile?.[1] === y) {
     map.player.spawnTile = null;
   }
+  map.anchors = (map.anchors || []).filter((anchor) => anchor.tile?.[0] !== x || anchor.tile?.[1] !== y);
+  const removedDoors = removeDoorsAt(map, x, y);
+  if (removedDoors.some((door) => door.id === editor.selectedDoorTriggerId)) {
+    editor.selectedDoorTriggerId = map.doorTriggers?.[0]?.id || '';
+  }
+  const modelCount = map.models?.length || 0;
+  map.models = (map.models || []).filter((model) => {
+    const footprint = placedModelFootprint(editor, model);
+    return !(x >= footprint.tlx && x < footprint.tlx + footprint.fw
+      && y >= footprint.tly && y < footprint.tly + footprint.fd);
+  });
+  if (map.models.length !== modelCount) editor.selectedPlacementIndex = null;
   resolvePathTiles(editor, [[x, y]]);
 }
 
@@ -806,6 +851,7 @@ function floodFillTile(editor, map, x, y, target, replacement) {
   const h = map.grid.height;
   const stack = [[x, y]];
   const seen = new Set();
+  const changed = [];
   while (stack.length) {
     const [cx, cy] = stack.pop();
     const key = `${cx},${cy}`;
@@ -815,8 +861,10 @@ function floodFillTile(editor, map, x, y, target, replacement) {
     if (target != null) applyTileCollision(editor, map, target, cx, cy, true);
     setTileCell(map, cx, cy, replacement);
     if (replacement != null) applyTileCollision(editor, map, replacement, cx, cy, false);
+    changed.push([cx, cy]);
     stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
   }
+  resolveTerrainTransitions(editor, map, changed);
 }
 
 function floodFillPath(editor, x, y, target, replacement) {
@@ -985,6 +1033,7 @@ function applyToolAt(map, editor, x, y) {
   const brush = editor.brush;
   const layer = brushLayer(brush);
   const tool = editor.tool;
+  if (tool === 'move') return;
   if (tool === 'clear') {
     clearAllAt(editor, map, x, y);
     return;
@@ -1540,19 +1589,15 @@ function isTilePlacementMode(editor) {
     && editor.tool !== 'lower'
     && editor.tool !== 'erase'
     && editor.tool !== 'clear'
+    && editor.tool !== 'move'
     && editor.tileBrushId != null;
 }
 
-// Draw roof/top snapshots over each placed prop's footprint on the 2D grid, plus a ghost
-// preview that follows the cursor while placing. Positions are derived from the live cell
-// geometry (offsetLeft/Width + neighbour pitch) so they stay aligned regardless of zoom/CSS,
-// and the overlay lives inside #mapPaintGrid so it scrolls with the grid.
-function refreshPropOverlays(editor) {
+function gridOverlayGeometry(editor) {
   const grid = document.getElementById('mapPaintGrid');
-  const overlay = document.getElementById('mapPropOverlay');
-  if (!grid || !overlay || !editor.map) return;
-  const c0 = grid.querySelector('[data-cell="0,0"]');
-  if (!c0) { overlay.innerHTML = ''; return; }
+  if (editor?._gridOverlayGeometry?.grid === grid) return editor._gridOverlayGeometry.box;
+  const c0 = grid?.querySelector('[data-cell="0,0"]');
+  if (!grid || !c0) return null;
   const cx = grid.querySelector('[data-cell="1,0"]');
   const cy = grid.querySelector('[data-cell="0,1"]');
   const x0 = c0.offsetLeft;
@@ -1567,6 +1612,52 @@ function refreshPropOverlays(editor) {
     w: fw * pitchX - (pitchX - cw),
     h: fd * pitchY - (pitchY - ch),
   });
+  if (editor) editor._gridOverlayGeometry = { grid, box };
+  return box;
+}
+
+function refreshPlacementGhost(editor) {
+  const overlay = document.getElementById('mapGhostOverlay');
+  const box = gridOverlayGeometry(editor);
+  if (!overlay || !box || !editor.map || !Array.isArray(editor._ghostTile)) {
+    if (overlay) overlay.innerHTML = '';
+    return;
+  }
+  const items = [];
+  if (isTilePlacementMode(editor)) {
+    const tile = tileEntry(editor, editor.tileBrushId);
+    const fp = tileFootprint(tile);
+    const [gx, gy] = editor._ghostTile;
+    const r = box(gx, gy, fp.w, fp.h);
+    const src = tilePreviewSource(editor, editor.tileBrushId);
+    const img = src ? `<img src="${src}" alt="">` : `<span class="map-tile-color" style="background:${tileHashColor(editor.tileBrushId)}"></span>`;
+    items.push(`<div class="map-tile-footprint-overlay is-ghost" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${img}${tileSizeLabel(fp) ? `<span class="map-tile-size">${tileSizeLabel(fp)}</span>` : ''}</div>`);
+  }
+  if (editor.placeModelId) {
+    const meta = (editor.modelCatalog || []).find((c) => c.id === editor.placeModelId);
+    if (meta) {
+      const fp = modelAuthoringFootprint(meta);
+      const fw = Math.max(1, fp.w);
+      const fd = Math.max(1, fp.d);
+      const [gx, gy] = editor._ghostTile;
+      const r = box(gx - Math.floor((fw - 1) / 2), gy - Math.floor((fd - 1) / 2), fw, fd);
+      const roof = roofThumbForModel(meta, () => refreshPlacementGhost(editor));
+      const img = roof ? `<img src="${roof.src}" alt="">` : '';
+      items.push(`<div class="map-prop-roof is-ghost" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${img}</div>`);
+    }
+  }
+  overlay.innerHTML = items.join('');
+}
+
+// Draw roof/top snapshots over each placed prop's footprint on the 2D grid, plus a ghost
+// preview that follows the cursor while placing. Positions are derived from the live cell
+// geometry (offsetLeft/Width + neighbour pitch) so they stay aligned regardless of zoom/CSS,
+// and the overlay lives inside #mapPaintGrid so it scrolls with the grid.
+function refreshPropOverlays(editor) {
+  const grid = document.getElementById('mapPaintGrid');
+  const overlay = document.getElementById('mapPropOverlay');
+  const box = gridOverlayGeometry(editor);
+  if (!grid || !overlay || !box || !editor.map) return;
   const roofImg = (meta, yawDeg) => {
     const roof = roofThumbForModel(meta, () => refreshPropOverlays(editor));
     return roof ? `<img src="${roof.src}" alt="" style="transform:rotate(${yawDeg || 0}deg)">` : '';
@@ -1596,27 +1687,8 @@ function refreshPropOverlays(editor) {
     const r = box(fpc.tlx, fpc.tly, fpc.fw, fpc.fd);
     items.push(`<div class="map-prop-roof" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${roofImg(fpc.meta, mdl.yawDeg)}</div>`);
   }
-  if (isTilePlacementMode(editor) && Array.isArray(editor._ghostTile)) {
-    const tile = tileEntry(editor, editor.tileBrushId);
-    const fp = tileFootprint(tile);
-    const [gx, gy] = editor._ghostTile;
-    const r = box(gx, gy, fp.w, fp.h);
-    const src = tilePreviewSource(editor, editor.tileBrushId);
-    const img = src ? `<img src="${src}" alt="" loading="lazy">` : `<span class="map-tile-color" style="background:${tileHashColor(editor.tileBrushId)}"></span>`;
-    items.push(`<div class="map-tile-footprint-overlay is-ghost" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${img}${tileSizeLabel(fp) ? `<span class="map-tile-size">${tileSizeLabel(fp)}</span>` : ''}</div>`);
-  }
-  if (editor.placeModelId && Array.isArray(editor._ghostTile)) {
-    const meta = (editor.modelCatalog || []).find((c) => c.id === editor.placeModelId);
-    if (meta) {
-      const fp = modelAuthoringFootprint(meta);
-      const fw = Math.max(1, fp.w);
-      const fd = Math.max(1, fp.d);
-      const [gx, gy] = editor._ghostTile;
-      const r = box(gx - Math.floor((fw - 1) / 2), gy - Math.floor((fd - 1) / 2), fw, fd);
-      items.push(`<div class="map-prop-roof is-ghost" style="left:${r.left}px;top:${r.top}px;width:${r.w}px;height:${r.h}px">${roofImg(meta, 0)}</div>`);
-    }
-  }
   overlay.innerHTML = items.join('');
+  refreshPlacementGhost(editor);
 }
 
 // True top-down (2D) placement view: flat tiles shaded by height, with each placed prop
@@ -2139,7 +2211,8 @@ export function ensureMapEditorState(state) {
       selectedPlacementIndex: null,
       selectedDoorTriggerId: '',
       doorTool: null,
-      doorAttachVisual: true,
+      doorAttachVisual: false,
+      doorPanelSection: 'position',
       compileDisplayName: '',
       compileDefaultYaw: 0,
       compileDefaultScale: 1,
@@ -2165,6 +2238,8 @@ export function ensureMapEditorState(state) {
   if (state.mapEditor.selectedPlacementIndex === undefined) state.mapEditor.selectedPlacementIndex = null;
   if (state.mapEditor.selectedDoorTriggerId === undefined) state.mapEditor.selectedDoorTriggerId = '';
   if (state.mapEditor.doorTool === undefined) state.mapEditor.doorTool = null;
+  if (state.mapEditor.doorAttachVisual === undefined) state.mapEditor.doorAttachVisual = false;
+  if (!state.mapEditor.doorPanelSection) state.mapEditor.doorPanelSection = 'position';
   if (!state.mapEditor.modelCatalog) state.mapEditor.modelCatalog = [];
   if (!Array.isArray(state.mapEditor.undoStack)) state.mapEditor.undoStack = [];
   if (!Array.isArray(state.mapEditor.redoStack)) state.mapEditor.redoStack = [];
@@ -2194,20 +2269,53 @@ export function ensureMapEditorState(state) {
   return state.mapEditor;
 }
 
-function syncCellButton(btn, map, x, y, editor, doorTriggerIndex = null) {
+function syncDoorMarker(btn, map, x, y, editor, doorTriggerIndex = null, doorVisualIndex = null) {
+  const door = doorTriggerAt(map, x, y, doorTriggerIndex);
+  const doorVisual = doorVisualAt(map, x, y, doorVisualIndex);
+  btn.classList.toggle('has-door-trigger', Boolean(door));
+  btn.classList.toggle('has-door-visual', Boolean(doorVisual));
+  btn.classList.toggle('has-door-selected', Boolean(
+    editor.selectedDoorTriggerId && (door?.id === editor.selectedDoorTriggerId || doorVisual?.id === editor.selectedDoorTriggerId),
+  ));
+  let doorEl = btn.querySelector('.cell-door');
+  const doorMarker = door ? 'D' : doorVisual ? 'V' : '';
+  const doorTitle = door ? `Door trigger: ${door.id}` : doorVisual ? `Door tile: ${doorVisual.id}` : '';
+  if (doorMarker && !doorEl) btn.insertAdjacentHTML('beforeend', `<span class="cell-door" title="${esc(doorTitle)}">${doorMarker}</span>`);
+  else if (!doorMarker && doorEl) doorEl.remove();
+  else if (doorEl) { doorEl.textContent = doorMarker; doorEl.title = doorTitle; }
+}
+
+function refreshDoorMarkers(editor) {
+  if (!editor.map) return;
+  const triggerIndex = buildDoorTriggerIndex(editor.map);
+  const visualIndex = buildDoorVisualIndex(editor.map);
+  document.querySelectorAll('#mapPaintGrid [data-cell]').forEach((btn) => {
+    const [x, y] = (btn.dataset.cell || '').split(',').map(Number);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      syncDoorMarker(btn, editor.map, x, y, editor, triggerIndex, visualIndex);
+    }
+  });
+}
+
+function syncCellButton(btn, map, x, y, editor, doorTriggerIndex = null, doorVisualIndex = null, footprintIndex = null) {
   if (!btn) return;
   const st = unifiedCellStyle(map, x, y, editor.showCellValues);
   const tileId = displayTileCellValue(map, x, y);
   const tile = tileId == null ? null : tileEntry(editor, tileId);
-  const footprintHit = visibleTileFootprintAt(editor, map, x, y);
+  const footprintHit = footprintIndex
+    ? footprintIndex.get(`${x},${y}`) || null
+    : visibleTileFootprintAt(editor, map, x, y);
   const activeLayerIndex = map.tileLayers?.activeLayer || 0;
   btn.style.background = '';
+  btn.style.removeProperty('--tile-bg-size');
+  btn.style.removeProperty('--tile-bg-position');
   if (tile) {
-    const preview = tilePaintVisualUrl(editor, tileId);
+    const worldStyle = worldTilePreviewStyle(editor.tilePackage, tile, x, y);
+    const preview = worldStyle ? tileTextureUrl(editor, tile) : tilePaintVisualUrl(editor, tileId);
     btn.style.backgroundImage = preview ? `linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,.08)), url("${preview}")` : '';
     btn.style.backgroundColor = preview ? '#d8e0e6' : tileHashColor(tileId);
-    btn.style.backgroundSize = preview ? 'cover' : '';
-    btn.style.backgroundPosition = preview ? 'center' : '';
+    btn.style.setProperty('--tile-bg-size', worldStyle?.backgroundSize || (preview ? 'cover' : ''));
+    btn.style.setProperty('--tile-bg-position', worldStyle?.backgroundPosition || (preview ? 'center' : ''));
     if (!preview) {
       requestRtpksTileThumbnail(editor, tileId, { onReady: () => schedulePlacedTileVisualRefresh(editor) });
     }
@@ -2227,11 +2335,7 @@ function syncCellButton(btn, map, x, y, editor, doorTriggerIndex = null) {
   btn.classList.toggle('has-tile-footprint', Boolean(footprintHit && (footprintHit.anchorX !== x || footprintHit.anchorY !== y)));
   btn.classList.toggle('is-muted-layer', Boolean(footprintHit && footprintHit.layerIndex !== activeLayerIndex));
   btn.classList.toggle('has-path', pathCellValue(map, x, y) === 1);
-  const door = doorTriggerAt(map, x, y, doorTriggerIndex);
-  btn.classList.toggle('has-door-trigger', Boolean(door));
-  let doorEl = btn.querySelector('.cell-door');
-  if (door && !doorEl) btn.insertAdjacentHTML('beforeend', `<span class="cell-door" title="Door trigger: ${esc(door.id)}">D</span>`);
-  else if (!door && doorEl) doorEl.remove();
+  syncDoorMarker(btn, map, x, y, editor, doorTriggerIndex, doorVisualIndex);
   let rampEl = btn.querySelector('.cell-ramp');
   if (st.rampLabel) {
     const rampShort = RAMP_PRESETS.find((r) => r.id === st.special)?.short || '';
@@ -2267,9 +2371,16 @@ function placedTileIds(map) {
 function refreshPlacedTileVisuals(editor) {
   if (!editor.map) return;
   const doorTriggerIndex = buildDoorTriggerIndex(editor.map);
+  const doorVisualIndex = buildDoorVisualIndex(editor.map);
+  const footprintIndex = buildVisibleFootprintIndex(
+    editor.map.tileLayers?.layers || [],
+    (tileId) => tileFootprint(tileEntry(editor, tileId)),
+  );
   document.querySelectorAll('[data-cell]').forEach((btn) => {
     const [x, y] = (btn.dataset.cell || '').split(',').map(Number);
-    if (Number.isFinite(x) && Number.isFinite(y)) syncCellButton(btn, editor.map, x, y, editor, doorTriggerIndex);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      syncCellButton(btn, editor.map, x, y, editor, doorTriggerIndex, doorVisualIndex, footprintIndex);
+    }
   });
   refreshPropOverlays(editor);
 }
@@ -2345,6 +2456,11 @@ export function mapEditorHtml(state, esc) {
   let gridHtml = '';
   if (map) {
     const doorTriggerIndex = buildDoorTriggerIndex(map);
+    const doorVisualIndex = buildDoorVisualIndex(map);
+    const footprintIndex = buildVisibleFootprintIndex(
+      map.tileLayers?.layers || [],
+      (tileId) => tileFootprint(tileEntry(editor, tileId)),
+    );
     const tsz = map.grid?.tileSize || TILE_SIZE;
     const propTiles = new Map();
     const propFootprint = new Set();
@@ -2371,7 +2487,7 @@ export function mapEditorHtml(state, esc) {
         const st = unifiedCellStyle(map, x, y, editor.showCellValues);
         const tileId = displayTileCellValue(map, x, y);
         const tile = tileId == null ? null : tileEntry(editor, tileId);
-        const footprintHit = visibleTileFootprintAt(editor, map, x, y);
+        const footprintHit = footprintIndex.get(`${x},${y}`) || null;
         const activeLayerIndex = map.tileLayers?.activeLayer || 0;
         const classes = ['map-cell'];
         if (st.isSpawn) classes.push('is-spawn');
@@ -2383,6 +2499,7 @@ export function mapEditorHtml(state, esc) {
         if (pathCellValue(map, x, y)) classes.push('has-path');
         const propCount = propTiles.get(`${x},${y}`) || 0;
         const doorTrigger = doorTriggerAt(map, x, y, doorTriggerIndex);
+        const doorVisual = doorVisualAt(map, x, y, doorVisualIndex);
         if (propFootprint.has(`${x},${y}`)) classes.push('has-prop-cell');
         if (selFootprint && x >= selFootprint.tlx && x < selFootprint.tlx + selFootprint.fw
           && y >= selFootprint.tly && y < selFootprint.tly + selFootprint.fd) {
@@ -2390,11 +2507,17 @@ export function mapEditorHtml(state, esc) {
         }
         if (propCount) classes.push('has-prop');
         if (doorTrigger) classes.push('has-door-trigger');
+        if (doorVisual) classes.push('has-door-visual');
+        if (editor.selectedDoorTriggerId && (doorTrigger?.id === editor.selectedDoorTriggerId || doorVisual?.id === editor.selectedDoorTriggerId)) classes.push('has-door-selected');
         const val = st.showValues ? `<span class="cell-val">${st.hv}</span>` : '';
         const rampShort = RAMP_PRESETS.find((r) => r.id === st.special)?.short || '';
         const ramp = st.rampLabel ? `<span class="cell-ramp" title="${esc(st.rampLabel)}">${esc(rampShort)}</span>` : '';
         const prop = propCount ? `<span class="cell-prop" title="${propCount} prop${propCount > 1 ? 's' : ''}">${propCount > 1 ? propCount : ''}</span>` : '';
-        const door = doorTrigger ? `<span class="cell-door" title="Door trigger ${esc(doorTrigger.id)}">D</span>` : '';
+        const door = doorTrigger
+          ? `<span class="cell-door" title="Door trigger ${esc(doorTrigger.id)}">D</span>`
+          : doorVisual
+            ? `<span class="cell-door" title="Door tile ${esc(doorVisual.id)}">V</span>`
+            : '';
         const tileTexture = tile ? tilePaintVisualUrl(editor, tileId) : '';
         const cellVars = `--height-overlay:${heightOverlayColor(st.hv)};--collision-overlay:${st.blocked ? 'rgba(220,38,38,.72)' : 'rgba(255,255,255,.035)'}`;
         const tileStyle = tile
@@ -2406,11 +2529,12 @@ export function mapEditorHtml(state, esc) {
       }
     }
     const gridModeCls = [
+      editor.tool === 'move' ? 'is-move-tool' : '',
       placing ? 'is-placing' : (editor.propTool === 'select' ? 'is-prop-select' : ''),
       editor.brush === 'collision' ? 'is-editing-collision' : '',
       editor.brush === 'height' ? 'is-editing-height' : '',
     ].filter(Boolean).join(' ');
-    gridHtml = `<div class="map-grid-wrap ${gridModeCls}" id="mapGridWrap"><div class="map-grid" id="mapPaintGrid" style="grid-template-columns:repeat(${w}, 24px)">${cells.join('')}<div class="map-prop-overlay" id="mapPropOverlay"></div></div><div class="map-drag-overlay" id="mapDragOverlay" hidden></div></div>`;
+    gridHtml = `<div class="map-grid-wrap ${gridModeCls}" id="mapGridWrap"><div class="map-grid" id="mapPaintGrid" style="grid-template-columns:repeat(${w}, 24px)">${cells.join('')}<div class="map-prop-overlay" id="mapPropOverlay"></div><div class="map-prop-overlay" id="mapGhostOverlay"></div></div><div class="map-drag-overlay" id="mapDragOverlay" hidden></div></div>`;
   } else {
     gridHtml = '<p class="hint">Load a map or create a new one to start painting.</p>';
   }
@@ -2481,7 +2605,7 @@ export function mapEditorHtml(state, esc) {
             <div class="map-active-layer-chip" title="Choose the edited layer from the left panel">Layer: <strong>${esc(isPropLayerActive(editor) ? 'Props' : brush === 'tile' ? `Deco ${(editor.map?.tileLayers?.activeLayer || 0) + 1}` : BRUSHES.find((b) => b.id === brush)?.label || 'Paint')}</strong></div>
             <div class="tool-group map-shared-tools" role="group" aria-label="Drawing tools">
               ${TOOLS.map((t) => {
-                const disabled = isPropLayerActive(editor) || ((t.id === 'raise' || t.id === 'lower') && brush !== 'height');
+                const disabled = (isPropLayerActive(editor) && t.id !== 'move') || ((t.id === 'raise' || t.id === 'lower') && brush !== 'height');
                 return `<button type="button" class="tool-btn map-tool ${editor.tool === t.id ? 'active' : ''}" data-tool="${t.id}" title="${esc(t.title)}" aria-label="${esc(t.label)}" ${disabled ? 'disabled' : ''}>${iconHtml(t.icon)}<span>${esc(t.label)}</span></button>`;
               }).join('')}
             </div>
@@ -3017,6 +3141,8 @@ async function loadTilePackage(editor, fileName) {
     editor._rtpksThumbUrls = {};
     return null;
   }
+  const requestedFile = String(fileName).replace(/\\/g, '/').split('/').pop();
+  if (editor.tilePackage?.fileName === requestedFile) return editor.tilePackage;
   const res = await fetch(`/api/tile-packages/package?file=${encodeURIComponent(fileName)}`);
   const payload = await res.json().catch(() => ({}));
   if (!res.ok || !payload.ok) throw new Error(payload.error || `RTPKS load failed (${res.status})`);
@@ -3385,10 +3511,15 @@ function tileCatalogHtml(editor, esc) {
     : '';
   const filtered = tileCatalogFiltered(editor);
   if (!filtered.length) return `${tabbar}<p class="hint">No tiles match this tab/search.</p>`;
-  const visible = filtered;
+  const maxPage = Math.max(0, Math.ceil(filtered.length / TILE_CATALOG_PAGE_SIZE) - 1);
+  const page = Math.min(maxPage, Math.max(0, Number(editor.tilePage) || 0));
+  editor.tilePage = page;
+  const start = page * TILE_CATALOG_PAGE_SIZE;
+  const visible = filtered.slice(start, start + TILE_CATALOG_PAGE_SIZE);
+  const end = start + visible.length;
   const controls = `<div class="map-tile-pagebar">
-    <span>${filtered.length} tiles</span>
-    <span class="map-tile-pagebar-hint">Scroll library</span>
+    <span>${start + 1}–${end} of ${filtered.length}</span>
+    <span class="map-tile-page-controls"><button type="button" data-tile-page="previous" ${page === 0 ? 'disabled' : ''}>Previous</button><button type="button" data-tile-page="next" ${page === maxPage ? 'disabled' : ''}>Next</button></span>
   </div>`;
   const cards = visible.map((tile) => {
     const active = Number(editor.tileBrushId) === Number(tile.resortTileId) && editor.brush === 'tile' ? 'active' : '';
@@ -4810,6 +4941,53 @@ export function bindMapEditor(state, deps) {
   }
   const render = editor._wrappedRender;
 
+  const syncSidebarTabs = () => {
+    document.querySelectorAll('[data-sidebar-tab]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.sidebarTab === editor.sidebarTab);
+    });
+    document.querySelectorAll('.map-sidebar-panel').forEach((panel) => {
+      const id = panel.id?.replace('mapSidebar', '').toLowerCase();
+      if (id) panel.classList.toggle('hidden', id !== editor.sidebarTab);
+    });
+  };
+
+  const renderDoorInspector = (reason = 'panel') => {
+    const panel = document.querySelector('#mapSidebarDoors');
+    if (!panel) return;
+    panel.innerHTML = `<h3>Door triggers</h3>${doorAuthoringHtml(editor, esc)}`;
+    bindDoorAuthoring(editor, { render: renderDoorInspector, log });
+    if (reason === 'geometry') refreshPlacedTileVisuals(editor);
+    else if (reason === 'selection') refreshDoorMarkers(editor);
+    syncPaintToolbarState(editor);
+  };
+
+  const syncToolMode = () => {
+    document.querySelectorAll('.map-tool').forEach((button) => {
+      button.classList.toggle('active', button.dataset.tool === editor.tool);
+      button.disabled = (button.dataset.tool === 'raise' || button.dataset.tool === 'lower')
+        && editor.brush !== 'height';
+    });
+    document.querySelectorAll('[data-map-door-layer]').forEach((button) => button.classList.toggle('active', Boolean(editor.doorTool)));
+    document.querySelectorAll('[data-map-prop-layer]').forEach((button) => button.classList.toggle('active', isPropLayerActive(editor)));
+    document.querySelectorAll('[data-prop-tool]').forEach((button) => {
+      const mode = button.dataset.propTool;
+      button.classList.toggle('active', mode === 'terrain' ? !editor.propTool : mode === editor.propTool);
+    });
+    const gridWrap = document.querySelector('#mapGridWrap');
+    if (gridWrap) {
+      gridWrap.classList.toggle('is-move-tool', editor.tool === 'move');
+      gridWrap.classList.toggle('is-placing', editor.propTool === 'place');
+      gridWrap.classList.toggle('is-prop-select', editor.propTool === 'select');
+    }
+    const layerLabel = document.querySelector('.map-active-layer-chip strong');
+    if (layerLabel) {
+      layerLabel.textContent = editor.brush === 'tile'
+        ? `Deco ${(editor.map?.tileLayers?.activeLayer || 0) + 1}`
+        : BRUSHES.find((item) => item.id === editor.brush)?.label || 'Paint';
+    }
+    refreshPlacementGhost(editor);
+  };
+
   const projectModalDeps = {
     ...deps,
     render,
@@ -4953,6 +5131,7 @@ export function bindMapEditor(state, deps) {
         event.stopPropagation();
         const ed = ensureMapEditorState(state);
         ed.tileTabId = tileTabBtn.dataset.tileTab || '';
+        ed.tilePage = 0;
         const firstTile = tileCatalogFiltered(ed)[0];
         if (firstTile) ed.tileBrushId = firstTile.resortTileId;
         ed.brush = 'tile';
@@ -4965,7 +5144,7 @@ export function bindMapEditor(state, deps) {
         event.preventDefault();
         const ed = ensureMapEditorState(state);
         const filtered = tileCatalogFiltered(ed);
-        const maxPage = Math.max(0, Math.ceil(filtered.length / 160) - 1);
+        const maxPage = Math.max(0, Math.ceil(filtered.length / TILE_CATALOG_PAGE_SIZE) - 1);
         ed.tilePage = tilePageBtn.dataset.tilePage === 'next'
           ? Math.min(maxPage, (Number(ed.tilePage) || 0) + 1)
           : Math.max(0, (Number(ed.tilePage) || 0) - 1);
@@ -5256,7 +5435,7 @@ export function bindMapEditor(state, deps) {
         editor.tool === 'raise' || editor.tool === 'lower');
     if (editor.tool === 'fill') {
       if (editor.brush === 'tile') {
-        floodFillTile(editor.map, x, y, tileCellValue(editor.map, x, y), editor.tileBrushId ?? null);
+        floodFillTile(editor, editor.map, x, y, tileCellValue(editor.map, x, y), editor.tileBrushId ?? null);
       } else if (editor.brush === 'path') {
         floodFillPath(editor, x, y, pathCellValue(editor.map, x, y), 1);
       } else {
@@ -5291,10 +5470,15 @@ export function bindMapEditor(state, deps) {
         }
       }
       const doorTriggerIndex = buildDoorTriggerIndex(editor.map);
+      const doorVisualIndex = buildDoorVisualIndex(editor.map);
+      const footprintIndex = buildVisibleFootprintIndex(
+        editor.map.tileLayers?.layers || [],
+        (tileId) => tileFootprint(tileEntry(editor, tileId)),
+      );
       for (const key of dirtyCells) {
         const [tx, ty] = key.split(',').map(Number);
         const btn = paintGrid?.querySelector(`[data-cell="${tx},${ty}"]`);
-        syncCellButton(btn, editor.map, tx, ty, editor, doorTriggerIndex);
+        syncCellButton(btn, editor.map, tx, ty, editor, doorTriggerIndex, doorVisualIndex, footprintIndex);
       }
       if (editor.brush === 'tile' || editor.tool === 'clear') refreshPropOverlays(editor);
       editor._tileDirtyCells = null;
@@ -5379,13 +5563,37 @@ export function bindMapEditor(state, deps) {
         removeAtPointer(x, y);
         return;
       }
-      if (editor.doorTool === 'place') {
+      if (editor.tool === 'move') {
+        const gridWrap = document.querySelector('#mapGridWrap');
+        editor._gridPan = {
+          clientX: event.clientX,
+          clientY: event.clientY,
+          scrollLeft: gridWrap?.scrollLeft || 0,
+          scrollTop: gridWrap?.scrollTop || 0,
+        };
+        gridWrap?.classList.add('is-panning');
+        return;
+      }
+      if (editor.doorTool) {
+        if (editor.doorTool === 'select') {
+          if (selectDoorAt(editor, x, y)) {
+            editor.sidebarTab = 'doors';
+            render();
+          }
+          return;
+        }
         beginMapHistory(editor);
-        if (placeSelectedDoorTrigger(editor, x, y)) {
+        const doorMoveMode = editor.doorTool;
+        const moved = doorMoveMode === 'move-visual'
+          ? moveSelectedDoorVisual(editor, x, y)
+          : placeSelectedDoorTrigger(editor, x, y);
+        if (moved) {
           commitMapHistory(editor);
           editor.doorTool = 'select';
+          editor.doorPanelSection = 'position';
           editor.dirty = true;
-          render();
+          log(doorMoveMode === 'move-visual' ? 'Moved door tile.' : 'Moved door trigger.', 'ok');
+          renderDoorInspector('geometry');
         } else {
           cancelMapHistory(editor);
         }
@@ -5428,6 +5636,14 @@ export function bindMapEditor(state, deps) {
       stampPaint(x, y);
     };
     paintGrid.onmousemove = (event) => {
+      if (editor._gridPan && editor.tool === 'move') {
+        const gridWrap = document.querySelector('#mapGridWrap');
+        if (gridWrap) {
+          gridWrap.scrollLeft = editor._gridPan.scrollLeft - (event.clientX - editor._gridPan.clientX);
+          gridWrap.scrollTop = editor._gridPan.scrollTop - (event.clientY - editor._gridPan.clientY);
+        }
+        return;
+      }
       const pos = cellFromEvent(event);
       if (!pos) return;
       const [x, y] = pos;
@@ -5443,7 +5659,7 @@ export function bindMapEditor(state, deps) {
         const prev = editor._ghostTile;
         if (!prev || prev[0] !== x || prev[1] !== y) {
           editor._ghostTile = [x, y];
-          refreshPropOverlays(editor);
+          refreshPlacementGhost(editor);
         }
         return;
       }
@@ -5451,7 +5667,7 @@ export function bindMapEditor(state, deps) {
         const prev = editor._ghostTile;
         if (!prev || prev[0] !== x || prev[1] !== y) {
           editor._ghostTile = [x, y];
-          refreshPropOverlays(editor);
+          refreshPlacementGhost(editor);
         }
       }
       if ((editor.tool === 'area' || editor.tool === 'line') && editor.dragStart) {
@@ -5463,7 +5679,13 @@ export function bindMapEditor(state, deps) {
       if (editor.tool === 'area' || editor.tool === 'line') return;
       stampPaint(x, y, { light: true });
     };
-    window.addEventListener('mouseup', () => {
+    if (editor._gridMouseUpHandler) window.removeEventListener('mouseup', editor._gridMouseUpHandler);
+    editor._gridMouseUpHandler = () => {
+      if (editor._gridPan) {
+        editor._gridPan = null;
+        document.querySelector('#mapGridWrap')?.classList.remove('is-panning');
+        return;
+      }
       if (editor._placementDrag) {
         if (editor._placementDrag.moved) {
           commitMapHistory(editor);
@@ -5490,11 +5712,12 @@ export function bindMapEditor(state, deps) {
         }
       }
       editor.painting = false;
-    }, { once: false });
+    };
+    window.addEventListener('mouseup', editor._gridMouseUpHandler);
     paintGrid.onmouseleave = () => {
       if ((editor.propTool === 'place' || isTilePlacementMode(editor)) && editor._ghostTile) {
         editor._ghostTile = null;
-        refreshPropOverlays(editor);
+        refreshPlacementGhost(editor);
       }
     };
   }
@@ -5619,7 +5842,8 @@ export function bindMapEditor(state, deps) {
   if (modelSearch) {
     modelSearch.oninput = () => {
       editor.modelSearch = modelSearch.value;
-      render();
+      clearTimeout(editor._modelSearchTimer);
+      editor._modelSearchTimer = setTimeout(render, 120);
     };
   }
 
@@ -5628,7 +5852,8 @@ export function bindMapEditor(state, deps) {
     tileSearch.oninput = () => {
       editor.tileSearch = tileSearch.value;
       editor.tilePage = 0;
-      render();
+      clearTimeout(editor._tileSearchTimer);
+      editor._tileSearchTimer = setTimeout(render, 120);
     };
   }
 
@@ -5960,7 +6185,11 @@ export function bindMapEditor(state, deps) {
   document.querySelectorAll('.map-tool').forEach((btn) => {
     btn.onclick = () => {
       editor.tool = btn.dataset.tool;
-      render();
+      editor.propTool = null;
+      editor.placeModelId = null;
+      editor.doorTool = null;
+      editor._ghostTile = null;
+      syncToolMode();
     };
   });
 
@@ -6082,7 +6311,18 @@ export function bindMapEditor(state, deps) {
   document.querySelectorAll('[data-sidebar-tab]').forEach((btn) => {
     btn.onclick = () => {
       editor.sidebarTab = btn.dataset.sidebarTab;
-      render();
+      if (editor.sidebarTab === 'doors') {
+        editor.doorTool = editor.doorTool || 'select';
+        editor.propTool = null;
+        editor.placeModelId = null;
+        renderDoorInspector('mode');
+      } else if (editor.doorTool) {
+        editor.doorTool = null;
+      }
+      syncSidebarTabs();
+      syncToolMode();
+      if (editor.sidebarTab === 'props' && !editor.modelViewportOpen) refreshModelThumbnails(editor);
+      refreshSelectedAssetPreview(editor);
     };
   });
 
@@ -6118,11 +6358,14 @@ export function bindMapEditor(state, deps) {
       editor.sidebarTab = 'doors';
       editor.propTool = null;
       editor.placeModelId = null;
-      render();
+      editor._ghostTile = null;
+      renderDoorInspector('mode');
+      syncSidebarTabs();
+      syncToolMode();
     };
   });
 
-  bindDoorAuthoring(editor, { render, log });
+  bindDoorAuthoring(editor, { render: renderDoorInspector, log });
 
   const openWizardBtn = document.querySelector('#mapOpenCompileWizard');
   if (openWizardBtn) openWizardBtn.onclick = openCompileWizard;
@@ -6273,6 +6516,7 @@ export function bindMapEditor(state, deps) {
           body: JSON.stringify({ fileName, map: editor.map }),
         });
         editor.currentFile = fileName.endsWith('.owmap') ? fileName : `${fileName}.owmap`;
+        clearMapPlanThumbCache(editor.currentFile);
         editor.dirty = false;
         syncProjectFromEditor(editor);
         try {

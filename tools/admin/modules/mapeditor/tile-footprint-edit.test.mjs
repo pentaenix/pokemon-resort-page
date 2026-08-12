@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { footprintAnchorAt, overlappingFootprintAnchors } from './tile-footprint-edit.js';
+import { buildVisibleFootprintIndex, footprintAnchorAt, overlappingFootprintAnchors } from './tile-footprint-edit.js';
 
 const footprint = (tileId) => tileId === 9 ? { w: 3, h: 3 } : tileId === 8 ? { w: 1, h: 3 } : { w: 1, h: 1 };
 
@@ -23,4 +23,25 @@ test('placing a multi-cell tile finds every overlapping anchor, including anchor
       .map(({ tileId, anchorX, anchorY }) => [tileId, anchorX, anchorY]),
     [[9, 1, 1], [8, 4, 2]],
   );
+});
+
+test('visible footprint index resolves all cells once and lets higher layers win', () => {
+  const base = Array.from({ length: 5 }, () => Array(5).fill(null));
+  const upper = Array.from({ length: 5 }, () => Array(5).fill(null));
+  const hidden = Array.from({ length: 5 }, () => Array(5).fill(null));
+  base[1][1] = 9;
+  upper[2][2] = 1;
+  hidden[0][0] = 9;
+  const index = buildVisibleFootprintIndex([
+    { cells: base },
+    { cells: upper },
+    { cells: hidden, visible: false },
+  ], footprint);
+  assert.deepEqual(index.get('3,3'), {
+    tileId: 9, anchorX: 1, anchorY: 1, layerIndex: 0, footprint: { w: 3, h: 3 },
+  });
+  assert.deepEqual(index.get('2,2'), {
+    tileId: 1, anchorX: 2, anchorY: 2, layerIndex: 1, footprint: { w: 1, h: 1 },
+  });
+  assert.equal(index.get('0,0'), undefined);
 });

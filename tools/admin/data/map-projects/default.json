@@ -131,8 +131,8 @@
     }
   ],
   "editor": {
-    "activeMapId": "0_south",
-    "viewMode": "2d",
+    "activeMapId": "0",
+    "viewMode": "3d",
     "zoom": 1,
     "overlays": {
       "values": true,

@@ -785,7 +785,9 @@ async function addRtpksTiles(scene, map, tileSize, packageInfo, fileName, dispos
           map,
           x,
           z,
-          layerLift: index * DECORATION_LAYER_Y_EPSILON,
+          // Layer zero must also clear the generated fallback terrain. Starting
+          // at zero made flat RTPKS surfaces fight the heightfield beneath them.
+          layerLift: (index + 1) * DECORATION_LAYER_Y_EPSILON,
           conformToTerrain: meshVerticalRange(meshPayload) <= 0.02,
           baseY: terrainFloorBaseAtTile(map, x, z, tileSize),
         };

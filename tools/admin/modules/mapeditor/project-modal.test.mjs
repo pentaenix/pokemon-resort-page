@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { findMapSnap } from './project-modal.js';
+import { findMapSnap, isMapLayoutClick } from './project-modal.js';
 
 const anchor = {
   id: 'anchor',
@@ -37,4 +37,10 @@ test('findMapSnap respects maps with different dimensions', () => {
   assert.equal(snap?.top, 30);
   assert.equal(snap?.gridX, 4);
   assert.equal(snap?.gridY, 2);
+});
+
+test('a short map gesture opens the map while a drag remains a layout edit', () => {
+  assert.equal(isMapLayoutClick(100, 100, 102, 101), true);
+  assert.equal(isMapLayoutClick(100, 100, 104, 101), false);
+  assert.equal(isMapLayoutClick(100, 100, 140, 100), false);
 });

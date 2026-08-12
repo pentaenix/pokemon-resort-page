@@ -381,6 +381,13 @@ export function saveTilePackDocument(packBuffer, metaBuffer, document) {
   return writePack(pack);
 }
 
+export function transformEditableTilePack(packBuffer, metaBuffer, transform) {
+  const pack = loadEditableTilePack(packBuffer, metaBuffer);
+  const result = transform(pack);
+  syncDefinitions(pack, pack.document);
+  return { ...writePack(pack), result };
+}
+
 function nextId(values) {
   return values.reduce((max, value) => Math.max(max, Number(value) || 0), -1) + 1;
 }

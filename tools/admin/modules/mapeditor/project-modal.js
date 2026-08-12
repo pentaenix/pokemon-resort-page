@@ -117,8 +117,9 @@ function layoutGridHtml(editor, esc, maps) {
     const position = positions.get(map.id);
     const active = map.id === activeId ? ' active' : '';
     const separated = map.linked === false ? ' separated' : '';
-    return `<article class="map-layout-card${active}${separated}" data-layout-map="${esc(map.id)}"
+    return `<button type="button" class="map-layout-card${active}${separated}" data-layout-map="${esc(map.id)}"
       data-grid-x="${map.gridX}" data-grid-y="${map.gridY}"
+      aria-label="Open ${esc(map.name || map.id)}"
       style="left:${position.left}px;top:${position.top}px;width:${size.width}px;height:${size.height}px">
       <canvas class="map-layout-thumb" data-plan-thumb="${esc(map.file)}" aria-hidden="true"></canvas>
       <div class="map-layout-label">
@@ -127,12 +128,13 @@ function layoutGridHtml(editor, esc, maps) {
         ${map.sourceMapId ? `<em>Reuses ${esc(map.sourceMapId)}</em>` : ''}
         ${map.linked === false ? '<em>Separated</em>' : ''}
       </div>
-    </article>`;
+    </button>`;
   }).join('');
 
   return `<div class="map-layout-viewport" id="mapLayoutViewport">
     <div class="map-layout-hud">
-      <span>Drag maps to move</span>
+      <span>Click to open</span>
+      <span>Drag to move</span>
       <span>Snap edges to connect</span>
       <span>Drop away to separate</span>
       <span>Drag empty space to pan</span>
@@ -356,14 +358,7 @@ export function bindProjectModal(state, deps, getBuilders) {
       if (contextOpen && contextMapId) {
         const entry = editor.project?.maps?.find((m) => m.id === contextMapId);
         if (!entry?.file) return;
-        try {
-          await deps.loadMapFileIntoEditor?.(state, deps, entry.file, entry.id);
-          editor.projectModalOpen = false;
-          host.classList.add('hidden');
-          render();
-        } catch (err) {
-          log(err.message || 'Could not open map.', 'error');
-        }
+        await editor._openProjectMapEntry?.(entry);
         return;
       }
 
@@ -482,20 +477,45 @@ export function bindProjectModal(state, deps, getBuilders) {
       editor.projectDirty = true;
     });
 
+    editor._openProjectMapEntry = async (entry) => {
+      if (!entry?.file) return;
+      const activeId = editor.project?.editor?.activeMapId || '';
+      if (activeId !== entry.id && editor.dirty
+          && !window.confirm(`Open ${entry.name || entry.id} and discard unsaved changes to the current map?`)) {
+        return;
+      }
+      editor.projectModalOpen = false;
+      host.classList.add('hidden');
+      if (activeId === entry.id && editor.map) {
+        render();
+        return;
+      }
+      try {
+        await deps.loadMapFileIntoEditor?.(state, deps, entry.file, entry.id);
+      } catch (err) {
+        editor.projectModalOpen = true;
+        host.classList.remove('hidden');
+        syncProjectModal(editor, esc, getBuilders);
+        log(err.message || 'Could not open map.', 'error');
+      }
+    };
+
     editor._bindProjectMapSurface = () => {
       const canvas = host.querySelector('#mapLayoutCanvas');
       if (!canvas) return;
       bindLayoutDrag(canvas, editor, () => {
         editor.projectDirty = true;
         syncProjectModal(editor, esc, getBuilders);
-      });
+      }, (entry) => editor._openProjectMapEntry?.(entry));
     };
 
     editor._openProjectModal = async () => {
       editor.projectModalOpen = true;
       editor.projectModalTab = editor.projectModalTab || 'layout';
       host.classList.remove('hidden');
-      clearMapPlanThumbCache();
+      syncProjectModal(editor, esc, getBuilders);
+      deps.bindProjectPanelInputs?.(state, deps, host);
+      deps.bindTerrainVisualInputs?.(state, deps, host);
       try {
         const listing = await fetch('/api/maps/list').then((r) => r.json()).catch(() => null);
         if (listing?.ok) {
@@ -507,7 +527,9 @@ export function bindProjectModal(state, deps, getBuilders) {
         if (added.length) {
           log(`Found ${added.length} map file${added.length === 1 ? '' : 's'} on disk and added as separated.`, 'ok');
         }
-        await deps.refreshProjectMapDimensions?.(editor);
+        const needsDimensions = added.length > 0 || (editor.project?.maps || [])
+          .some((entry) => !editor.mapDimensionsByFile?.[entry.file]);
+        if (needsDimensions) await deps.refreshProjectMapDimensions?.(editor);
       } catch { /* keep modal usable */ }
       syncProjectModal(editor, esc, getBuilders);
       deps.bindProjectPanelInputs?.(state, deps, host);
@@ -575,7 +597,11 @@ export function findMapSnap(moving, candidates, maxDistance = MAP_LAYOUT_SNAP_DI
   return nearest && nearest.distance <= maxDistance ? nearest : null;
 }
 
-function bindLayoutDrag(canvas, editor, onMoved) {
+export function isMapLayoutClick(startX, startY, endX, endY, threshold = 5) {
+  return Math.abs(endX - startX) + Math.abs(endY - startY) < threshold;
+}
+
+function bindLayoutDrag(canvas, editor, onMoved, onOpen) {
   if (canvas.dataset.dragBound === '1') return;
   canvas.dataset.dragBound = '1';
   const viewport = canvas.closest('#mapLayoutViewport');
@@ -616,6 +642,24 @@ function bindLayoutDrag(canvas, editor, onMoved) {
     contextMenu?.classList.add('hidden');
     if (contextMenu) delete contextMenu.dataset.mapId;
   };
+
+  const openCard = (card) => {
+    const map = editor.project?.maps?.find((entry) => entry.id === card?.dataset.layoutMap);
+    if (!map) return;
+    card.classList.add('is-opening');
+    card.setAttribute('aria-busy', 'true');
+    Promise.resolve(onOpen?.(map)).catch(() => {}).finally(() => {
+      card.classList.remove('is-opening');
+      card.removeAttribute('aria-busy');
+    });
+  };
+
+  viewport.addEventListener('keydown', (event) => {
+    const card = event.target.closest('.map-layout-card');
+    if (!card || !['Enter', ' '].includes(event.key)) return;
+    event.preventDefault();
+    openCard(card);
+  });
 
   viewport.addEventListener('contextmenu', (event) => {
     const card = event.target.closest('.map-layout-card');
@@ -711,7 +755,7 @@ function bindLayoutDrag(canvas, editor, onMoved) {
       canvas.querySelectorAll('.map-layout-card.is-snap-target').forEach((card) => card.classList.remove('is-snap-target'));
       const dx = event.clientX - gesture.startX;
       const dy = event.clientY - gesture.startY;
-      if (Math.abs(dx) + Math.abs(dy) >= 5) {
+      if (!isMapLayoutClick(gesture.startX, gesture.startY, event.clientX, event.clientY)) {
         if (!gesture.snap) {
           gesture.map.linked = false;
         } else {
@@ -730,6 +774,8 @@ function bindLayoutDrag(canvas, editor, onMoved) {
           gesture.map.gridY = gesture.snap.gridY;
         }
         onMoved();
+      } else {
+        openCard(gesture.card);
       }
     }
     gesture = null;
