@@ -26,6 +26,11 @@
   },
   "statusCards": [
     {
+      "label": "Aquarium",
+      "value": "Testing",
+      "detail": "Tank construction, connected rooms, exhibit stocking, decorations, and visitors in the development build"
+    },
+    {
       "label": "Island Reconstruction",
       "value": "Active",
       "detail": "Cork board, pins, models, and character work"

@@ -5,6 +5,7 @@ import {
   buildDoorVisualIndex,
   buildDoorTriggerIndex,
   doorVisualAt,
+  dragDoorPart,
   doorTriggerAt,
   ensureDoorAuthoring,
   moveSelectedDoorVisual,
@@ -88,6 +89,38 @@ test('moving an existing animated tile preserves its assigned decoration layer',
   };
   assert.equal(moveSelectedDoorVisual(editor, 7, 8), true);
   assert.deepEqual(editor.map.doorTriggers[0].visual, { mapId: '', layerId: 'doors', tile: [7, 8] });
+});
+
+test('directly dragging a visible door moves its RTPKS tile and metadata together', () => {
+  const cells = Array.from({ length: 6 }, () => Array(6).fill(null));
+  cells[2][2] = 91;
+  const editor = {
+    map: {
+      id: 'outside',
+      doorTriggers: [{ id: 'front', tile: [2, 3], visual: { mapId: '', layerId: 'doors', tile: [2, 2] } }],
+      tileLayers: { layers: [{ id: 'doors', cells }] },
+    },
+  };
+  assert.equal(dragDoorPart(editor, 'front', 'visual', 4, 1), true);
+  assert.equal(cells[2][2], null);
+  assert.equal(cells[1][4], 91);
+  assert.deepEqual(editor.map.doorTriggers[0].visual.tile, [4, 1]);
+});
+
+test('direct door dragging never overwrites an occupied tile', () => {
+  const cells = Array.from({ length: 4 }, () => Array(4).fill(null));
+  cells[1][1] = 91;
+  cells[1][2] = 44;
+  const editor = {
+    map: {
+      id: 'outside',
+      doorTriggers: [{ id: 'front', tile: [1, 2], visual: { mapId: '', layerId: 'doors', tile: [1, 1] } }],
+      tileLayers: { layers: [{ id: 'doors', cells }] },
+    },
+  };
+  assert.equal(dragDoorPart(editor, 'front', 'visual', 2, 1), false);
+  assert.equal(cells[1][1], 91);
+  assert.equal(cells[1][2], 44);
 });
 
 test('doors can be selected from either their trigger or animated tile marker', () => {

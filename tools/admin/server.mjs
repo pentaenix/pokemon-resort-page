@@ -593,6 +593,10 @@ function normalizeProject(project, fallbackId = 'default') {
         mapPlacement: Array.isArray(part.mapPlacement) ? [...part.mapPlacement] : [0, 0, 0],
         footprint: Array.isArray(part.footprint) ? [...part.footprint] : [1, 1],
       })),
+      tiles: (Array.isArray(kit.tiles) ? kit.tiles : []).map((tile) => ({
+        ...tile,
+        sourceCell: Array.isArray(tile.sourceCell) ? [...tile.sourceCell] : [0, 0],
+      })),
     })).filter((kit) => kit.id),
     editor: {
       activeMapId: String(project?.editor?.activeMapId || '').trim(),

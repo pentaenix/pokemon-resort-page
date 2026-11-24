@@ -1,0 +1,205 @@
+{
+  "title": "Attend Pokemon Provider: Historical Forms",
+  "description": "ORAS Cosplay Pikachu models and a custom Spiky-eared Pichu. Original 3DS animation mappings and preferred base models are retained.",
+  "matches": [
+    "gameplay/pokemon_attend/providers/historical_forms.json"
+  ],
+  "tags": [
+    "attend",
+    "pokemon",
+    "provider"
+  ],
+  "groups": [
+    {
+      "id": "assets",
+      "label": "Model discovery",
+      "order": 1
+    },
+    {
+      "id": "placement",
+      "label": "Default Pokemon transform",
+      "order": 10
+    },
+    {
+      "id": "interaction",
+      "label": "Interaction adapter",
+      "description": "Semantic nodes and interaction timing shared by provider models.",
+      "order": 20
+    },
+    {
+      "id": "idle",
+      "label": "Idle behavior",
+      "description": "Provider-level no-interaction emote and sleep timing.",
+      "order": 30
+    },
+    {
+      "id": "semantics",
+      "label": "Animation semantics",
+      "order": 40,
+      "collapsedDefault": true
+    },
+    {
+      "id": "frames",
+      "label": "Expression frame maps",
+      "order": 50,
+      "collapsedDefault": true
+    },
+    {
+      "id": "pokemon",
+      "label": "Per-Pokemon overrides",
+      "order": 70,
+      "collapsedDefault": true
+    }
+  ],
+  "fields": {
+    "pokemon.*.hiddenMaterialSubstrings": {
+      "label": "Hidden effect materials in all Attend modes",
+      "group": "pokemon",
+      "description": "Provider-owned material-name filters copied into normal Attend, bath and spa. Victini hides AuraEf1 and BodyB_Add attack effects while retaining body and animation data."
+    },
+    "pokemon.*.poseRootRollDegrees": {
+      "label": "Attend inverted root-track correction",
+      "group": "placement",
+      "min": -180,
+      "max": 180,
+      "step": 1
+    },
+    "defaults.interactionAdapter.playAnimation.heightNormalizationStrength": {
+      "label": "Play animation height correction",
+      "group": "interaction",
+      "min": 0,
+      "max": 1,
+      "step": 0.05,
+      "hint": "Zero disables. One aligns large idle/movement height offsets while preserving bobbing."
+    },
+    "defaults.interactionAdapter.playAnimation.minimumHeightOffsetModelUnits": {
+      "label": "Minimum clip height mismatch to correct",
+      "group": "interaction",
+      "min": 0,
+      "max": 1000,
+      "step": 1,
+      "unit": " source model units"
+    },
+    "defaults.interactionAdapter.playAnimation.rootNodeNames": {
+      "label": "Body-root candidates for height alignment",
+      "group": "interaction"
+    },
+    "defaults.interactionAdapter.playAnimation.pickupBlendInSeconds": {
+      "label": "Movement into pickup blend",
+      "group": "interaction",
+      "min": 0.01,
+      "max": 1,
+      "step": 0.01,
+      "unit": " seconds"
+    },
+    "defaults.interactionAdapter.playAnimation.pickupBlendOutSeconds": {
+      "label": "Pickup back to movement blend",
+      "group": "interaction",
+      "min": 0.01,
+      "max": 1,
+      "step": 0.01,
+      "unit": " seconds"
+    },
+    "defaults.idleBehavior.enabled": {
+      "label": "Idle behavior enabled",
+      "widget": "checkbox",
+      "group": "idle",
+      "order": 1
+    },
+    "defaults.idleBehavior.emoteAfterSeconds": {
+      "label": "Emote after no interaction",
+      "unit": " sec",
+      "group": "idle",
+      "order": 2
+    },
+    "defaults.idleBehavior.emoteIntervalMinSeconds": {
+      "label": "Emote random delay min",
+      "widget": "number",
+      "min": 15,
+      "description": "Automatic idle emotes must be at least 15 seconds apart.",
+      "unit": " sec",
+      "group": "idle",
+      "order": 3
+    },
+    "defaults.idleBehavior.emoteIntervalMaxSeconds": {
+      "label": "Emote random delay max",
+      "widget": "number",
+      "min": 15,
+      "unit": " sec",
+      "group": "idle",
+      "order": 4
+    },
+    "defaults.idleBehavior.sleepAfterSeconds": {
+      "label": "Sleep after no interaction",
+      "unit": " sec",
+      "group": "idle",
+      "order": 5
+    },
+    "defaults.idleBehavior.emoteAnimation": {
+      "label": "Emote animation semantic",
+      "group": "idle",
+      "order": 6
+    },
+    "defaults.idleBehavior.sleepAnimation": {
+      "label": "Sleep animation semantic",
+      "group": "idle",
+      "order": 7
+    },
+    "defaults.idleBehavior.sleepDurationSeconds": {
+      "label": "Sleep visible duration",
+      "unit": " sec",
+      "group": "idle",
+      "max": 7200,
+      "order": 8
+    }
+  },
+  "patterns": {
+    "defaults.model*": {
+      "group": "assets"
+    },
+    "defaults.*Degrees": {
+      "group": "placement"
+    },
+    "defaults.scale": {
+      "label": "Default Pokemon model scale",
+      "group": "placement"
+    },
+    "defaults.idleMotion.*": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.*Eye": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.*Mouth": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.*DurationSeconds": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.idleBehavior.fade*": {
+      "group": "idle",
+      "advanced": true
+    },
+    "defaults.interactionAdapter.semanticAnimationSlots.*": {
+      "group": "semantics",
+      "advanced": true
+    },
+    "defaults.interactionAdapter.*ExpressionFrames.*": {
+      "group": "frames",
+      "advanced": true
+    },
+    "defaults.interactionAdapter.*": {
+      "group": "interaction"
+    },
+    "pokemon.*": {
+      "group": "pokemon"
+    },
+    "pokemon.*.*": {
+      "group": "pokemon"
+    }
+  }
+}

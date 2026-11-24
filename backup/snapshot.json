@@ -1,0 +1,11 @@
+{
+  "repository": "pokemon-resort-page",
+  "date": "2026-11-24",
+  "originalHead": "700b3fed1271334d84908e4144f800740fd0c2e6",
+  "originalBranch": "main",
+  "snapshotBranch": "backup/resort-2026-11-24",
+  "includedPaths": 898,
+  "excluded": "Ignored files, build outputs, generated exports/caches, and local runtime saves are not part of this source snapshot.",
+  "conflictedWorktree": false,
+  "largeAssetsInRelease": false
+}

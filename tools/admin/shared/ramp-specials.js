@@ -16,6 +16,7 @@ export const SPECIAL = {
   CONCAVE_SE: 11,
   CONCAVE_SW: 12,
   CONCAVE_NW: 13,
+  ACTOR_SPAWN: 14,
 };
 
 export const SPECIAL_LABELS = {
@@ -33,6 +34,7 @@ export const SPECIAL_LABELS = {
   11: 'Concave SE',
   12: 'Concave SW',
   13: 'Concave NW',
+  14: 'Actor spawn',
 };
 
 export const RAMP_PRESETS = [
@@ -50,9 +52,10 @@ export const RAMP_PRESETS = [
   { id: 11, label: 'Concave SE', short: 'vSE', group: 'concave' },
   { id: 12, label: 'Concave SW', short: 'vSW', group: 'concave' },
   { id: 13, label: 'Concave NW', short: 'vNW', group: 'concave' },
+  { id: 14, label: 'Actor spawn', short: 'S', group: 'spawn' },
 ];
 
-export const SPECIAL_MAX = 13;
+export const SPECIAL_MAX = 14;
 
 function tileHeight(heights, tx, ty) {
   return heights?.[ty]?.[tx] ?? 0;

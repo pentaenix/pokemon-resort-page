@@ -30,13 +30,13 @@
     },
     "mapAlignment": {
       "planeSize": 10,
-      "scaleX": 1,
-      "scaleZ": 1,
+      "scaleX": 0.9554140127388535,
+      "scaleZ": 0.7165605095541401,
       "offsetX": 0,
       "offsetZ": 0,
       "rotationY": 0,
       "flipU": 0,
-      "flipV": 1,
+      "flipV": 0,
       "overlayOpacity": 0.55
     }
   },

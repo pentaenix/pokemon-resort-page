@@ -76,6 +76,10 @@ export function resizeMap(map, width, height) {
     allowedDirections: [...(trigger.allowedDirections || [])],
     visual: trigger.visual ? { ...trigger.visual, tile: [...(trigger.visual.tile || trigger.tile || [0, 0])] } : null,
   }));
+  next.spawnTiles = (map.spawnTiles || [])
+    .filter((spawn) => spawn?.tile?.[0] >= 0 && spawn.tile[0] < width &&
+      spawn?.tile?.[1] >= 0 && spawn.tile[1] < height)
+    .map((spawn) => ({ ...spawn, tile: [...spawn.tile] }));
   next.terrain.height = copyLayer(map.terrain?.height, 0);
   next.terrain.special = copyLayer(map.terrain?.special, 0);
   next.terrain.collision = copyLayer(map.terrain?.collision, 0);

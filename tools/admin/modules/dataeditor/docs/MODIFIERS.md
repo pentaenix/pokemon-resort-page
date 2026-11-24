@@ -4,6 +4,33 @@ Modifiers live in `tools/admin/modules/dataeditor/modifiers/` and customize how 
 
 This editor is intentionally conservative: modifiers should describe fields that actually exist in the target config file. Do not invent paths.
 
+The cinematic shot modifier exposes the authored shot 7 `flyerPrompt` controls:
+image/font paths, reveal/fade/prompt delay, poster height, background blur/dimming,
+signature XY/width, and character limit. The game reloads saved config normally;
+name-entry runtime state is reset on reload without changing any save/profile.
+`flyerPrompt.tearPullPixels`, `tearPullSeconds`, and `tearCoastSeconds` tune paper
+tension and release inertia while retaining the existing travel/fade controls.
+Zero coast restores legacy easing.
+The shared textbox modifier exposes `textbox.advanceMarker` sprite-sheet,
+animation and inset controls for overworld and Watanabe dialogue. Text reserves
+room for the marker; rendering remains disabled for empty/non-waiting boxes.
+Shot `cityAudio` controls city rain, filtered flyer rain, door clips and wet step
+volume/contact frames. `welcomeIntro.dialogueResolutionScale` changes the welcome
+dialogue raster density independently of the game's 400 by 250 world.
+`welcomeIntro.dialoguePages` adds two-line pages after the greeting. `autoAdvance`
+and `pageSeconds` time each page; clicking skips ahead and resets its timer.
+`audio.music.welcomeSelected` and `welcomeVolume` select Watanabe's separate music.
+`audio.music.selected` selects the boat song, including the title-screen track.
+`musicStartDelaySeconds` starts the welcome song after Watanabe is fully visible.
+`exitFadeSeconds` and `musicLeadSeconds` tune the final fade and black hold into
+the existing boat playlist: stop welcome music at black, then reveal after the hold.
+`audio.music.startShotKey` and `startSeconds` delay boat music until Haru turns
+toward the island (shot 3, 8.05 seconds, 0.1 seconds after her turn begins);
+the first two shots retain only SFX.
+`audio.boatMix` exposes music rise, water/motor ducking, and the later camera
+departure fade. Gains multiply the authored loop volumes; splash tails are not
+ducked, and the music cue does not restart boat ambience.
+
 ## JSON comment metadata
 
 Some game config files include helper fields such as:
@@ -45,6 +72,7 @@ These metadata fields remain in the saved JSON unchanged unless the user explici
 - `text`
 - `textarea`
 - `number`
+- `vector` for numeric arrays, with labeled component inputs (`components`, default X/Y/Z) and a configurable numeric `step`. Values remain numeric arrays when saved.
 - `slider`
 - `checkbox`
 - `select` / `dropdown`

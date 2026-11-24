@@ -144,6 +144,35 @@ export function moveSelectedDoorVisual(editor, x, y) {
   return true;
 }
 
+/** Move a door handle directly from the map, including its visible RTPKS tile. */
+export function dragDoorPart(editor, triggerId, part, x, y) {
+  if (!editor?.map) return false;
+  ensureDoorAuthoring(editor.map);
+  const trigger = editor.map.doorTriggers.find((item) => item.id === triggerId);
+  if (!trigger) return false;
+  const target = [Number(x), Number(y)];
+  if (part !== 'visual') {
+    trigger.tile = target;
+    editor.dirty = true;
+    return true;
+  }
+  if (!trigger.visual || (trigger.visual.mapId && trigger.visual.mapId !== editor.map.id)) return false;
+  const old = numberPair(trigger.visual.tile);
+  const layer = editor.map.tileLayers?.layers?.find((item) => item.id === trigger.visual.layerId);
+  if (layer?.cells) {
+    const sourceTile = layer.cells?.[old[1]]?.[old[0]];
+    const targetTile = layer.cells?.[target[1]]?.[target[0]];
+    if (sourceTile != null && targetTile != null && (old[0] !== target[0] || old[1] !== target[1])) return false;
+    if (sourceTile != null && layer.cells?.[target[1]]) {
+      layer.cells[target[1]][target[0]] = sourceTile;
+      if (layer.cells?.[old[1]]) layer.cells[old[1]][old[0]] = null;
+    }
+  }
+  trigger.visual.tile = target;
+  editor.dirty = true;
+  return true;
+}
+
 export function removeDoorTriggerById(map, triggerId) {
   ensureDoorAuthoring(map);
   const removed = map.doorTriggers.filter((trigger) => trigger.id === triggerId);
@@ -202,7 +231,7 @@ function destinationMapOptions(editor, selected, esc) {
 function doorModeHint(mode) {
   if (mode === 'move-trigger' || mode === 'place') return 'Click the cell the player walks toward.';
   if (mode === 'move-visual') return 'Click the cell containing the animated door tile.';
-  return 'Click a D or V marker to select a door.';
+  return 'Click a D or V marker to select it, then drag it directly on the map.';
 }
 
 export function doorAuthoringHtml(editor, esc) {
@@ -232,11 +261,6 @@ export function doorAuthoringHtml(editor, esc) {
     <div class="map-door-actions"><button type="button" class="btn small" data-door-add>Add door</button><button type="button" class="btn small danger" data-door-delete>Delete</button></div>
     <div class="map-door-list">${list}</div>
     <div class="map-door-summary"><strong>${esc(selected.id)}</strong><span>Trigger ${selected.tile[0]}, ${selected.tile[1]}</span><span>Tile ${esc(visualText)}</span><span>${esc(destinationText)}</span></div>
-    <div class="map-door-modebar" role="group" aria-label="Door map tool">
-      <button type="button" class="${editor.doorTool === 'select' ? 'active' : ''}" data-door-mode="select">Select</button>
-      <button type="button" class="${['move-trigger', 'place'].includes(editor.doorTool) ? 'active' : ''}" data-door-mode="move-trigger">Move trigger</button>
-      <button type="button" class="${editor.doorTool === 'move-visual' ? 'active' : ''}" data-door-mode="move-visual">Move door tile</button>
-    </div>
     <p class="map-door-mode-hint">${esc(doorModeHint(editor.doorTool))}</p>
     <div class="map-door-sections" role="tablist">
       <button type="button" class="${section === 'position' ? 'active' : ''}" data-door-section="position">Position</button>

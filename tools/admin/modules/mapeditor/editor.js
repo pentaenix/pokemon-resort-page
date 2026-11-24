@@ -17,6 +17,26 @@ import { openTilePackEditor } from './tile-pack-editor.js';
 import { bindProjectModal, openProjectModal, syncProjectModal } from './project-modal.js';
 import { buildVisibleFootprintIndex, footprintAnchorAt, overlappingFootprintAnchors } from './tile-footprint-edit.js';
 import { createMapFromRaeInterior, validateRaeInteriorMetadata } from './interior-import.js';
+import {
+  createBlankInteriorMap,
+  defaultInteriorRoomStyle,
+  interiorOpeningCovers,
+} from './interior-default-room.js';
+import {
+  chunkInteriorTiles,
+  ensureInteriorTileTabs,
+  groupInteriorTilesByTab,
+  parseRaeInteriorKitArchive,
+} from './interior-kit-import.js';
+import {
+  DEFAULT_SPAWN_TILE_USE,
+  SPAWN_TILE_USES,
+  offsetSpawnTiles,
+  pruneSpawnTiles,
+  removeSpawnTile,
+  setSpawnTile,
+  spawnTileAt,
+} from './spawn-tile-authoring.js';
 import { clearMapPlanThumbCache } from './map-plan-thumb.js';
 import { resolveTerrainTransitionUpdates } from './terrain-transitions.js';
 import { worldTilePreviewStyle } from './world-tile-preview.js';
@@ -25,6 +45,7 @@ import {
   buildDoorVisualIndex,
   buildDoorTriggerIndex,
   doorAuthoringHtml,
+  dragDoorPart,
   doorTriggerAt,
   doorVisualAt,
   ensureDoorAuthoring,
@@ -60,7 +81,8 @@ const BRUSHES = [
   { id: 'path', label: 'Path', layer: null, color: '#c084fc' },
   { id: 'ramp', label: 'Ramp', layer: 'special', color: '#fbbf24' },
   { id: 'collision', label: 'Blocked', layer: 'collision', color: '#ef6461' },
-  { id: 'spawn', label: 'Spawn', layer: null, color: '#f59e0b' },
+  { id: 'spawn', label: 'Player start', layer: null, color: '#f59e0b' },
+  { id: 'actor_spawn', label: 'Actor spawn', layer: 'special', color: '#0ea5e9' },
 ];
 
 const TOOLS = [
@@ -588,6 +610,7 @@ function setCell(map, layer, x, y, value) {
 
 function clearTerrainCell(map, x, y) {
   if (!inBounds(map, x, y)) return;
+  removeSpawnTile(map, x, y, { clearSpecial: false });
   setCell(map, 'height', x, y, 0);
   setCell(map, 'special', x, y, 0);
   setCell(map, 'collision', x, y, 0);
@@ -921,7 +944,7 @@ function specialColor(v) {
   const palette = [
     '#e2e8f0', '#fde68a', '#60a5fa', '#34d399', '#f472b6', '#a78bfa',
     '#fb923c', '#f97316', '#fdba74', '#fcd34d', '#86efac', '#4ade80',
-    '#22d3ee', '#38bdf8',
+    '#22d3ee', '#38bdf8', '#0ea5e9',
   ];
   return palette[v] || '#94a3b8';
 }
@@ -934,9 +957,22 @@ function emptyTileCheckerBackground() {
   return 'none';
 }
 
-function emptyTileCheckerStyle(x = 0, y = 0) {
-  const rgb = ((x + y) & 1) === 0 ? PREVIEW_TOP_A : PREVIEW_TOP_B;
+function emptyTileCheckerStyle(map, x = 0, y = 0) {
+  const room = defaultInteriorRoomStyle(map);
+  const rgb = room
+    ? (((x + y) & 1) === 0 ? room.floorA : room.floorB)
+    : (((x + y) & 1) === 0 ? PREVIEW_TOP_A : PREVIEW_TOP_B);
   return `background-color:rgb(${rgb[0]},${rgb[1]},${rgb[2]});background-image:none;background-size:auto;background-position:0 0`;
+}
+
+function defaultInteriorWallSpans(map, x, y, width, height) {
+  if (!defaultInteriorRoomStyle(map)) return '';
+  const edges = [];
+  if (y === 0 && !interiorOpeningCovers(map, 'north', x)) edges.push('north');
+  if (y === height - 1 && !interiorOpeningCovers(map, 'south', x)) edges.push('south');
+  if (x === 0 && !interiorOpeningCovers(map, 'west', y)) edges.push('west');
+  if (x === width - 1 && !interiorOpeningCovers(map, 'east', y)) edges.push('east');
+  return edges.map((edge) => `<span class="cell-default-wall is-${edge}" aria-hidden="true"></span>`).join('');
 }
 
 function unifiedCellStyle(map, x, y, showValues) {
@@ -1003,6 +1039,7 @@ function floodFill(map, layer, x, y, target, replacement) {
     if (seen.has(key) || !inBounds(map, cx, cy)) continue;
     if (cellValue(map, layer, cx, cy) !== target) continue;
     seen.add(key);
+    if (layer === 'special') removeSpawnTile(map, cx, cy, { clearSpecial: false });
     setCell(map, layer, cx, cy, replacement);
     stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
   }
@@ -1024,6 +1061,7 @@ function applyBrush(map, editor, x, y) {
 function activeBrushValue(editor) {
   if (editor.brush === 'tile') return editor.tileBrushId ?? null;
   if (editor.brush === 'path') return 1;
+  if (editor.brush === 'actor_spawn') return SPECIAL.ACTOR_SPAWN;
   const layer = brushLayer(editor.brush);
   if (!layer) return 0;
   return editor.values[editor.brush] ?? LAYER_META[layer].default;
@@ -1048,9 +1086,29 @@ function applyToolAt(map, editor, x, y) {
     map.player.spawnTile = [x, y];
     return;
   }
+  if (brush === 'actor_spawn') {
+    if (tool === 'eyedropper') {
+      editor.spawnTileUse = spawnTileAt(map, x, y)?.allows || DEFAULT_SPAWN_TILE_USE;
+      editor.tool = 'paint';
+      return;
+    }
+    if (tool === 'erase') {
+      removeSpawnTile(map, x, y);
+      return;
+    }
+    if (tool === 'raise' || tool === 'lower') return;
+    setSpawnTile(map, x, y, editor.spawnTileUse);
+    return;
+  }
   if (brush === 'tile') {
     if (tool === 'eyedropper') {
-      editor.tileBrushId = visibleTileFootprintAtLayer(editor, map, x, y)?.tileId ?? tileCellValue(map, x, y);
+      const hit = visibleTileFootprintAt(editor, map, x, y);
+      if (hit) {
+        editor.tileBrushId = hit.tileId;
+        map.tileLayers.activeLayer = hit.layerIndex;
+      } else {
+        editor.tileBrushId = tileCellValue(map, x, y);
+      }
       editor.tool = 'paint';
       return;
     }
@@ -1089,6 +1147,12 @@ function applyToolAt(map, editor, x, y) {
   }
   if (!layer) return;
   if (tool === 'eyedropper') {
+    if (layer === 'special' && cellValue(map, layer, x, y) === SPECIAL.ACTOR_SPAWN) {
+      editor.brush = 'actor_spawn';
+      editor.spawnTileUse = spawnTileAt(map, x, y)?.allows || DEFAULT_SPAWN_TILE_USE;
+      editor.tool = 'paint';
+      return;
+    }
     editor.values[brush] = cellValue(map, layer, x, y);
     editor.tool = 'paint';
     return;
@@ -1105,9 +1169,11 @@ function applyToolAt(map, editor, x, y) {
     return;
   }
   if (tool === 'erase') {
+    if (layer === 'special') removeSpawnTile(map, x, y, { clearSpecial: false });
     setCell(map, layer, x, y, LAYER_META[layer].default);
     return;
   }
+  if (layer === 'special') removeSpawnTile(map, x, y, { clearSpecial: false });
   setCell(map, layer, x, y, activeBrushValue(editor));
 }
 
@@ -2063,7 +2129,8 @@ function brushHint(brush) {
   if (brush === 'path') return 'Path brush paints a logical path mask and resolves it into the configured RTPKS path tile set.';
   if (brush === 'ramp') return 'Ramp brush: cardinals 2–5, corner ramps 6–13. Auto (1) is baked to N/E/S/W on save. Pick a type below.';
   if (brush === 'collision') return 'Blocked brush marks unwalkable tiles (red outline on the grid).';
-  return 'Spawn brush sets the player start tile (gold ring).';
+  if (brush === 'actor_spawn') return 'Actor spawn marks a future spawn location and records which occupant type may use it.';
+  return 'Player start sets the player start tile (gold ring).';
 }
 
 function rampIcon(id) {
@@ -2170,6 +2237,7 @@ export function ensureMapEditorState(state) {
       tool: 'paint',
       brushSize: 1,
       values: { height: 1, ramp: 0, collision: 1 },
+      spawnTileUse: DEFAULT_SPAWN_TILE_USE,
       showCellValues: true,
       painting: false,
       dragStart: null,
@@ -2257,6 +2325,9 @@ export function ensureMapEditorState(state) {
   if (!state.mapEditor.values) {
     state.mapEditor.values = { height: 1, ramp: 0, collision: 1 };
   }
+  if (!SPAWN_TILE_USES.some((option) => option.id === state.mapEditor.spawnTileUse)) {
+    state.mapEditor.spawnTileUse = DEFAULT_SPAWN_TILE_USE;
+  }
   if (!state.mapEditor.previewSize) {
     state.mapEditor.previewSize = { w: 504, h: 400 };
   }
@@ -2295,6 +2366,16 @@ function refreshDoorMarkers(editor) {
       syncDoorMarker(btn, editor.map, x, y, editor, triggerIndex, visualIndex);
     }
   });
+}
+
+function refreshDoorMarkerCells(editor, cells) {
+  if (!editor.map) return;
+  const triggerIndex = buildDoorTriggerIndex(editor.map);
+  const visualIndex = buildDoorVisualIndex(editor.map);
+  for (const [x, y] of cells) {
+    const btn = document.querySelector(`#mapPaintGrid [data-cell="${x},${y}"]`);
+    if (btn) syncDoorMarker(btn, editor.map, x, y, editor, triggerIndex, visualIndex);
+  }
 }
 
 function syncCellButton(btn, map, x, y, editor, doorTriggerIndex = null, doorVisualIndex = null, footprintIndex = null) {
@@ -2524,8 +2605,9 @@ export function mapEditorHtml(state, esc) {
           ? (tileTexture
             ? `${cellVars};background:#d8e0e6;background-image:linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,.08)),url('${esc(tileTexture)}')`
             : `${cellVars};background:${tileHashColor(tileId)}`)
-          : `${cellVars};${emptyTileCheckerStyle(x, y)}`;
-        cells.push(`<button type="button" class="${classes.join(' ')}" data-cell="${x},${y}" style="${tileStyle}" aria-label="cell ${x},${y}">${ramp}${prop}${door}${val}</button>`);
+          : `${cellVars};${emptyTileCheckerStyle(map, x, y)}`;
+        const defaultWalls = defaultInteriorWallSpans(map, x, y, w, h);
+        cells.push(`<button type="button" class="${classes.join(' ')}" data-cell="${x},${y}" style="${tileStyle}" aria-label="cell ${x},${y}">${defaultWalls}${ramp}${prop}${door}${val}</button>`);
       }
     }
     const gridModeCls = [
@@ -2586,7 +2668,7 @@ export function mapEditorHtml(state, esc) {
         <button type="button" class="btn ghost" id="mapApplyDir">Apply folder</button>
         <button type="button" class="btn ghost" id="mapImportJson">Import .map.json</button>
         <button type="button" class="btn ghost" id="mapImportRaeInterior">Import RAE interior…</button>
-        <button type="button" class="btn ghost" id="mapImportRaeInteriorKit">Import interior kit…</button>
+        <button type="button" class="btn ghost" id="mapImportRaeInteriorKit">Import interior tile kit…</button>
         <button type="button" class="btn ghost" id="mapExportOwmap" ${map ? '' : ' disabled'}>Download .owmap</button>
       </div>
       ${map ? `<div class="row" style="margin-top:10px">
@@ -2623,7 +2705,7 @@ export function mapEditorHtml(state, esc) {
               <div class="map-ramp-group"><span>Convex</span>${RAMP_PRESETS.filter((r) => r.group === 'convex').map((r) => rampButtonHtml(r, brushVal, esc)).join('')}</div>
               <div class="map-ramp-group"><span>Concave</span>${RAMP_PRESETS.filter((r) => r.group === 'concave').map((r) => rampButtonHtml(r, brushVal, esc)).join('')}</div>
             </div>${rampSelectionPreviewHtml(brushVal, esc)}` : ''}
-            <p class="hint" style="margin:8px 0">${esc(brushHint(brush))}</p>
+            <p class="hint map-workspace-shortcuts" style="margin:8px 0">${esc(brushHint(brush))} · Space-drag pans · Alt-click samples the visible tile · Right-click erases</p>
             ${brush === 'tile'
               ? `<div class="map-tile-active-strip">${editor.tileBrushId == null
                 ? 'Pick an RTPKS tile from the Tiles workflow.'
@@ -2636,7 +2718,9 @@ export function mapEditorHtml(state, esc) {
                 ? `<div class="map-tile-active-strip">${activePathSet(editor)
                   ? `Drawing path set <strong>${esc(activePathSet(editor).name || activePathSet(editor).id)}</strong>`
                   : 'Create a path set in the Paths workflow before drawing paths.'}</div>`
-              : (brush !== 'spawn' ? `<div class="map-palette" id="mapPalette">${paletteButtons(brush, brushVal, esc)}</div>` : '<p class="hint">Click cells to place spawn.</p>')}
+              : brush === 'actor_spawn'
+                ? `<label>Allowed occupant <select id="mapActorSpawnUse">${SPAWN_TILE_USES.map((option) => `<option value="${esc(option.id)}" ${editor.spawnTileUse === option.id ? 'selected' : ''}>${esc(option.label)}</option>`).join('')}</select></label>`
+                : (brush !== 'spawn' ? `<div class="map-palette" id="mapPalette">${paletteButtons(brush, brushVal, esc)}</div>` : '<p class="hint">Click cells to place player start.</p>')}
           </div>
         </section>
         ${editor.workspaceView === '3d' && map
@@ -2751,6 +2835,7 @@ function resizeMapLocal(map, width, height) {
   const sx = Math.min(width - 1, Math.max(0, next.player.spawnTile?.[0] ?? 0));
   const sy = Math.min(height - 1, Math.max(0, next.player.spawnTile?.[1] ?? 0));
   next.player.spawnTile = [sx, sy];
+  pruneSpawnTiles(next, width, height);
   return next;
 }
 
@@ -2823,6 +2908,7 @@ function expandMapLocal(map, direction, amount) {
       next.player.spawnTile[1] + offsetY,
     ];
   }
+  offsetSpawnTiles(next, offsetX, offsetY);
   if (offsetX || offsetY) {
     for (const model of next.models || []) {
       if (!Array.isArray(model.position)) continue;
@@ -3569,8 +3655,9 @@ function mapAuthoringLayersHtml(editor, esc) {
     { id: 'height', label: 'Height', brush: 'height', active: editor.brush === 'height' },
     { id: 'collision', label: 'Collision', brush: 'collision', active: editor.brush === 'collision' },
     { id: 'special', label: 'Modifiers', brush: 'ramp', active: editor.brush === 'ramp' },
+    { id: 'actor_spawn', label: 'Actor spawns', brush: 'actor_spawn', active: editor.brush === 'actor_spawn' },
     { id: 'path', label: 'Paths', brush: 'path', active: editor.brush === 'path' },
-    { id: 'spawn', label: 'Spawn', brush: 'spawn', active: editor.brush === 'spawn' },
+    { id: 'spawn', label: 'Player start', brush: 'spawn', active: editor.brush === 'spawn' },
   ];
   const layers = editor.map.tileLayers.layers || [];
   const decoRows = layers.map((layer, index) => {
@@ -4211,10 +4298,100 @@ async function importRaeInteriorFiles(state, deps, files) {
 async function importRaeInteriorKitFile(state, deps, file) {
   const { api, log, render } = deps;
   const editor = ensureMapEditorState(state);
-  if (!file || !/\.zip$/i.test(file.name)) throw new Error('Select the interior-kit.zip created by RAE.');
+  if (!file || !/\.zip$/i.test(file.name)) throw new Error('Select the interior-tile-kit.zip created by RAE.');
+  const parsed = parseRaeInteriorKitArchive(await file.arrayBuffer());
+  if (parsed.kind === 'tiles') {
+    if (!editor.tilePackage?.fileName) {
+      throw new Error('Choose or create an RTPKS tile package before importing an interior tile kit.');
+    }
+    const groups = groupInteriorTilesByTab(parsed.tiles);
+    const authoringResponse = await fetch(
+      `/api/tile-packages/authoring?file=${encodeURIComponent(editor.tilePackage.fileName)}`);
+    const authoring = await authoringResponse.json().catch(() => ({}));
+    if (!authoringResponse.ok || !authoring.ok) {
+      throw new Error(authoring.error || `Could not read RTPKS tabs (${authoringResponse.status})`);
+    }
+    if (ensureInteriorTileTabs(authoring.document, groups)) {
+      const saveTabsResponse = await fetch(
+        `/api/tile-packages/authoring?file=${encodeURIComponent(editor.tilePackage.fileName)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: editor.tilePackage.fileName, document: authoring.document }),
+      });
+      const savedTabs = await saveTabsResponse.json().catch(() => ({}));
+      if (!saveTabsResponse.ok || !savedTabs.ok) {
+        throw new Error(savedTabs.error || `Could not create interior RTPKS tabs (${saveTabsResponse.status})`);
+      }
+      editor.tilePackage = savedTabs.package;
+    }
+
+    const imported = [];
+    log?.(`Importing ${parsed.tiles.length} interior tiles into ${groups.length} role tabs from ${file.name}…`);
+    for (const group of groups) {
+      for (const chunk of chunkInteriorTiles(group.tiles)) {
+        const fd = new FormData();
+        fd.append('metadata', JSON.stringify({
+          fileName: editor.tilePackage.fileName,
+          tile: { tabId: group.id },
+        }));
+        for (const tile of chunk) {
+          const fileName = String(tile.bundle || `${tile.id}.tile`).split('/').pop();
+          fd.append('tileBundle', new Blob([tile.bytes], { type: 'application/zip' }), fileName);
+        }
+        const response = await fetch('/api/tile-packages/tiles/batch', { method: 'POST', body: fd });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || `Interior ${group.name} import failed (${response.status})`);
+        }
+        editor.tilePackage = payload.package;
+        chunk.forEach((tile, index) => imported.push({
+          id: tile.id,
+          role: tile.role,
+          tabId: group.id,
+          sourceCell: Array.isArray(tile.sourceCell) ? [...tile.sourceCell] : [0, 0],
+          resortTileId: payload.resortTileIds?.[index],
+        }));
+      }
+    }
+    let packageFound = false;
+    editor.tilePackages = (editor.tilePackages || []).map((pkg) => {
+      if (pkg.fileName !== editor.tilePackage.fileName) return pkg;
+      packageFound = true;
+      return editor.tilePackage;
+    });
+    if (!packageFound) editor.tilePackages.push(editor.tilePackage);
+    rememberProjectTilePackage(editor, editor.tilePackage);
+    if (editor.map && editor.map.tilePackage?.file !== editor.tilePackage.fileName) {
+      beginMapHistory(editor);
+      editor.map.tilePackage = {
+        file: editor.tilePackage.fileName,
+        packId: editor.tilePackage.packId,
+        name: editor.tilePackage.name,
+        path: editor.tilePackage.gamePath,
+      };
+      ensureTileLayers(editor.map);
+      commitMapHistory(editor);
+      editor.dirty = true;
+    }
+    if (editor.project) {
+      const sourceIndex = parsed.manifest.source?.mapFileIndex || 'map';
+      const kitId = `interior_${sourceIndex}_tile_kit`;
+      editor.project.interiorKits = (editor.project.interiorKits || []).filter((kit) => kit.id !== kitId);
+      editor.project.interiorKits.push({ id: kitId, source: parsed.manifest.source || {}, tiles: imported });
+      await saveProject(editor);
+    }
+    editor.tileTabId = groups[0]?.id || editor.tileTabId;
+    editor.tileBrushId = imported[0]?.resortTileId ?? editor.tileBrushId;
+    editor.brush = 'tile';
+    editor.sidebarTab = 'tiles';
+    log?.(`Interior tile kit ready: ${imported.length} tiles are organized across ${groups.length} interior tabs.`, 'ok');
+    render();
+    return;
+  }
+
   const fd = new FormData();
   fd.append('archive', file, file.name);
-  log?.(`Importing reusable interior models from ${file.name}…`);
+  log?.(`Importing legacy reusable interior models from ${file.name}…`);
   const response = await fetch('/api/overworld-models/import-interior-kit', { method: 'POST', body: fd });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload.ok) throw new Error(payload.error || `Interior kit import failed (${response.status})`);
@@ -4230,7 +4407,7 @@ async function importRaeInteriorKitFile(state, deps, file) {
   modelThumbCache.clear();
   await loadMapEditorListing(state, api);
   editor.sidebarTab = 'props';
-  log?.(`Interior kit ready: ${imported.length} models are available in 3D props.`, 'ok');
+  log?.(`Legacy interior kit ready: ${imported.length} models are available in 3D props.`, 'ok');
   render();
 }
 
@@ -5027,15 +5204,27 @@ export function bindMapEditor(state, deps) {
       const isTyping = target?.matches?.('input, textarea, select, [contenteditable="true"]');
       if (isTyping) return;
       const key = event.key.toLowerCase();
+      const ed = ensureMapEditorState(state);
+      if (key === ' ') {
+        ed._spacePan = true;
+        document.querySelector('#mapGridWrap')?.classList.add('is-move-tool');
+        event.preventDefault();
+        return;
+      }
       const mod = event.metaKey || event.ctrlKey;
       if (!mod || key !== 'z' && key !== 'y') return;
-      const ed = ensureMapEditorState(state);
       const wantsRedo = key === 'y' || (key === 'z' && event.shiftKey);
       const changed = wantsRedo ? redoMapEdit(ed) : undoMapEdit(ed);
       if (!changed) return;
       event.preventDefault();
       refreshMapPreview(state);
       render();
+    });
+    document.addEventListener('keyup', (event) => {
+      if (event.key !== ' ') return;
+      const ed = ensureMapEditorState(state);
+      ed._spacePan = false;
+      if (ed.tool !== 'move') document.querySelector('#mapGridWrap')?.classList.remove('is-move-tool');
     });
     document.addEventListener('click', (event) => {
       const activeLayerBtn = event.target.closest('[data-active-tile-layer]');
@@ -5050,8 +5239,13 @@ export function bindMapEditor(state, deps) {
         ed.sidebarTab = 'tiles';
         ed.propTool = null;
         ed.placeModelId = null;
-        ed.dirty = true;
-        render();
+        ed.doorTool = null;
+        document.querySelectorAll('[data-active-tile-layer]').forEach((button) => {
+          button.classList.toggle('active', Number(button.dataset.activeTileLayer) === ed.map.tileLayers.activeLayer);
+        });
+        syncSidebarTabs();
+        syncToolMode();
+        refreshSelectedAssetPreview(ed);
         return;
       }
       const toggleLayerBtn = event.target.closest('[data-toggle-tile-layer]');
@@ -5122,7 +5316,11 @@ export function bindMapEditor(state, deps) {
         ed.propTool = ed.placeModelId ? 'place' : 'select';
         ed.sidebarTab = 'props';
         ed._ghostTile = null;
-        render();
+        ed.doorTool = null;
+        syncSidebarTabs();
+        syncToolMode();
+        refreshPropOverlays(ed);
+        if (!ed.modelViewportOpen) refreshModelThumbnails(ed);
         return;
       }
       const tileTabBtn = event.target.closest('[data-tile-tab]');
@@ -5469,9 +5667,10 @@ export function bindMapEditor(state, deps) {
           dirtyCells.add(`${tx},${ty}`);
         }
       }
-      const doorTriggerIndex = buildDoorTriggerIndex(editor.map);
-      const doorVisualIndex = buildDoorVisualIndex(editor.map);
-      const footprintIndex = buildVisibleFootprintIndex(
+      const indexes = editor._strokeVisualIndexes || {};
+      const doorTriggerIndex = indexes.doorTriggerIndex || buildDoorTriggerIndex(editor.map);
+      const doorVisualIndex = indexes.doorVisualIndex || buildDoorVisualIndex(editor.map);
+      const footprintIndex = indexes.footprintIndex || buildVisibleFootprintIndex(
         editor.map.tileLayers?.layers || [],
         (tileId) => tileFootprint(tileEntry(editor, tileId)),
       );
@@ -5482,7 +5681,6 @@ export function bindMapEditor(state, deps) {
       }
       if (editor.brush === 'tile' || editor.tool === 'clear') refreshPropOverlays(editor);
       editor._tileDirtyCells = null;
-      refreshMapPreview(state);
       return;
     }
     editor._tileDirtyCells = null;
@@ -5559,11 +5757,50 @@ export function bindMapEditor(state, deps) {
       const pos = cellFromEvent(event);
       if (!pos) return;
       const [x, y] = pos;
+      editor._lastPointerCellKey = `${x},${y}`;
       if (event.button === 2) {
         removeAtPointer(x, y);
         return;
       }
-      if (editor.tool === 'move') {
+      if (event.altKey) {
+        const hit = visibleTileFootprintAt(editor, editor.map, x, y);
+        if (hit) {
+          editor.tileBrushId = hit.tileId;
+          editor.map.tileLayers.activeLayer = hit.layerIndex;
+          editor.brush = 'tile';
+          editor.tool = 'paint';
+          editor.sidebarTab = 'tiles';
+          editor.propTool = null;
+          editor.placeModelId = null;
+          syncSidebarTabs();
+          syncToolMode();
+          refreshSelectedAssetPreview(editor);
+        }
+        return;
+      }
+      const visualDoor = doorVisualAt(editor.map, x, y);
+      const triggerDoor = doorTriggerAt(editor.map, x, y);
+      if ((visualDoor || triggerDoor) && !editor._spacePan && event.button !== 1
+          && (!editor.doorTool || editor.doorTool === 'select')) {
+        const selected = visualDoor || triggerDoor;
+        editor.selectedDoorTriggerId = selected.id;
+        editor.doorTool = 'select';
+        editor.sidebarTab = 'doors';
+        editor.propTool = null;
+        editor.placeModelId = null;
+        beginMapHistory(editor);
+        editor._doorDrag = {
+          id: selected.id,
+          part: visualDoor ? 'visual' : 'trigger',
+          last: [x, y],
+          moved: false,
+        };
+        renderDoorInspector('selection');
+        syncSidebarTabs();
+        syncToolMode();
+        return;
+      }
+      if (editor.tool === 'move' || editor._spacePan || event.button === 1) {
         const gridWrap = document.querySelector('#mapGridWrap');
         editor._gridPan = {
           clientX: event.clientX,
@@ -5632,11 +5869,19 @@ export function bindMapEditor(state, deps) {
       }
       beginMapHistory(editor);
       editor._paintingHistoryActive = true;
+      editor._strokeVisualIndexes = {
+        doorTriggerIndex: buildDoorTriggerIndex(editor.map),
+        doorVisualIndex: buildDoorVisualIndex(editor.map),
+        footprintIndex: buildVisibleFootprintIndex(
+          editor.map.tileLayers?.layers || [],
+          (tileId) => tileFootprint(tileEntry(editor, tileId)),
+        ),
+      };
       editor.painting = true;
       stampPaint(x, y);
     };
     paintGrid.onmousemove = (event) => {
-      if (editor._gridPan && editor.tool === 'move') {
+      if (editor._gridPan) {
         const gridWrap = document.querySelector('#mapGridWrap');
         if (gridWrap) {
           gridWrap.scrollLeft = editor._gridPan.scrollLeft - (event.clientX - editor._gridPan.clientX);
@@ -5647,12 +5892,24 @@ export function bindMapEditor(state, deps) {
       const pos = cellFromEvent(event);
       if (!pos) return;
       const [x, y] = pos;
+      const pointerCellKey = `${x},${y}`;
+      if (editor._lastPointerCellKey === pointerCellKey) return;
+      editor._lastPointerCellKey = pointerCellKey;
+      if (editor._doorDrag) {
+        const drag = editor._doorDrag;
+        const old = drag.last;
+        if (dragDoorPart(editor, drag.id, drag.part, x, y)) {
+          drag.last = [x, y];
+          drag.moved = true;
+          refreshDoorMarkerCells(editor, [old, [x, y]]);
+        }
+        return;
+      }
       if (editor._placementDrag && editor.propTool === 'select') {
         const drag = editor._placementDrag;
         movePlacementToTile(editor, drag.index, x, y);
         drag.moved = true;
         refreshPropOverlays(editor);
-        refreshMapPreview(state);
         return;
       }
       if (editor.propTool === 'place' && editor.placeModelId) {
@@ -5681,6 +5938,7 @@ export function bindMapEditor(state, deps) {
     };
     if (editor._gridMouseUpHandler) window.removeEventListener('mouseup', editor._gridMouseUpHandler);
     editor._gridMouseUpHandler = () => {
+      editor._lastPointerCellKey = '';
       if (editor._gridPan) {
         editor._gridPan = null;
         document.querySelector('#mapGridWrap')?.classList.remove('is-panning');
@@ -5690,11 +5948,26 @@ export function bindMapEditor(state, deps) {
         if (editor._placementDrag.moved) {
           commitMapHistory(editor);
           editor.dirty = true;
+          refreshMapPreview(state);
           render();
         } else {
           cancelMapHistory(editor);
         }
         editor._placementDrag = null;
+        return;
+      }
+      if (editor._doorDrag) {
+        const moved = editor._doorDrag.moved;
+        if (moved) {
+          commitMapHistory(editor);
+          editor.dirty = true;
+          refreshPlacedTileVisuals(editor);
+          renderDoorInspector('geometry');
+        } else {
+          cancelMapHistory(editor);
+          refreshDoorMarkers(editor);
+        }
+        editor._doorDrag = null;
         return;
       }
       if ((editor.tool === 'area' || editor.tool === 'line') && editor.dragStart) {
@@ -5705,6 +5978,10 @@ export function bindMapEditor(state, deps) {
         commitMapHistory(editor);
         editor._paintingHistoryActive = false;
         if (editor._paintUsedLightUpdates) {
+          // Footprints may have changed during the stroke; reconcile once after
+          // input ends instead of rebuilding the complete index per cell.
+          refreshPlacedTileVisuals(editor);
+          refreshMapPreview(state);
           syncPaintToolbarState(editor);
           editor._paintUsedLightUpdates = false;
         } else {
@@ -5712,6 +5989,7 @@ export function bindMapEditor(state, deps) {
         }
       }
       editor.painting = false;
+      editor._strokeVisualIndexes = null;
     };
     window.addEventListener('mouseup', editor._gridMouseUpHandler);
     paintGrid.onmouseleave = () => {
@@ -5870,77 +6148,6 @@ export function bindMapEditor(state, deps) {
       editor.doorTool = null;
       editor.dirty = true;
       render();
-    };
-  }
-
-  const tileLayerPanel = document.querySelector('#mapTileLayerPanel');
-  if (tileLayerPanel) {
-    tileLayerPanel.onclick = (event) => {
-      const activeLayerBtn = event.target.closest('[data-active-tile-layer]');
-      if (activeLayerBtn) {
-        event.preventDefault();
-        if (!editor.map) return;
-        ensureTileLayers(editor.map);
-        editor.map.tileLayers.activeLayer = Number(activeLayerBtn.dataset.activeTileLayer) || 0;
-        editor.brush = 'tile';
-        editor.sidebarTab = 'tiles';
-        editor.propTool = null;
-        editor.placeModelId = null;
-        editor.dirty = true;
-        render();
-        return;
-      }
-      const toggleLayerBtn = event.target.closest('[data-toggle-tile-layer]');
-      if (toggleLayerBtn) {
-        event.preventDefault();
-        if (!editor.map) return;
-        beginMapHistory(editor);
-        const layer = tileLayerAt(editor.map, Number(toggleLayerBtn.dataset.toggleTileLayer) || 0);
-        layer.visible = layer.visible === false;
-        commitMapHistory(editor);
-        editor.dirty = true;
-        refreshMapPreview(state);
-        render();
-        return;
-      }
-      const addLayerBtn = event.target.closest('[data-add-tile-layer]');
-      if (addLayerBtn) {
-        event.preventDefault();
-        if (!editor.map) return;
-        ensureTileLayers(editor.map);
-        const layers = editor.map.tileLayers.layers;
-        if (layers.length >= MAX_TILE_LAYERS) return;
-        beginMapHistory(editor);
-        const width = editor.map.grid?.width || 16;
-        const height = editor.map.grid?.height || 16;
-        layers.push({
-          id: `deco_${layers.length + 1}`,
-          name: `Deco ${layers.length + 1}`,
-          visible: true,
-          cells: createTileGrid(width, height, null),
-        });
-        editor.map.tileLayers.activeLayer = layers.length - 1;
-        editor.brush = 'tile';
-        editor.sidebarTab = 'tiles';
-        editor.propTool = null;
-        editor.placeModelId = null;
-        commitMapHistory(editor);
-        editor.dirty = true;
-        render();
-        return;
-      }
-      const deleteLayerBtn = event.target.closest('[data-delete-tile-layer]');
-      if (deleteLayerBtn) {
-        event.preventDefault();
-        beginMapHistory(editor);
-        if (deleteActiveTileLayer(editor)) {
-          commitMapHistory(editor);
-          refreshMapPreview(state);
-          render();
-        } else {
-          cancelMapHistory(editor);
-        }
-      }
     };
   }
 
@@ -6339,6 +6546,13 @@ export function bindMapEditor(state, deps) {
     };
   });
 
+  const actorSpawnUse = document.querySelector('#mapActorSpawnUse');
+  if (actorSpawnUse) {
+    actorSpawnUse.onchange = () => {
+      editor.spawnTileUse = actorSpawnUse.value;
+    };
+  }
+
   document.querySelectorAll('[data-map-prop-layer]').forEach((btn) => {
     btn.onclick = () => {
       if (!editor.map) return;
@@ -6624,15 +6838,34 @@ export function bindMapEditor(state, deps) {
       dialog.innerHTML = `
         <form method="dialog" class="panel" style="min-width:min(520px,90vw)">
           <h3>Interior tools</h3>
-          <p class="hint">Start with an exact RAE shell, or add reusable wall, floor, entrance, stair, window, and shadow models to the 3D props library.</p>
+          <p class="hint">Start with a resizeable room that already has a darker floor and walls, or import reusable RAE interior tiles.</p>
           <div class="stack" style="gap:10px">
+            <button type="button" class="btn" data-interior-action="blank">Create blank interior</button>
             <button type="button" class="btn" data-interior-action="shell">Import complete interior…</button>
-            <button type="button" class="btn ghost" data-interior-action="kit">Import reusable kit ZIP…</button>
+            <button type="button" class="btn ghost" data-interior-action="kit">Import reusable tile kit ZIP…</button>
           </div>
           <div class="actions" style="margin-top:14px"><button type="submit" class="btn ghost">Close</button></div>
         </form>`;
       document.body.appendChild(dialog);
       dialog.addEventListener('close', () => dialog.remove(), { once: true });
+      dialog.querySelector('[data-interior-action="blank"]').onclick = () => {
+        const blank = createBlankInteriorMap(emptyMapLocal(16, 12));
+        if (editor.tilePackage) {
+          blank.tilePackage = {
+            file: editor.tilePackage.fileName,
+            packId: editor.tilePackage.packId,
+            name: editor.tilePackage.name,
+            path: editor.tilePackage.gamePath,
+          };
+        }
+        editor.map = blank;
+        editor.currentFile = 'new_interior.owmap';
+        editor.dirty = true;
+        clearMapHistory(editor);
+        log('New 16×12 interior ready with default floor and walls.', 'ok');
+        dialog.close();
+        render();
+      };
       dialog.querySelector('[data-interior-action="shell"]').onclick = () => {
         dialog.close();
         mapImportRaeInterior?.click();

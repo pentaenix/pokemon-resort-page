@@ -1,3 +1,5 @@
+import { vectorFieldHtml, bindVectorFields } from './vector-field.js';
+
 function ensureDataEditorState(state) {
   if (!state.dataEditor) {
     state.dataEditor = {
@@ -451,6 +453,7 @@ function fieldInputHtml(field, current, esc) {
   const common = `data-data-field="${esc(path)}" data-value-type="${esc(valueType)}"${disabled}`;
   const placeholder = mod.placeholder ? ` placeholder="${esc(mod.placeholder)}"` : '';
   if (widget === 'hidden' || mod.hidden) return '';
+  if (widget === 'vector') return vectorFieldHtml(field, mod, common, esc);
   if (['mask-grid', 'pixel-grid', 'bitmap', 'boolean-grid'].includes(widget)) return maskGridInputHtml(field, mod, common, esc);
   if (widget === 'select' || widget === 'dropdown') return `<select ${common}>${optionHtml(mod.options || [], value, esc)}</select>`;
   if (widget === 'radio') {
@@ -1393,4 +1396,5 @@ export function bindEditor(state, deps) {
     });
   });
   bindFieldInputs(state);
+  bindVectorFields();
 }

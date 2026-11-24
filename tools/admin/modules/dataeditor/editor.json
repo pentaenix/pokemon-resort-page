@@ -4,9 +4,9 @@
   "title": "Data Editor",
   "description": "Browse, validate, and tune game JSON configs from the sibling Pok\u00e9mon Resort repo.",
   "image": "/media/game_engine/data.png",
-  "entry": "/modules/dataeditor/editor.js?v=13",
+  "entry": "/modules/dataeditor/editor.js?v=14",
   "styles": [
-    "/modules/dataeditor/editor.css?v=13"
+    "/modules/dataeditor/editor.css?v=14"
   ],
   "bodyClass": "data-editor-active",
   "legacyRoutes": [

@@ -1,5 +1,5 @@
 {
-  "currentMilestoneId": "milestone-3d-map-render-pipeline",
+  "currentMilestoneId": "milestone-aquarium-playtesting",
   "milestones": [
     {
       "id": "milestone-initial-idea",
@@ -28,8 +28,20 @@
     {
       "id": "milestone-3d-map-render-pipeline",
       "title": "3D map and render pipeline started",
+      "status": "past",
+      "summary": "The initial 3D map and rendering pipeline is in use in the development build. Island reconstruction and public map research continue separately."
+    },
+    {
+      "id": "milestone-aquarium-playtesting",
+      "title": "Aquarium construction and visitor playtesting",
       "status": "current",
-      "summary": "Current focus: rebuild the island, prepare submodels, and connect the 3D map to public research data."
+      "summary": "Player-built tanks, connected rooms, stocking, decorations, water controls, and visitors are implemented for testing. Current checks cover controls, resident movement, visitor dialogue, save recovery, and large-room performance."
+    },
+    {
+      "id": "milestone-aquarium-expansion",
+      "title": "Aquarium integration and remaining interactions",
+      "status": "future",
+      "summary": "Connect stocking to owned Pokémon, include decorations in resident navigation, and add walkway decorations and signs. Visitor eligibility rules and additional floors remain future work."
     },
     {
       "id": "milestone-3d-map-website",

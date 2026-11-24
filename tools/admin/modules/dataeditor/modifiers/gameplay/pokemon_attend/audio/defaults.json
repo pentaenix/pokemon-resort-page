@@ -9,6 +9,7 @@
     "audio"
   ],
   "groups": [
+    {"id":"music","label":"Care-scene music","order":0},
     {
       "id": "cries",
       "label": "Pokemon cries",
@@ -17,6 +18,16 @@
     }
   ],
   "fields": {
+    "audio.music.massagePath":{"label":"Spa looping music asset","group":"music"},
+    "audio.music.massageVolume":{"label":"Spa music relative volume","group":"music","min":0,"max":1,"step":0.025,"description":"Relative gain before the shared music channel/master controls. Follows the white transition fade."},
+    "audio.playSoundCooldownSeconds": {"label":"Toy contact/impact cooldown","group":"cries","min":0.05,"max":5,"step":0.05},
+    "audio.playSounds.*.air": {"label":"Dry play event sound (empty disables)","group":"cries"},
+    "audio.playSounds.*.underwater": {"label":"Underwater play event sound (empty disables)","group":"cries"},
+    "audio.materialSounds.*.air": {"label":"Dry material contact/impact sound","group":"cries"},
+    "audio.materialSounds.*.underwater": {"label":"Underwater material contact/impact sound","group":"cries"},
+    "audio.bubblePopSfx": { "label": "Bubble actor-pop sound (empty disables)", "group": "cries" },
+    "audio.balloonPopSfx": { "label": "Balloon actor-pop sound (empty disables)", "group": "cries" },
+    "audio.playPopCooldownSeconds": { "label": "Minimum time between repeated pop sounds", "group": "cries", "min": 0.05, "max": 5, "step": 0.05, "unit": " seconds" },
     "audio.petHappyCryDelaySeconds": {
       "label": "Pet-happy cry delay",
       "group": "cries",

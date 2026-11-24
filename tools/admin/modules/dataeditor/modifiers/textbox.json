@@ -35,11 +35,29 @@
     },
     {
       "id": "futureText",
-      "label": "Future text",
+      "label": "Dialogue text",
       "order": 40
+    },
+    {
+      "id": "advanceMarker",
+      "label": "Dialogue advance marker",
+      "order": 45
     }
   ],
   "fields": {
+    "textbox.advanceSound.enabled": {"label": "Message advance sound", "widget": "checkbox", "group": "behavior"},
+    "textbox.advanceSound.path": {"label": "Message sound file", "widget": "asset", "group": "behavior"},
+    "textbox.advanceSound.volume": {"label": "Message sound volume", "widget": "slider", "min": 0, "max": 1, "step": 0.01, "group": "behavior"},
+    "textbox.advanceMarker.enabled": {"label": "Show advance marker", "widget": "checkbox", "group": "advanceMarker"},
+    "textbox.advanceMarker.path": {"label": "Marker sprite sheet", "widget": "asset", "group": "advanceMarker"},
+    "textbox.advanceMarker.frameSeconds": {"label": "Animation frame seconds", "widget": "number", "min": 0.01, "step": 0.01, "group": "advanceMarker"},
+    "textbox.advanceMarker.rightInsetPx": {"label": "Right inset", "widget": "number", "min": 0, "step": 1, "group": "advanceMarker"},
+    "textbox.advanceMarker.bottomInsetPx": {"label": "Bottom inset", "widget": "number", "min": 0, "step": 1, "group": "advanceMarker"},
+    "textbox.advanceMarker.frameWidthPx": {"label": "Frame width", "widget": "number", "min": 1, "max": 128, "step": 1, "group": "advanceMarker", "advanced": true},
+    "textbox.advanceMarker.frameHeightPx": {"label": "Frame height", "widget": "number", "min": 1, "max": 128, "step": 1, "group": "advanceMarker", "advanced": true},
+    "textbox.advanceMarker.frameCount": {"label": "Frame count", "widget": "number", "min": 1, "max": 32, "step": 1, "group": "advanceMarker", "advanced": true},
+    "textbox.text.bottomInsetPx": {"label": "Text bottom inset", "widget": "number", "min": 0, "step": 1, "unit": "px", "group": "layout"},
+    "textbox.text.lineGapPx": {"label": "Dialogue line spacing", "widget": "number", "min": 0, "max": 24, "step": 1, "unit": "px", "group": "layout", "description": "Extra space between the two vertically centered dialogue rows."},
     "textbox.visibleMode": {
       "label": "Visible Mode",
       "widget": "select",
@@ -144,14 +162,14 @@
       "group": "slicing",
       "order": 5
     },
-    "textbox.futureText.fontPath": {
-      "label": "Future Font Path",
+    "textbox.text.fontPath": {
+      "label": "Dialogue Font Path",
       "widget": "asset",
       "group": "futureText",
       "order": 1
     },
-    "textbox.futureText.fontSizePx": {
-      "label": "Future Font Size",
+    "textbox.text.fontSizePx": {
+      "label": "Dialogue Font Size",
       "widget": "number",
       "min": 1,
       "step": 1,

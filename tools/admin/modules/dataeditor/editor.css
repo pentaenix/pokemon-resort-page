@@ -295,3 +295,7 @@ body.data-color-dragging *{
 /* v12: color wheel alignment + clearer copy affordances */
 .data-color-copy:focus-visible,.data-selected-color-chip:focus-visible{outline:4px solid rgba(49,87,201,.24);outline-offset:3px}
 .data-color-copy-grid{align-items:stretch}
+.data-vector-field { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.data-vector-field > label { display: grid; gap: 4px; min-width: 0; }
+.data-vector-field > label > span { font-size: 11px; opacity: .75; }
+.data-vector-field input[type="number"] { width: 100%; min-width: 0; }

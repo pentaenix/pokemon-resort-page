@@ -52,6 +52,13 @@
     }
   ],
   "fields": {
+    "pokemon.*.hiddenMaterialSubstrings":{"label":"Hidden effect materials in all Attend modes","group":"pokemon","description":"Provider-owned material-name filters copied into normal Attend, bath and spa. Victini hides AuraEf1 and BodyB_Add attack effects while retaining body and animation data."},
+    "pokemon.*.poseRootRollDegrees":{"label":"Attend inverted root-track correction","group":"placement","min":-180,"max":180,"step":1},
+    "defaults.interactionAdapter.playAnimation.heightNormalizationStrength": {"label":"Play animation height correction","group":"interaction","min":0,"max":1,"step":0.05,"hint":"Zero disables. One aligns large idle/movement height offsets while preserving bobbing."},
+    "defaults.interactionAdapter.playAnimation.minimumHeightOffsetModelUnits": {"label":"Minimum clip height mismatch to correct","group":"interaction","min":0,"max":1000,"step":1,"unit":" source model units"},
+    "defaults.interactionAdapter.playAnimation.rootNodeNames": {"label":"Body-root candidates for height alignment","group":"interaction"},
+    "defaults.interactionAdapter.playAnimation.pickupBlendInSeconds": {"label":"Movement into pickup blend","group":"interaction","min":0.01,"max":1,"step":0.01,"unit":" seconds"},
+    "defaults.interactionAdapter.playAnimation.pickupBlendOutSeconds": {"label":"Pickup back to movement blend","group":"interaction","min":0.01,"max":1,"step":0.01,"unit":" seconds"},
     "defaults.idleBehavior.enabled": {
       "label": "Idle behavior enabled",
       "widget": "checkbox",
@@ -66,12 +73,17 @@
     },
     "defaults.idleBehavior.emoteIntervalMinSeconds": {
       "label": "Emote random delay min",
+      "widget": "number",
+      "min": 15,
+      "description": "Automatic idle emotes must be at least 15 seconds apart.",
       "unit": " sec",
       "group": "idle",
       "order": 3
     },
     "defaults.idleBehavior.emoteIntervalMaxSeconds": {
       "label": "Emote random delay max",
+      "widget": "number",
+      "min": 15,
       "unit": " sec",
       "group": "idle",
       "order": 4

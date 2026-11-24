@@ -1,0 +1,90 @@
+{
+  "title": "Aquarium presentation",
+  "description": "Aquarium room camera, lighting, and tank presentation settings.",
+  "matches": [
+    "gameplay/world3d/aquariums.json"
+  ],
+  "tags": [
+    "aquarium",
+    "camera",
+    "lighting"
+  ],
+  "groups": [
+    {
+      "id": "camera",
+      "label": "Room camera",
+      "description": "Choose a tested room camera, then tune the close framing values if needed.",
+      "order": 1
+    }
+  ],
+  "fields": {
+    "buildingPresentation.camera.preset": {
+      "label": "Camera preset",
+      "description": "Close integer 2x uses the tuned enlarged view. Overworld low keeps the exterior distance at a lower angle. Overworld uses the exterior camera unchanged.",
+      "widget": "select",
+      "options": [
+        {
+          "value": "pixel-perfect-close",
+          "label": "Close integer 2x"
+        },
+        {
+          "value": "overworld-low",
+          "label": "Overworld distance, low"
+        },
+        {
+          "value": "overworld",
+          "label": "Normal overworld"
+        }
+      ],
+      "group": "camera",
+      "order": 1
+    },
+    "buildingPresentation.camera.zoomedInEnabled": {
+      "label": "Use aquarium camera",
+      "description": "Turn this off to force the normal overworld camera regardless of the selected preset.",
+      "widget": "checkbox",
+      "group": "camera",
+      "order": 2
+    },
+    "buildingPresentation.camera.distanceBehindPlayerTiles": {
+      "label": "Close camera distance",
+      "description": "Horizontal component used only by the Close integer 2x preset.",
+      "group": "camera",
+      "order": 4,
+      "step": 0.01,
+      "unit": " tiles"
+    },
+    "buildingPresentation.camera.heightAbovePlayerTiles": {
+      "label": "Close camera height",
+      "description": "Vertical component used only by the Close integer 2x preset.",
+      "group": "camera",
+      "order": 5,
+      "step": 0.01,
+      "unit": " tiles"
+    },
+    "buildingPresentation.camera.nearClipTiles": {
+      "label": "Near clip",
+      "group": "camera",
+      "order": 6,
+      "step": 0.1,
+      "unit": " tiles",
+      "advanced": true
+    },
+    "buildingPresentation.camera.overworldLowPitchDegrees": {
+      "label": "Low camera pitch",
+      "description": "Controls only the Overworld distance, low preset. Values nearer zero place the camera lower to the ground.",
+      "widget": "slider",
+      "group": "camera",
+      "order": 3,
+      "min": -55,
+      "max": -15,
+      "step": 1,
+      "unit": " degrees"
+    }
+  },
+  "patterns": {
+    "buildingPresentation.camera.*": {
+      "group": "camera"
+    }
+  }
+}

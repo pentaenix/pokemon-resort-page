@@ -13,6 +13,7 @@ import { loadGlbScene } from '/shared/model-glb-viewer.js';
 import { tuneGltfTexture } from '/shared/model-texture-alpha.js';
 import { cornerHeightsForTile, SPECIAL } from '/shared/ramp-specials.js';
 import { cardinalRampProgress, rampProgressColor } from './ramp-visual-hints.js';
+import { defaultInteriorRoomStyle, interiorOpeningCovers } from './interior-default-room.js';
 import {
   normalizeRtpksSampler,
   rtpksMaterialAppearance,
@@ -27,8 +28,8 @@ const rtpksTextureCache = new Map();
 const rtpksThumbnailCache = new Map();
 const DECORATION_LAYER_Y_EPSILON = 0.004;
 
-function tileColor(level, special, blocked, parity, visual = {}) {
-  const base = parity ? TOP_A : TOP_B;
+function tileColor(level, special, blocked, parity, visual = {}, room = null) {
+  const base = room ? (parity ? room.floorA : room.floorB) : (parity ? TOP_A : TOP_B);
   if (visual.rampRecolorEnabled !== false && special >= SPECIAL.RAMP_N && special <= SPECIAL.CONCAVE_NW) {
     return new THREE.Color(visual.rampColor || '#f4d03f');
   }
@@ -64,6 +65,7 @@ function buildTerrain(map, tileSize, packageInfo = null) {
   const specials = map.terrain?.special || [];
   const collision = map.terrain?.collision || [];
   const visual = map.terrainVisual || {};
+  const room = defaultInteriorRoomStyle(map);
   const floorHeight = Number(visual.floorHeightScale) || tileSize;
   const tileLayers = visibleTileLayers(map);
   const footprints = tileFootprintLookup(packageInfo);
@@ -110,7 +112,8 @@ function buildTerrain(map, tileSize, packageInfo = null) {
     for (let x = 0; x < w; x += 1) {
       const level = Math.max(0, heights?.[z]?.[x] ?? 0);
       const special = specials?.[z]?.[x] ?? 0;
-      const color = tileColor(level, special, Boolean(collision?.[z]?.[x]), ((x + z) & 1) === 0, visual);
+      const color = tileColor(
+        level, special, Boolean(collision?.[z]?.[x]), ((x + z) & 1) === 0, visual, room);
       const c = cornersAt(x, z); // NW, NE, SE, SW, matching the C++ terrain renderer.
       const nw = [x * tileSize, c[0], z * tileSize];
       const ne = [(x + 1) * tileSize, c[1], z * tileSize];
@@ -138,6 +141,70 @@ function buildTerrain(map, tileSize, packageInfo = null) {
       const west = cornersAt(x - 1, z);
       if (edgeAbove(c[3], c[0], west[2], west[1])) {
         pushQuad([sw, nw, [x * tileSize, west[1], z * tileSize], [x * tileSize, west[2], (z + 1) * tileSize]], color, sideShade);
+      }
+    }
+  }
+
+  if (room) {
+    const colorFromRgb = (value) => new THREE.Color(value[0] / 255, value[1] / 255, value[2] / 255);
+    const wallNS = colorFromRgb(room.wallNS);
+    const wallEW = colorFromRgb(room.wallEW);
+    const trim = colorFromRgb(room.trim);
+    const baseboard = colorFromRgb(room.baseboard);
+    const pushWallSegment = (a, b, heightTiles, bodyColor) => {
+      const wallHeight = Math.max(0, heightTiles) * tileSize;
+      if (wallHeight <= 0.001) return;
+      const band = Math.min(Math.max(0, room.trimHeightTiles) * tileSize, wallHeight * 0.35);
+      if (band > 0.001) {
+        pushQuad([
+          a, b,
+          [b[0], b[1] + band, b[2]],
+          [a[0], a[1] + band, a[2]],
+        ], baseboard);
+      }
+      if (wallHeight > band * 2 + 0.001) {
+        pushQuad([
+          [a[0], a[1] + band, a[2]],
+          [b[0], b[1] + band, b[2]],
+          [b[0], b[1] + wallHeight - band, b[2]],
+          [a[0], a[1] + wallHeight - band, a[2]],
+        ], bodyColor);
+      }
+      if (band > 0.001) {
+        pushQuad([
+          [a[0], a[1] + wallHeight - band, a[2]],
+          [b[0], b[1] + wallHeight - band, b[2]],
+          [b[0], b[1] + wallHeight, b[2]],
+          [a[0], a[1] + wallHeight, a[2]],
+        ], trim);
+      }
+    };
+    for (let x = 0; x < w; x += 1) {
+      const north = cornersAt(x, 0);
+      if (!interiorOpeningCovers(map, 'north', x)) {
+        pushWallSegment(
+          [x * tileSize, north[0], 0], [(x + 1) * tileSize, north[1], 0],
+          room.wallHeightTiles, wallNS);
+      }
+      const south = cornersAt(x, h - 1);
+      if (!interiorOpeningCovers(map, 'south', x)) {
+        pushWallSegment(
+          [(x + 1) * tileSize, south[2], h * tileSize], [x * tileSize, south[3], h * tileSize],
+          room.frontWallHeightTiles, wallNS);
+      }
+    }
+    for (let z = 0; z < h; z += 1) {
+      const west = cornersAt(0, z);
+      if (!interiorOpeningCovers(map, 'west', z)) {
+        pushWallSegment(
+          [0, west[3], (z + 1) * tileSize], [0, west[0], z * tileSize],
+          room.wallHeightTiles, wallEW);
+      }
+      const east = cornersAt(w - 1, z);
+      if (!interiorOpeningCovers(map, 'east', z)) {
+        pushWallSegment(
+          [w * tileSize, east[1], z * tileSize], [w * tileSize, east[2], (z + 1) * tileSize],
+          room.wallHeightTiles, wallEW);
       }
     }
   }
@@ -226,7 +293,7 @@ function configureRtpksTexture(texture, sampler) {
   return texture;
 }
 
-function materialForRtpks(fileName, packageInfo, materialId) {
+function materialForRtpks(fileName, packageInfo, materialId, { animate = true } = {}) {
   const meta = (packageInfo.materials || []).find((mat) => Number(mat.materialId) === Number(materialId));
   const animation = meta?.animation;
   const motion = animation?.type === 'materialMotion';
@@ -240,7 +307,12 @@ function materialForRtpks(fileName, packageInfo, materialId) {
     return clone;
   };
   const sourceTexture = meta?.textureName ? loadRtpksTexture(fileName, meta.textureName) : null;
-  const texture = cloneMaterialTexture(sourceTexture);
+  // Static editor surfaces can safely share the loader-owned texture. Cloning
+  // before TextureLoader finishes leaves a clone without image data and was
+  // the source of black maps and repeated WebGL upload warnings.
+  const texture = animate
+    ? cloneMaterialTexture(sourceTexture)
+    : configureRtpksTexture(sourceTexture, sampler);
   const shadowLike = /shadow|kage|shade/i.test(`${meta?.name || ''} ${meta?.textureName || ''}`);
   const material = new THREE.MeshStandardMaterial({
     map: texture || null,
@@ -257,7 +329,7 @@ function materialForRtpks(fileName, packageInfo, materialId) {
     polygonOffsetFactor: shadowLike ? -1 : 0,
     polygonOffsetUnits: shadowLike ? -1 : 0,
   });
-  if (animation?.type === 'frames' && Array.isArray(animation.frames) && animation.frames.length) {
+  if (animate && animation?.type === 'frames' && Array.isArray(animation.frames) && animation.frames.length) {
     const frames = animation.frames.map((name) => cloneMaterialTexture(loadRtpksTexture(fileName, name)));
     const frameTime = Math.max(16, Number(animation.frameDurationMs) || 180);
     material.onBeforeRender = () => {
@@ -270,7 +342,7 @@ function materialForRtpks(fileName, packageInfo, materialId) {
         material.needsUpdate = true;
       }
     };
-  } else if (motion) {
+  } else if (animate && motion) {
     const offsets = Array.isArray(animation.offsets) ? animation.offsets : [];
     const keyframes = (animation.imageKeyframes || []).map((keyframe) => ({
       frame: Math.max(0, Number(keyframe.frame) || 0),
@@ -416,7 +488,7 @@ export async function renderRtpksTileThumbnail(fileName, packageInfo, resortTile
   const promise = (async () => {
     const tile = (packageInfo?.tiles || []).find((entry) => Number(entry.resortTileId) === Number(resortTileId));
     const tileSize = 32;
-    const root = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize);
+    const root = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize, null, { animate: false });
     await waitForObjectTextures(root);
     const scene = new THREE.Scene();
     scene.background = null;
@@ -490,7 +562,7 @@ function buildRangeGeometry(mesh, range, tileSize, placement = null, uvMapping =
   return geometry;
 }
 
-async function buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize, placement = null) {
+async function buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize, placement = null, options = {}) {
   const meshPayload = await loadRtpksMesh(fileName, resortTileId);
   const effectivePlacement = placement
     ? {
@@ -508,7 +580,7 @@ async function buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileS
     const materialMeta = (packageInfo.materials || []).find((mat) => Number(mat.materialId) === Number(range.materialId));
     const geometry = buildRangeGeometry(meshPayload, range, tileSize, effectivePlacement, materialMeta?.uvMapping);
     if (!geometry) continue;
-    const mat = materialForRtpks(fileName, packageInfo, range.materialId);
+    const mat = materialForRtpks(fileName, packageInfo, range.materialId, { animate: options.animate !== false });
     const part = new THREE.Mesh(geometry, mat);
     part.renderOrder = Number(materialMeta?.renderOrder) || 0;
     part.castShadow = false;
@@ -526,6 +598,7 @@ export async function mountRtpksTilePreview(host, fileName, packageInfo, resortT
   let intersectionObserver = null;
   let previewVisible = true;
   let lastAnimatedRender = 0;
+  const settleTimers = new Set();
 
   const tileSize = Math.max(8, Number(options.tileSize || 32));
   const viewW = Math.max(180, Math.round(host.clientWidth || 260));
@@ -535,7 +608,9 @@ export async function mountRtpksTilePreview(host, fileName, packageInfo, resortT
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x18212a);
 
-  const root = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize);
+  const root = await buildRtpksTileTemplate(fileName, packageInfo, resortTileId, tileSize, null, {
+    animate: options.animate === true,
+  });
   if (disposed || (typeof options.isCurrent === 'function' && !options.isCurrent())) {
     disposeRtpksObject(root);
     return { dispose() {} };
@@ -579,8 +654,7 @@ export async function mountRtpksTilePreview(host, fileName, packageInfo, resortT
   camera.lookAt(0, 0, 0);
 
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
+  controls.enableDamping = false;
   controls.enableRotate = false;
   controls.enablePan = false;
   controls.minZoom = 0.35;
@@ -593,16 +667,27 @@ export async function mountRtpksTilePreview(host, fileName, packageInfo, resortT
     controls.update();
     renderer.render(scene, camera);
   };
+  controls.addEventListener('change', renderFrame);
 
   const tick = (now) => {
-    if (disposed) return;
+    if (disposed || options.animate !== true) return;
     if (previewVisible && now - lastAnimatedRender >= 1000 / 30) {
       lastAnimatedRender = now;
       renderFrame();
     }
     raf = requestAnimationFrame(tick);
   };
-  raf = requestAnimationFrame(tick);
+  if (options.animate === true) raf = requestAnimationFrame(tick);
+  else {
+    renderFrame();
+    for (const delay of [60, 240, 800]) {
+      const timer = setTimeout(() => {
+        settleTimers.delete(timer);
+        renderFrame();
+      }, delay);
+      settleTimers.add(timer);
+    }
+  }
 
   const onResize = () => {
     if (disposed) return;
@@ -637,7 +722,10 @@ export async function mountRtpksTilePreview(host, fileName, packageInfo, resortT
     if (disposed) return;
     disposed = true;
     cancelAnimationFrame(raf);
+    for (const timer of settleTimers) clearTimeout(timer);
+    settleTimers.clear();
     controls.dispose();
+    controls.removeEventListener('change', renderFrame);
     if (resizeObserver) resizeObserver.disconnect();
     else window.removeEventListener('resize', onResize);
     intersectionObserver?.disconnect();
@@ -730,7 +818,7 @@ export async function downloadRtpksTileGlb(fileName, packageInfo, resortTileId, 
   }
 }
 
-async function addRtpksTiles(scene, map, tileSize, packageInfo, fileName, disposedRef) {
+async function addRtpksTiles(scene, map, tileSize, packageInfo, fileName, disposedRef, options = {}) {
   const layers = visibleTileLayers(map);
   if (!layers?.length) return;
 
@@ -764,7 +852,7 @@ async function addRtpksTiles(scene, map, tileSize, packageInfo, fileName, dispos
     for (const range of ranges) usedMaterialIds.add(Number(range.materialId));
   }
   const materialsById = new Map([...usedMaterialIds].map((materialId) => (
-    [materialId, materialForRtpks(fileName, packageInfo, materialId)]
+    [materialId, materialForRtpks(fileName, packageInfo, materialId, { animate: options.animate === true })]
   )));
 
   const group = new THREE.Group();
@@ -839,7 +927,7 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
   host.innerHTML = '';
   let disposed = false;
   const disposedRef = { disposed: false };
-  let raf = 0;
+  const settleTimers = new Set();
 
   const tileSize = map.grid?.tileSize || 16;
   const w = map.grid.width;
@@ -850,9 +938,11 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
 
   const viewW = Math.max(320, Math.round(host.clientWidth || 640));
   const viewH = Math.max(320, Math.round(host.clientHeight || 520));
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // Editing favors immediate pointer response. Full-resolution antialiasing and
+  // animated materials remain available in focused asset previews.
+  const dpr = 1;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(dpr);
   renderer.setSize(viewW, viewH);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -867,13 +957,26 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
   camera.position.set(cx + span * 0.7, span * 0.85, cz + span * 0.9);
 
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.08;
+  controls.enableDamping = false;
   controls.target.set(cx, tileSize, cz);
   controls.maxPolarAngle = Math.PI * 0.49; // keep above the horizon
   controls.minDistance = tileSize * 2;
   controls.maxDistance = span * 6;
   controls.update();
+
+  const renderFrame = () => {
+    if (!disposed && renderer.domElement.isConnected) renderer.render(scene, camera);
+  };
+  const settleRender = () => {
+    for (const delay of [40, 180, 700]) {
+      const timer = setTimeout(() => {
+        settleTimers.delete(timer);
+        renderFrame();
+      }, delay);
+      settleTimers.add(timer);
+    }
+  };
+  controls.addEventListener('change', renderFrame);
 
   scene.add(new THREE.HemisphereLight(0xffffff, lightCfg.ground, lightCfg.hemi));
   const key = new THREE.DirectionalLight(lightCfg.color, lightCfg.key);
@@ -897,7 +1000,10 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
   const tilePackageFile = map.tilePackage?.file || opts.tilePackage?.fileName;
   if (tilePackageFile) {
     loadRtpksPackage(tilePackageFile)
-      .then((packageInfo) => addRtpksTiles(scene, map, tileSize, packageInfo, tilePackageFile, disposedRef))
+      .then((packageInfo) => addRtpksTiles(scene, map, tileSize, packageInfo, tilePackageFile, disposedRef, {
+        animate: opts.previewAnimations === true,
+      }))
+      .then(() => { renderFrame(); settleRender(); })
       .catch(() => { /* RTPKS preview is optional; bad packages should not kill the 3D view */ });
   }
 
@@ -917,6 +1023,8 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
         const s = mdl.scale || 1;
         g.scale.set(s, s, s);
         props.add(g);
+        renderFrame();
+        settleRender();
       })
       .catch(() => { /* a missing/broken asset just doesn't appear; not fatal for preview */ });
   }
@@ -925,22 +1033,14 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
     if (disposed) return;
     disposed = true;
     disposedRef.disposed = true;
-    cancelAnimationFrame(raf);
+    for (const timer of settleTimers) clearTimeout(timer);
+    settleTimers.clear();
     ro.disconnect();
+    controls.removeEventListener('change', renderFrame);
     controls.dispose();
     renderer.dispose();
     if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
   };
-
-  const tick = () => {
-    if (disposed) return;
-    // If the host canvas was detached (tab switch / re-render) stop the loop and free GL.
-    if (!renderer.domElement.isConnected) { dispose(); return; }
-    controls.update();
-    renderer.render(scene, camera);
-    raf = requestAnimationFrame(tick);
-  };
-  raf = requestAnimationFrame(tick);
 
   const onResize = () => {
     if (disposed) return;
@@ -949,9 +1049,11 @@ export function mountMap3DView(host, map, catalog = [], opts = {}) {
     renderer.setSize(nw, nh);
     camera.aspect = nw / nh;
     camera.updateProjectionMatrix();
+    renderFrame();
   };
   const ro = new ResizeObserver(onResize);
   ro.observe(host);
+  renderFrame();
 
   return { dispose };
 }

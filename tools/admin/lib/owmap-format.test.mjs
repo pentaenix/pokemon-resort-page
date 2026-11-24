@@ -35,3 +35,12 @@ test('resizing preserves interior, door, and unknown metadata', () => {
   assert.deepEqual(resized.doorTriggers, map.doorTriggers);
   assert.deepEqual(resized.customMetadata, map.customMetadata);
 });
+
+test('actor spawn markers and special 14 round-trip through OWMAP', () => {
+  const map = emptyMap(4, 4);
+  map.terrain.special[2][1] = 14;
+  map.spawnTiles = [{ id: 'actor_spawn_1_2', tile: [1, 2], allows: 'npc_without_pokemon' }];
+  const decoded = decodeOwmap(encodeOwmap(map));
+  assert.equal(decoded.terrain.special[2][1], 14);
+  assert.deepEqual(decoded.spawnTiles, map.spawnTiles);
+});

@@ -1,0 +1,270 @@
+{
+  "schema": "pokemon-resort-start-cinematic",
+  "schemaVersion": 1,
+  "activeVessel": "virbank_forward",
+  "activeEnvironment": "day",
+  "vessels": [
+    {
+      "id": "liberty_yellow",
+      "label": "Option A — Liberty Garden yellow boat",
+      "model": "assets/cinematic/start/vessels/liberty_yellow.glb",
+      "animation": "",
+      "position": [
+        -0.28,
+        -0.28,
+        2.32
+      ],
+      "height": -0.28,
+      "yawDegrees": 0,
+      "scale": 0.02,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3.2
+    },
+    {
+      "id": "royal_unova",
+      "label": "Option B — Royal Unova",
+      "model": "assets/cinematic/start/vessels/royal_unova.glb",
+      "animation": "",
+      "position": [
+        -0.92,
+        -0.18,
+        -1.5
+      ],
+      "height": -0.18,
+      "yawDegrees": 0,
+      "scale": 0.0047,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3.5,
+      "materialPositionOffsets": {
+        "h1_ship_nami": [
+          0,
+          0,
+          -120
+        ]
+      }
+    },
+    {
+      "id": "virbank_forward",
+      "materialMotionSpeed": -60,
+      "label": "Option C — Virbank ship forward",
+      "model": "assets/cinematic/start/vessels/virbank_forward.glb",
+      "animation": "",
+      "position": [
+        0,
+        -0.25,
+        0
+      ],
+      "height": -0.25,
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3
+    },
+    {
+      "id": "virbank_side",
+      "materialMotionSpeed": -60,
+      "label": "Option C — Virbank ship side",
+      "model": "assets/cinematic/start/vessels/virbank_side.glb",
+      "animation": "",
+      "position": [
+        0,
+        -0.25,
+        0
+      ],
+      "height": -0.25,
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3
+    }
+  ],
+  "environments": [
+    {
+      "id": "day",
+      "label": "Day ocean",
+      "model": "assets/cinematic/start/environments/ocean_day.glb",
+      "animation": "ocean_day",
+      "ocean": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_06",
+        "C3Ship_wa"
+      ]
+    },
+    {
+      "id": "sunset",
+      "label": "Sunset ocean",
+      "model": "assets/cinematic/start/environments/ocean_sunset.glb",
+      "animation": "ocean_sunset",
+      "ocean": {
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_06",
+        "C3Ship_wa"
+      ]
+    },
+    {
+      "id": "night",
+      "label": "Night ocean",
+      "model": "assets/cinematic/start/environments/ocean_night.glb",
+      "animation": "ocean_night",
+      "ocean": {
+        "position": [
+          0,
+          -1,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          -1,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_06",
+        "C3Ship_wa"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "id": "wingull_left",
+      "model": "assets/pokemon_attend/pokemon_models/pm0278_00_Wingull.glbz",
+      "animation": "slot6_02",
+      "animationSpeed": 1,
+      "animationPhaseSeconds": 0,
+      "position": [
+        -2.8,
+        11.2,
+        1.5
+      ],
+      "height": 11.2,
+      "yawDegrees": 180,
+      "scale": 0.018,
+      "velocity": [
+        0,
+        0,
+        -0.3
+      ]
+    },
+    {
+      "id": "wingull_right",
+      "model": "assets/pokemon_attend/pokemon_models/pm0278_00_Wingull.glbz",
+      "animation": "slot6_02",
+      "animationSpeed": 1,
+      "animationPhaseSeconds": 0.35,
+      "position": [
+        2.4,
+        11.84,
+        3
+      ],
+      "height": 11.84,
+      "yawDegrees": 180,
+      "scale": 0.018,
+      "velocity": [
+        0,
+        0,
+        -0.3
+      ]
+    }
+  ],
+  "island": {
+    "id": "resort_island",
+    "label": "Resort island preview",
+    "enabled": true,
+    "model": "assets/cinematic/start/island/island_nocliff.glb",
+    "position": [
+      0,
+      -0.08,
+      -52
+    ],
+    "yawDegrees": 12,
+    "scale": 0.0015
+  },
+  "camera": {
+    "targetX": 0,
+    "targetY": 1,
+    "targetZ": 3,
+    "distance": 10,
+    "height": 4,
+    "fovYDegrees": 43,
+    "nearClip": 0.03,
+    "farClip": 180,
+    "moveSpeed": 8,
+    "mouseSensitivity": 0.12,
+    "initialPosition": [
+      8.5,
+      3.8,
+      -9.5
+    ],
+    "initialYawDegrees": -35,
+    "initialPitchDegrees": -8
+  },
+  "clearColor": [
+    0.36,
+    0.65,
+    0.86
+  ]
+}

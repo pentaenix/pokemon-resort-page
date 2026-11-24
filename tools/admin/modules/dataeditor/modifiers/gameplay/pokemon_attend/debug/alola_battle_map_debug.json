@@ -9,6 +9,7 @@
     "debug"
   ],
   "groups": [
+    {"id":"bathFraming","label":"Bathroom size / framing review","order":65,"description":"Temporary medium/large review sets, not outdoor eligibility. Base forms only; no Megas or School Wishiwashi."},
     {
       "id": "scene",
       "label": "Scene picks",
@@ -24,12 +25,32 @@
     {
       "id": "overlay",
       "label": "Debug overlay buttons",
-      "description": "D-menu button layout/style for TEST ATTEND only.",
+      "description": "D-menu button layout/style for TEST ATTEND only, including next/previous nature. Nature edits are temporary runtime state, not saved Pokemon changes.",
       "order": 70,
       "collapsedDefault": true
     }
   ],
   "fields": {
+    "ui.bathResetButton.labelPrefix":{"label":"Selected Pokemon care reset label","group":"overlay","description":"RESET CARE clears bath and spa completion independently tracked for this Pokemon. Does not reset other Pokemon."},
+    "bathFraming.mediumPokemon.*":{"label":"Medium review Pokemon ID","group":"bathFraming"},
+    "bathFraming.largePokemon.*":{"label":"Large review Pokemon ID","group":"bathFraming"},
+    "bathFraming.zoomStep":{"label":"Temporary zoom step fraction","group":"bathFraming","min":0.01,"max":0.25,"step":0.01},
+    "bathFraming.mediumZoom":{"label":"Shared medium group zoom","group":"bathFraming","min":0.1,"max":3,"step":0.01},
+    "bathFraming.largeZoom":{"label":"Shared large group zoom","group":"bathFraming","min":0.1,"max":3,"step":0.01},
+    "bathFraming.buttonWidth":{"label":"Framing button width","group":"bathFraming","min":80,"max":400,"step":1},
+    "bathFraming.buttonHeight":{"label":"Framing button height","group":"bathFraming","min":20,"max":400,"step":1},
+    "bathFraming.gap":{"label":"Framing button spacing","group":"bathFraming","min":0,"max":400,"step":1},
+    "bathFraming.bottomMargin":{"label":"Framing panel bottom margin","group":"bathFraming","min":0,"max":400,"step":1},
+    "bathFraming.labels.*":{"label":"Framing button label (medium -/+, large -/+, closer/farther)","group":"bathFraming"},
+    "ui.diagnosticRefreshSeconds":{"label":"Play diagnostics refresh interval","group":"overlay","min":0.1,"max":2,"step":0.05,"unit":" seconds"},
+    "ui.baselineSeconds":{"label":"Timing capture duration","group":"overlay","min":3,"max":60,"step":1,"unit":" seconds"},
+    "ui.baselineWarmupSeconds":{"label":"Timing capture warmup exclusion","group":"overlay","min":0,"max":59,"step":1,"unit":" seconds"},
+    "ui.playDetailsPanel.enabled":{"label":"Play details panel enabled","group":"overlay"},
+    "allowUnreviewedPlay": {
+      "label": "Experimental play for all Pokemon",
+      "group": "scene",
+      "description": "Test unreviewed bodies with provisional head grips and ground movement. Real clips/nodes are still required. This does not certify species rigs."
+    },
     "id": {
       "label": "Debug scene id",
       "group": "scene",
@@ -87,6 +108,7 @@
     }
   },
   "patterns": {
+    "ui.playDetailsPanel.*":{"group":"overlay","advanced":true},
     "ui.*Button.*": {
       "group": "overlay",
       "advanced": true

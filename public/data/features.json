@@ -8,6 +8,98 @@
   ],
   "features": [
     {
+      "id": "FEAT-AQUARIUM-CONSTRUCTION",
+      "title": "Aquarium construction and exhibits",
+      "area": "Aquarium",
+      "stage": "Testing",
+      "priority": "High",
+      "progress": 75,
+      "summary": "Build connected aquarium rooms, shape tanks, and choose their residents and decorations. Available in the development build, with controls and large exhibits still being tested.",
+      "linkedBugs": [],
+      "linkedRoutes": [],
+      "tasks": [
+        { "done": true, "label": "Draw, extend, subtract, merge, move, and delete tanks with undo and redo" },
+        { "done": true, "label": "Adjust height, below-floor depth, and individual rounded corners" },
+        { "done": true, "label": "Build walk-through tunnels with entrances, junctions, and glass floors" },
+        { "done": true, "label": "Resize rooms and connect independent rooms through movable doors" },
+        { "done": true, "label": "Save room layouts and tank designs per profile" },
+        { "done": true, "label": "Stock tanks from the reviewed test catalogue with habitat and size checks" },
+        { "done": true, "label": "Add rocks, corals, and plants with position, height, rotation, and scale controls" },
+        { "done": true, "label": "Choose water presets, brightness, murkiness, and floor materials" },
+        { "done": true, "label": "Inspect whole tanks and individual Pokémon from outside the glass" },
+        { "done": false, "label": "Verify the complete construction and stocking flow with controller-only input" },
+        { "done": false, "label": "Include placed decorations in Pokémon obstacle avoidance" },
+        { "done": false, "label": "Complete large-room performance, save recovery, and rendering regression checks" }
+      ],
+      "images": [],
+      "dossier": {
+        "overview": "Development progress as of September 14, 2026. These systems are implemented for playtesting, not a public release. Checklist progress describes the tasks on this card, not overall game completion.",
+        "sections": [
+          {
+            "id": "aquarium-building",
+            "title": "Rooms and tank construction",
+            "blocks": [
+              { "type": "text", "body": "Draw or subtract grid cells to shape an exhibit. Adjacent additions extend a tank. Side handles resize it, corner handles adjust roundness, and height and depth handles show an outline of the proposed change. Confirmed edits support undo and redo." },
+              { "type": "text", "body": "Tunnels provide walking routes through exhibits, including junctions and supported glass floors above deep water. Room walls can be moved, and doors connect additional rooms. Each end of a door connection can move independently along its own wall." }
+            ]
+          },
+          {
+            "id": "aquarium-presentation",
+            "title": "Water and decorations",
+            "blocks": [
+              { "type": "text", "body": "River, swamp, open ocean, and abyss presets set the exhibit appearance. Separate brightness and murkiness controls adjust visibility through the water. Animated surface layers, depth-dependent fog, glass borders, and selected emissive Pokémon details are in use." },
+              { "type": "text", "body": "Place up to 25 decorations per tank from the rock, coral, and plant catalogue. Decorations can be moved, rotated, resized, raised, or partially buried. Lateral movement preserves their chosen height. Walkway decorations and signs remain future work." }
+            ]
+          },
+          {
+            "id": "aquarium-stocking",
+            "title": "Residents and viewing",
+            "blocks": [
+              { "type": "text", "body": "The stocking panel uses a reviewed test catalogue, not Pokémon from the player storage boxes. Capacity and habitat checks consider tank geometry and Pokémon size. Connecting owned Pokémon and transfer storage is a later step." },
+              { "type": "text", "body": "Residents use swimming, schooling, hovering, bottom-resting, crawling, and surface behaviors. Escort fish can follow a larger resident. Navigation, separation, and behavior tuning remain under observation, particularly in crowded or tunnel-containing tanks." },
+              { "type": "text", "body": "Tank interaction offers a view from the glass, a whole-exhibit view, and a focused view of a selected Pokémon. The camera stays outside the tank while bringing the selected resident closer into view." }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "FEAT-AQUARIUM-VISITORS",
+      "title": "Aquarium visitors and companions",
+      "area": "Aquarium",
+      "stage": "Testing",
+      "priority": "Medium",
+      "progress": 75,
+      "summary": "Visitors watch exhibits, walk between rooms, and comment on tank contents. The follower Pokémon can stop to watch nearby tanks too.",
+      "linkedBugs": [],
+      "linkedRoutes": [],
+      "tasks": [
+        { "done": true, "label": "Populate rooms with existing visitor appearances and walkable-area capacity limits" },
+        { "done": true, "label": "Start visits with people already walking or watching exhibits" },
+        { "done": true, "label": "Use leisurely walking, exhibit history, room travel, and exit departures" },
+        { "done": true, "label": "Keep standing visitors solid and let moving visitors yield to the player" },
+        { "done": true, "label": "Let the follower watch tanks while preserving normal step-by-step following" },
+        { "done": true, "label": "Add tank-aware dialogue with two conversations per visitor per visit" },
+        { "done": false, "label": "Playtest dialogue repetition and conversation limits across room transitions" },
+        { "done": false, "label": "Verify visitor and follower traffic in narrow and crowded layouts" }
+      ],
+      "images": [],
+      "dossier": {
+        "overview": "The current development build uses existing human visitors. More specific visitor eligibility and arrival rules are planned separately.",
+        "sections": [
+          {
+            "id": "aquarium-visitor-routines",
+            "title": "A visit to the aquarium",
+            "blocks": [
+              { "type": "text", "body": "Visitors arrive with a mixture of walking and exhibit-watching states. They prefer tanks they have not seen, can choose another viewing spot, and can move between rooms or leave through the exit. Watching currently lasts between 5 and 20 seconds, with configurable limits." },
+              { "type": "text", "body": "Dialogue draws from 92 templates and refers to the watched tank, including its Pokémon, decorations, or tunnels. Recent choices reduce repetition. A visitor permits two conversations during an aquarium visit; changing rooms does not reset that allowance." },
+              { "type": "text", "body": "The follower can investigate nearby tanks or occasionally stand beside the player to watch one. Walking resumes the normal following trail. The follower does not leave the aquarium or change rooms independently." }
+            ]
+          }
+        ]
+      }
+    },
+    {
       "id": "FEAT-NEW-70933",
       "title": "Interactions -> attend",
       "area": "Overworld",

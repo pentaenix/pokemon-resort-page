@@ -1,0 +1,16 @@
+{
+  "title": "Attend Food: Flavors and Preferences",
+  "description": "Prototype tastes, not verified source recipes. Nature flavors rank foods and control badges and reward hearts. Missing flavors/base liking remain neutral. Inventory counts stay at 1.",
+  "matches": ["gameplay/pokemon_attend/food/*.json"],
+  "tags": ["attend", "food"],
+  "groups": [{"id": "food", "label": "Food catalog and taste", "order": 1}],
+  "fields": {
+    "foods.*.id": {"label": "Stable food ID", "group": "food"},
+    "foods.*.label": {"label": "Food label", "group": "food"},
+    "foods.*.sprite": {"label": "Food sprite path", "group": "food"},
+    "foods.*.baseLiking": {"label": "Base liking before nature", "group": "food", "min": -1, "max": 1, "step": 0.05},
+    "foods.*.testLiking": {"label": "Temporary preview liking override", "group": "food", "min": -1, "max": 1, "step": 0.25, "hint": "Remove to restore nature/flavor scoring. Zero shows an empty test heart. Negative values show purple dislike bursts and refuse food; -1 adds angry expression."},
+    "foods.*.testDislike": {"label":"Force dislike preview (including zero percent)","group":"food","hint":"Test-only: zero liking shows a grey irritation burst and quietly refuses food."},
+    "foods.*.flavors.*": {"label": "Flavor strength", "group": "food", "min": 0, "max": 1, "step": 0.05, "hint": "spicy / sour / sweet / dry / bitter. Favored flavor adds; disliked flavor subtracts."}
+  }
+}

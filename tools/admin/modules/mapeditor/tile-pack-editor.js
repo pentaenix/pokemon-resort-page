@@ -228,6 +228,7 @@ export async function openTilePackEditor(editor, { onSaved, log } = {}) {
     if (previewHost) {
       const tileId = Number(state.selectedTileId);
       mountRtpksTilePreview(previewHost, state.fileName, editor.tilePackage, tileId, {
+        animate: true,
         isCurrent: () => previewHost.isConnected && state.previewing && Number(state.selectedTileId) === tileId,
       }).then((handle) => {
         if (previewHost.isConnected && state.previewing && Number(state.selectedTileId) === tileId) state.previewHandle = handle;

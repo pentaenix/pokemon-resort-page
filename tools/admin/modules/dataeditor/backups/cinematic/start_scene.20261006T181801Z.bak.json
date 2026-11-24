@@ -1,0 +1,899 @@
+{
+  "schema": "pokemon-resort-start-cinematic",
+  "schemaVersion": 1,
+  "sceneCenter": [
+    0,
+    0,
+    0
+  ],
+  "fog": {
+    "enabled": true,
+    "start": 25,
+    "end": 300,
+    "strength": 0.82,
+    "color": [
+      0.48,
+      0.68,
+      0.85
+    ]
+  },
+  "audio": {
+    "music": {
+      "selected": "faith_in_the_future",
+      "volume": 1,
+      "tracks": [
+        {
+          "id": "aiming_for_those_dreams",
+          "label": "Aiming for Those Dreams",
+          "path": "assets/cinematic/start/audio/aiming_for_those_dreams.mp3"
+        },
+        {
+          "id": "lets_take_it_easy",
+          "label": "Let's Take It Easy",
+          "path": "assets/cinematic/start/audio/lets_take_it_easy.mp3"
+        },
+        {
+          "id": "a_new_beginning",
+          "label": "A New Beginning",
+          "path": "assets/cinematic/start/audio/a_new_beginning.mp3"
+        },
+        {
+          "id": "faith_in_the_future",
+          "label": "Faith in the Future",
+          "path": "assets/cinematic/start/audio/faith_in_the_future.mp3"
+        }
+      ]
+    },
+    "breachCues": [
+      {
+        "id": "wailord_surface_break",
+        "event": "surfaceBreak",
+        "path": "assets/cinematic/start/audio/wailord_surface_break_meaty.mp3",
+        "volume": 1,
+        "enabled": true,
+        "offsetSeconds": 0
+      },
+      {
+        "id": "wailord_landing",
+        "event": "landing",
+        "path": "assets/cinematic/start/audio/wailord_landing.mp3",
+        "volume": 1,
+        "enabled": true,
+        "offsetSeconds": 0
+      }
+    ],
+    "ambience": [
+      {
+        "id": "ferry_splashes",
+        "path": "assets/cinematic/start/audio/ferry_splashes.mp3",
+        "volume": 0.65,
+        "enabled": true
+      },
+      {
+        "id": "boat_engine",
+        "path": "assets/cinematic/start/audio/boat_engine.mp3",
+        "volume": 0.35,
+        "enabled": true
+      }
+    ]
+  },
+  "activeShot": "overhead",
+  "shots": [
+    {
+      "id": "overhead",
+      "label": "Ship and Wingull overhead",
+      "sounds": [
+        {
+          "id": "wingull_call",
+          "path": "assets/cinematic/start/audio/wingull_call_short.wav",
+          "atSeconds": 0,
+          "volume": 0.65,
+          "enabled": true,
+          "cutVolume": 0.2,
+          "cutFadeSeconds": 2
+        }
+      ],
+      "durationSeconds": 5,
+      "key": 1,
+      "vessel": "virbank_forward",
+      "position": [
+        2.656938,
+        10.263737,
+        -1.25381
+      ],
+      "yawDegrees": 303.450165,
+      "pitchDegrees": -73.200005,
+      "fovYDegrees": 45,
+      "foregroundBlurStrength": 2
+    },
+    {
+      "id": "boat_rear_three_quarter",
+      "label": "Wailord and splash soft focus",
+      "durationSeconds": 4,
+      "key": 2,
+      "vessel": "virbank_forward",
+      "position": [
+        3.172029,
+        1.042376,
+        3.123206
+      ],
+      "yawDegrees": 230.080246,
+      "pitchDegrees": -14.239999,
+      "fovYDegrees": 52,
+      "foregroundBlurStrength": 0,
+      "wailordBreach": {
+        "finFoldDegrees": 55,
+        "blurStrength": 0.1,
+        "blurParticles": true,
+        "positionOffset": [
+          -5,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "id": "haru_deck",
+      "label": "Mimi and Lillipup spot Wailord",
+      "durationSeconds": 9,
+      "key": 3,
+      "vessel": "virbank_deck",
+      "position": [
+        0.25,
+        0.95,
+        1.5
+      ],
+      "yawDegrees": 180,
+      "pitchDegrees": -3,
+      "fovYDegrees": 48,
+      "foregroundBlurStrength": 0,
+      "cameraMove": {
+        "startSeconds": 4.85,
+        "durationSeconds": 1.6,
+        "position": [
+          0.25,
+          0.95,
+          0.55
+        ]
+      },
+      "spriteActors": [
+        {
+          "id": "mimi",
+          "package": "assets/characters/npc/mimi.charbin",
+          "position": [
+            1.05,
+            0.166,
+            -0.05
+          ],
+          "destination": [
+            -0.75,
+            0.166,
+            -0.05
+          ],
+          "height": 0.42,
+          "facing": "left",
+          "turnFacing": "right",
+          "turnSeconds": 0.7,
+          "jumpSeconds": 0.8,
+          "jumpPeriodSeconds": 0.3,
+          "jumpCount": 2,
+          "jumpHeight": 0.12,
+          "runSeconds": 2.35,
+          "runDurationSeconds": 1.1,
+          "runFrameSeconds": 0.09
+        },
+        {
+          "id": "lillipup",
+          "package": "assets/characters/pokemon/lillipup.charbin",
+          "position": [
+            1.15,
+            0.166,
+            -0.35
+          ],
+          "destination": [
+            -0.75,
+            0.166,
+            -0.35
+          ],
+          "height": 0.42,
+          "facing": "left",
+          "turnFacing": "right",
+          "turnSeconds": 2.35,
+          "jumpCount": 0,
+          "runSeconds": 3.6,
+          "runDurationSeconds": 1.1,
+          "runFrameSeconds": 0.09
+        }
+      ],
+      "characterSprite": {
+        "positionOffset": [
+          -0.6,
+          0,
+          0.1
+        ],
+        "facing": "left",
+        "sequence": [
+          {
+            "atSeconds": 0,
+            "facing": "left",
+            "frame": 0
+          },
+          {
+            "atSeconds": 6.65,
+            "facing": "left",
+            "frame": 3
+          },
+          {
+            "atSeconds": 6.83,
+            "facing": "north",
+            "frame": 3
+          },
+          {
+            "atSeconds": 7.01,
+            "facing": "north",
+            "frame": 0
+          }
+        ]
+      }
+    },
+    {
+      "id": "dragonite_island_reveal",
+      "label": "Dragonite leads toward the island",
+      "key": 4,
+      "durationSeconds": 11,
+      "vessel": "virbank_deck",
+      "position": [
+        0.25,
+        0.95,
+        0.55
+      ],
+      "yawDegrees": 180,
+      "pitchDegrees": -3,
+      "fovYDegrees": 48,
+      "foregroundBlurStrength": 0,
+      "sounds": [
+        {
+          "id": "dragonite_arrival",
+          "path": "assets/cinematic/start/audio/dragonite_air_swoosh_boosted.wav",
+          "atSeconds": 0,
+          "volume": 1,
+          "enabled": true
+        }
+      ],
+      "windBurst": {
+        "enabled": true,
+        "startSeconds": 0.9,
+        "durationSeconds": 0.65,
+        "strength": 1,
+        "streaks": 18,
+        "particles": 12,
+        "originX": 0.18,
+        "originY": 0.15
+      },
+      "cameraImpact": {
+        "startSeconds": 0.9,
+        "durationSeconds": 0.45,
+        "strength": 1.25,
+        "frequencyHz": 12,
+        "offset": [
+          0.025,
+          0.017,
+          0.03
+        ]
+      },
+      "logo": {
+        "enabled": true,
+        "path": "assets/title/logo_main.png",
+        "fadeStartSeconds": 6,
+        "fadeDurationSeconds": 1.8,
+        "widthFraction": 0.624,
+        "centerX": 0.5,
+        "centerY": 0.5
+      },
+      "cameraMove": {
+        "startSeconds": 0.9,
+        "durationSeconds": 3.5,
+        "position": [
+          0.25,
+          5.5,
+          -25
+        ]
+      },
+      "characterSprite": {
+        "positionOffset": [
+          -0.6,
+          0,
+          0.1
+        ],
+        "facing": "north"
+      },
+      "spriteActors": [
+        {
+          "id": "mimi",
+          "package": "assets/characters/npc/mimi.charbin",
+          "position": [
+            -0.75,
+            0.166,
+            -0.05
+          ],
+          "destination": [
+            -0.75,
+            0.166,
+            -0.05
+          ],
+          "height": 0.42,
+          "facing": "right",
+          "turnFacing": "right",
+          "turnSeconds": 99,
+          "jumpCount": 0,
+          "runSeconds": 99
+        },
+        {
+          "id": "lillipup",
+          "package": "assets/characters/pokemon/lillipup.charbin",
+          "position": [
+            -0.75,
+            0.166,
+            -0.35
+          ],
+          "destination": [
+            -0.75,
+            0.166,
+            -0.35
+          ],
+          "height": 0.42,
+          "facing": "right",
+          "turnFacing": "right",
+          "turnSeconds": 99,
+          "jumpCount": 0,
+          "runSeconds": 99
+        }
+      ]
+    }
+  ],
+  "experiments": {
+    "wailordBreach": {
+      "enabled": true,
+      "triggerKey": 2,
+      "model": "assets/pokemon_attend/pokemon_models/pm0321_00_Wailord.glbz",
+      "animation": "slot6_02",
+      "animationSpeed": 1,
+      "blurStrength": 0.5,
+      "scale": 0.007776,
+      "yawDegrees": 90,
+      "launchPosition": [
+        -19.70905,
+        -10,
+        -11.558922
+      ],
+      "landingPosition": [
+        -19.70905,
+        -10,
+        -5.558922
+      ],
+      "driftVelocity": [
+        0,
+        0,
+        1.5
+      ],
+      "waterHeight": -0.8161758,
+      "delaySeconds": 0,
+      "durationSeconds": 4.2,
+      "riseHeight": 11,
+      "riseEndProgress": 0.38,
+      "fallStartProgress": 0.464,
+      "fallEndProgress": 0.947,
+      "uprightPitchDegrees": -90,
+      "emergenceYawDegrees": -55,
+      "rotationDamping": 3,
+      "sideFallAxis": [
+        1,
+        0,
+        0
+      ],
+      "sideFallDegrees": 90,
+      "fallPivotDepth": 3,
+      "fallPivotMode": "surface_contact",
+      "fallAccelerationPower": 3,
+      "fallSinkAcceleration": 1.4,
+      "fallTipDelaySeconds": 0,
+      "splash": {
+        "launchProgress": 0.075,
+        "landingProgress": 0.724778,
+        "durationSeconds": 2.3,
+        "radius": 17,
+        "height": 12,
+        "droplets": 128,
+        "bodyLength": 11.34,
+        "bodyWidth": 4.86,
+        "impactSites": 8,
+        "impactSweepSeconds": 0.22,
+        "color": [
+          0.85,
+          0.96,
+          1,
+          0.9
+        ]
+      }
+    }
+  },
+  "skyModels": [
+    {
+      "id": "environment",
+      "label": "Original ocean-set sky",
+      "model": ""
+    },
+    {
+      "id": "day_dome_0409",
+      "label": "Day sky dome (0409)",
+      "model": "assets/cinematic/start/skies/day_dome_0409.glb",
+      "materialSubstrings": [
+        "hai01_"
+      ]
+    }
+  ],
+  "activeVessel": "virbank_forward",
+  "activeEnvironment": "day",
+  "vessels": [
+    {
+      "id": "virbank_forward",
+      "placementAnchor": "center",
+      "centerMaterialSubstrings": [
+        "c13ship_01",
+        "h_mado"
+      ],
+      "materialMotionSpeed": -60,
+      "label": "Virbank ship exterior",
+      "model": "assets/cinematic/start/vessels/virbank_forward.glb",
+      "materialUvScroll": {
+        "nami_04": [
+          -1.0653409,
+          0
+        ],
+        "aqua_wv1": [
+          -3.4090909,
+          0
+        ],
+        "aqua_wv3": [
+          -3.4090909,
+          0
+        ]
+      },
+      "animation": "",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3
+    },
+    {
+      "id": "virbank_deck",
+      "placementAnchor": "center",
+      "centerMaterialSubstrings": [
+        "ship_body",
+        "ship_yuka"
+      ],
+      "materialMotionSpeed": 1,
+      "label": "Virbank deck with Haru",
+      "model": "assets/cinematic/start/vessels/virbank_deck.glb",
+      "materialUvScroll": {
+        "ship_wave": [
+          3,
+          0
+        ]
+      },
+      "characterSprite": {
+        "package": "assets/characters/playable/haru.charbin",
+        "material": "hero_m",
+        "animate": false
+      },
+      "animation": "",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "yawDegrees": 29.76,
+      "scale": 0.13,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3
+    }
+  ],
+  "environments": [
+    {
+      "id": "day",
+      "label": "Day ocean",
+      "model": "assets/cinematic/start/environments/ocean_day.glb",
+      "animation": "ocean_day",
+      "ocean": {
+        "treadmill": {
+          "enabled": true,
+          "speedMultiplier": 0.5,
+          "materialUvScroll": {
+            "sea_01": [
+              0.2101,
+              1.2124
+            ],
+            "sea_01_2": [
+              -0.2101,
+              1.2124
+            ]
+          }
+        },
+        "baseOpacity": 0.675,
+        "distantWater": {
+          "start": 12,
+          "end": 65,
+          "color": [
+            0.08,
+            0.36,
+            0.57
+          ],
+          "materialSubstrings": [
+            "sea_",
+            "nami_01"
+          ]
+        },
+        "materialOpacity": {
+          "nami_06_01": 0.5
+        },
+        "materialUvScroll": {
+          "nami_06_01": [
+            -2.5,
+            0
+          ],
+          "sea_01": [
+            0.4,
+            0.03125
+          ],
+          "sea_01_2": [
+            0.4,
+            0.03125
+          ],
+          "nami_01": [
+            0,
+            0.5454545
+          ]
+        },
+        "widthMultiplier": 16,
+        "depthMultiplier": 24,
+        "materialSubstrings": [
+          "sea_01",
+          "nami_01"
+        ],
+        "position": [
+          0,
+          -0.8161758,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "modelId": "day_dome_0409",
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          -20,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_05"
+      ]
+    },
+    {
+      "id": "sunset",
+      "label": "Sunset ocean",
+      "model": "assets/cinematic/start/environments/ocean_sunset.glb",
+      "animation": "ocean_sunset",
+      "ocean": {
+        "treadmill": {
+          "enabled": true,
+          "speedMultiplier": 0.5,
+          "materialUvScroll": {
+            "sea_02": [
+              0.2101,
+              1.2124
+            ],
+            "sea_02_2": [
+              -0.2101,
+              1.2124
+            ]
+          }
+        },
+        "baseOpacity": 0.675,
+        "distantWater": {
+          "start": 12,
+          "end": 65,
+          "color": [
+            0.08,
+            0.36,
+            0.57
+          ],
+          "materialSubstrings": [
+            "sea_",
+            "nami_01"
+          ]
+        },
+        "materialOpacity": {
+          "nami_06_02": 0.5
+        },
+        "materialUvScroll": {
+          "nami_06_02": [
+            -2.5,
+            0
+          ],
+          "sea_02": [
+            0.4,
+            0.03125
+          ],
+          "sea_02_2": [
+            0.4,
+            0.03125
+          ],
+          "nami_01": [
+            0,
+            0.5454545
+          ]
+        },
+        "widthMultiplier": 16,
+        "depthMultiplier": 24,
+        "materialSubstrings": [
+          "sea_01",
+          "nami_01"
+        ],
+        "position": [
+          0,
+          -0.8161758,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "modelId": "environment",
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          -0.8161758,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_05"
+      ]
+    },
+    {
+      "id": "night",
+      "label": "Night ocean",
+      "model": "assets/cinematic/start/environments/ocean_night.glb",
+      "animation": "ocean_night",
+      "ocean": {
+        "treadmill": {
+          "enabled": true,
+          "speedMultiplier": 0.5,
+          "materialUvScroll": {
+            "sea_03": [
+              0.2101,
+              1.2124
+            ],
+            "sea_03_2": [
+              -0.2101,
+              1.2124
+            ]
+          }
+        },
+        "baseOpacity": 0.675,
+        "distantWater": {
+          "start": 12,
+          "end": 65,
+          "color": [
+            0.04,
+            0.12,
+            0.23
+          ],
+          "materialSubstrings": [
+            "sea_",
+            "nami_01"
+          ]
+        },
+        "materialOpacity": {
+          "C3Ship_wa": 0.5
+        },
+        "materialUvScroll": {
+          "C3Ship_wa": [
+            -2.5,
+            0
+          ],
+          "sea_03": [
+            0.4,
+            0.03125
+          ],
+          "sea_03_2": [
+            0.4,
+            0.03125
+          ],
+          "nami_01": [
+            0,
+            0.5454545
+          ]
+        },
+        "widthMultiplier": 16,
+        "depthMultiplier": 24,
+        "materialSubstrings": [
+          "sea_01",
+          "nami_01"
+        ],
+        "position": [
+          0,
+          -1.8161758,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "modelId": "environment",
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          -1.8161758,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_05"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "id": "wingull_left",
+      "foregroundBlurStrength": 1,
+      "foregroundBlurRadius": 0,
+      "foregroundBlurDistance": 6,
+      "placementAnchor": "center",
+      "model": "assets/pokemon_attend/pokemon_models/pm0278_00_Wingull.glbz",
+      "animation": "slot6_02",
+      "animationSpeed": 1,
+      "animationPhaseSeconds": 0,
+      "position": [
+        -0.46,
+        6.7,
+        -1.655
+      ],
+      "yawDegrees": 180,
+      "scale": 0.017,
+      "velocity": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "wingull_right",
+      "foregroundBlurStrength": -1,
+      "foregroundBlurRadius": 0,
+      "foregroundBlurDistance": 6,
+      "placementAnchor": "center",
+      "model": "assets/pokemon_attend/pokemon_models/pm0278_00_Wingull.glbz",
+      "animation": "slot6_02",
+      "animationSpeed": 1,
+      "animationPhaseSeconds": 0.35,
+      "position": [
+        3.58,
+        7.29,
+        0.2
+      ],
+      "yawDegrees": 180,
+      "scale": 0.018,
+      "velocity": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "dragonite_flyby",
+      "shotKeys": [
+        4
+      ],
+      "placementAnchor": "center",
+      "model": "assets/pokemon_attend/pokemon_models/pm0149_00_Dragonite.glbz",
+      "animation": "slot6_03",
+      "animationSpeed": 1,
+      "position": [
+        4,
+        3.8,
+        -6
+      ],
+      "yawDegrees": 180,
+      "scale": 0.012,
+      "velocity": [
+        -0.5,
+        0.7,
+        -24
+      ],
+      "arrival": {
+        "startSeconds": 0.9,
+        "fadeOutStartSeconds": 5.8,
+        "fadeOutDurationSeconds": 1.2,
+        "rollDegrees": -35,
+        "yawOffsetDegrees": 18,
+        "settleStartSeconds": 0.2,
+        "settleDurationSeconds": 2.2
+      },
+      "foregroundBlurStrength": 0
+    }
+  ],
+  "island": {
+    "placementAnchor": "center",
+    "id": "resort_island",
+    "label": "Resort island preview",
+    "enabled": true,
+    "model": "assets/cinematic/start/island/island_nocliff.glb",
+    "position": [
+      0,
+      9.2609047,
+      -208
+    ],
+    "yawDegrees": 192,
+    "scale": 0.0075
+  },
+  "camera": {
+    "targetX": 0,
+    "targetY": 1,
+    "targetZ": 3,
+    "distance": 10,
+    "height": 4,
+    "fovYDegrees": 43,
+    "nearClip": 0.03,
+    "farClip": 600,
+    "moveSpeed": 8,
+    "mouseSensitivity": 0.12,
+    "initialPosition": [
+      8.5,
+      2.9838242,
+      -9.5
+    ],
+    "initialYawDegrees": -35,
+    "initialPitchDegrees": -8
+  },
+  "clearColor": [
+    0.36,
+    0.65,
+    0.86
+  ]
+}

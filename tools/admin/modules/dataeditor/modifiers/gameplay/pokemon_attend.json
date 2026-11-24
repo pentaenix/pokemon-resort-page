@@ -23,6 +23,9 @@
     }
   ],
   "fields": {
+    "files.friends": {
+      "label":"Friends picker config file","widget":"path","group":"files","order":7
+    },
     "activeDebug": {
       "label": "Active attend debug scene",
       "widget": "text",
@@ -41,11 +44,24 @@
       "group": "files",
       "order": 2
     },
+    "files.play": {
+      "label": "Play personality and capabilities file",
+      "widget": "path",
+      "group": "files",
+      "order": 6
+    },
     "files.pokemonProvider": {
       "label": "Pokemon provider file",
       "widget": "path",
       "group": "files",
       "order": 3
+    },
+    "files.pokemonProviders": {
+      "label": "Additional Pokemon provider files",
+      "description": "JSON array of config paths. The primary provider keeps priority for existing species.",
+      "widget": "json",
+      "group": "files",
+      "order": 3.1
     },
     "files.environment": {
       "label": "Environment catalog file",

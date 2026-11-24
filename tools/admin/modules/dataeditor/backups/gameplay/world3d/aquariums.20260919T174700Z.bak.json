@@ -1,0 +1,267 @@
+{
+  "schemaVersion": 5,
+  "buildingPresentation": {
+    "camera": {
+      "zoomedInEnabled": true,
+      "preset": "pixel-perfect-close",
+      "distanceBehindPlayerTiles": 16.17524,
+      "heightAbovePlayerTiles": 13.14238,
+      "nearClipTiles": 0.5
+    },
+    "lighting": {
+      "enabled": true,
+      "brightness": 0.5,
+      "tint": [
+        0.9,
+        0.97,
+        1.08
+      ]
+    },
+    "tankLighting": {
+      "enabled": true,
+      "brightness": 1.1,
+      "tint": [
+        0.88,
+        1.02,
+        1.12
+      ],
+      "spillColor": [
+        0.16,
+        0.54,
+        0.82
+      ],
+      "spillOpacity": 0.15,
+      "spillReachTiles": 1.35,
+      "waterAttenuationIntensity": 2.4,
+      "waterSurfaceSpeed": 0.7,
+      "sandDarkening": 0.18
+    }
+  },
+  "pokemonScale": 0.17,
+  "pokemonPresentation": {
+    "emission": {
+      "bulbBrightness": 1.5,
+      "haloBrightness": 1.1,
+      "fogRetention": 0.75
+    },
+    "brightness": 1.08,
+    "pokemonBrightness": 1.02,
+    "saturation": 1,
+    "contrast": 1,
+    "ambient": 0.74,
+    "directional": 0.34,
+    "formShadow": 0.24,
+    "lightDirection": [
+      -0.35,
+      0.82,
+      0.45
+    ],
+    "tint": [
+      1,
+      0.99,
+      0.95
+    ]
+  },
+  "maps": [
+    {
+      "mapId": "aquarium_builder_lab",
+      "buildingPresentation": {
+        "camera": {
+          "farClipTiles": 128
+        }
+      },
+      "construction": {
+        "enabled": true,
+        "roomTrimColor": [
+          67,
+          105,
+          148,
+          255
+        ],
+        "returnCell": [
+          27,
+          31
+        ],
+        "returnFacing": "north",
+        "allowedCellRows": [
+          {
+            "row": 1,
+            "fromColumn": 1,
+            "toColumn": 25
+          },
+          {
+            "row": 1,
+            "fromColumn": 29,
+            "toColumn": 52
+          },
+          {
+            "row": 2,
+            "fromColumn": 1,
+            "toColumn": 25
+          },
+          {
+            "row": 2,
+            "fromColumn": 29,
+            "toColumn": 52
+          },
+          {
+            "row": 3,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 4,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 5,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 6,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 7,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 8,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 9,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 10,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 11,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 12,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 13,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 14,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 15,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 16,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 17,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 18,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 19,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 20,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 21,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 22,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 23,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 24,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 25,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 26,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 27,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 28,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 29,
+            "fromColumn": 1,
+            "toColumn": 52
+          },
+          {
+            "row": 30,
+            "fromColumn": 1,
+            "toColumn": 25
+          },
+          {
+            "row": 30,
+            "fromColumn": 29,
+            "toColumn": 52
+          },
+          {
+            "row": 31,
+            "fromColumn": 1,
+            "toColumn": 25
+          },
+          {
+            "row": 31,
+            "fromColumn": 29,
+            "toColumn": 52
+          }
+        ]
+      },
+      "tanks": []
+    }
+  ]
+}

@@ -9,6 +9,7 @@
     "ui"
   ],
   "groups": [
+    {"id":"wellbeing","label":"Enjoyment and fullness","order":25},
     {
       "id": "global",
       "label": "Global UI",
@@ -102,6 +103,46 @@
     }
   ],
   "fields": {
+    "ui.wellbeingHud.enabled": {"label":"Enabled","group":"wellbeing"},
+    "ui.wellbeingHud.top": {"label":"Top","min":1,"max":400,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.heartSize": {"label":"Heart Size","min":1,"max":400,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.heartGap": {"label":"Heart Gap","min":1,"max":400,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.sparkleSeconds": {"label":"Gain sparkle duration","min":0.05,"max":20,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.sparkleSize": {"label":"Gain sparkle size","min":1,"max":30,"step":0.5,"group":"wellbeing"},
+    "ui.wellbeingHud.sparklesPerHeart": {"label":"Gain sparkles per heart","min":0,"max":8,"step":1,"group":"wellbeing"},
+    "ui.wellbeingHud.sparkleColor": {"label":"Gain sparkle color","group":"wellbeing"},
+    "ui.wellbeingHud.fadeSeconds": {"label":"Fullness fade seconds","min":0.05,"max":20,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.smoothingSeconds": {"label":"Smoothing Seconds","min":0.05,"max":20,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.fullnessWidth": {"label":"Stomach icon width","min":1,"max":400,"step":0.5,"group":"wellbeing"},
+    "ui.wellbeingHud.fullnessHeight": {"label":"Stomach icon height","min":1,"max":400,"step":0.5,"group":"wellbeing"},
+    "ui.wellbeingHud.fullnessBottom": {"label":"Fullness Bottom","min":1,"max":400,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.foodLingerSeconds": {"label":"Food Linger Seconds","min":0.05,"max":20,"step":0.05,"group":"wellbeing"},
+    "ui.wellbeingHud.heartColor": {"label":"Heart Color","group":"wellbeing"},
+    "ui.wellbeingHud.fullnessColor": {"label":"Fullness Color","group":"wellbeing"},
+    "ui.careMenu.animationSeconds":{"label":"Bell menu morph duration","group":"cornerButtons","min":0.01,"max":2,"step":0.01},
+    "ui.careMenu.childScale":{"label":"Bell menu child button scale","group":"cornerButtons","min":0.4,"max":1,"step":0.01},
+    "ui.careMenu.gap":{"label":"Bell menu button gap","group":"cornerButtons","min":0,"max":80,"step":1},
+    "ui.careMenu.margin":{"label":"Bell menu edge margin","group":"cornerButtons","min":0,"max":80,"step":1},
+    "ui.careMenu.stagger":{"label":"Bell menu button stagger","group":"cornerButtons","min":0,"max":0.5,"step":0.01},
+    "ui.bagMenu.foodCatalog":{"label":"Food sprite catalog JSON","group":"cornerButtons","hint":"Fifth category, above the toys. Prototype quantities stay permanently at 1."},
+    "ui.bagMenu.foodPreviewScale":{"label":"Food preview size relative to toys","group":"cornerButtons","min":0.4,"max":1,"step":0.05},
+    "ui.bagMenu.foodSpacingScale":{"label":"Food spacing relative to toys","group":"cornerButtons","min":0.5,"max":1,"step":0.05},
+    "ui.cornerButtons.toyReturnDelaySeconds": {"label": "Toy-play menu return delay", "widget": "number", "min": 0, "max": 5, "step": 0.05, "group": "cornerButtons"},
+    "ui.cornerButtons.toySlideInSeconds": {"label": "Toy-play menu slide in", "widget": "number", "min": 0.01, "max": 2, "step": 0.05, "group": "cornerButtons"},
+    "ui.bagMenu.*": {"group": "cornerButtons"},
+    "ui.bagMenu.animationSeconds": {"label": "Bag expansion duration", "widget": "number", "min": 0.01, "max": 2, "step": 0.01},
+    "ui.bagMenu.childScale": {"label": "Bag category button scale", "widget": "number", "min": 0.4, "max": 1, "step": 0.01},
+    "ui.bagMenu.gap": {"label": "Bag category spacing", "widget": "number", "min": 0, "max": 80, "step": 1},
+    "ui.bagMenu.margin": {"label": "Expanded bag edge margin", "widget": "number", "min": 0, "max": 80, "step": 1},
+    "ui.bagMenu.stagger": {"label": "Bag category animation stagger", "widget": "number", "min": 0, "max": 0.5, "step": 0.01},
+    "ui.bagMenu.previewBackgroundOpacity": {"label": "Toy preview white background opacity", "description": "0 hides the white backing; 1 makes it opaque. Toy previews remain fully visible.", "widget": "number", "min": 0, "max": 1, "step": 0.01},
+    "ui.bagMenu.categories": {"label": "Toy preview categories", "description": "Ordered balls, chew toys, flying discs and interactive toys. Food uses a separate sprite catalog and fifth category."},
+    "ui.bagMenu.categories.*.label": {"label": "Category name"},
+    "ui.bagMenu.categories.*.toys": {"label": "Toy previews"},
+    "ui.bagMenu.categories.*.toys.*.label": {"label": "Toy name"},
+    "ui.bagMenu.categories.*.toys.*.model": {"label": "Source toy model"},
+    "ui.bagMenu.categories.*.toys.*.preview": {"label": "Baked toy preview image"},
+    "ui.bagMenu.categories.*.toys.*.previewHalfTurn": {"label": "Rotate toy preview 180 degrees", "widget": "checkbox"},
     "ui.pixelatedOverlay": {
       "label": "Pixelated Attend UI",
       "description": "Keeps the 3D Attend scene at the shared low-resolution pixel density. UI screens default to HD below.",
@@ -280,6 +321,10 @@
       "step": 1,
       "group": "profilePlate",
       "order": 23
+    },
+    "ui.profilePlate.friendIconPitch": {
+      "label":"Friend icon spacing","description":"Guest sprites extend the name row leftward without moving the owner icon or text.",
+      "widget":"number","min":24,"max":96,"step":1,"group":"profilePlate","order":24
     },
     "ui.profilePlate.spriteOffsetX": {
       "label": "Icon X offset",

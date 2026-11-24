@@ -1,0 +1,281 @@
+{
+  "schema": "pokemon-resort-start-cinematic",
+  "schemaVersion": 1,
+  "sceneCenter": [0.0, 0.0, 0.0],
+  "fog": {"enabled": true, "start": 25, "end": 300, "strength": 0.82, "color": [0.48, 0.68, 0.85]},
+  "audio": {
+    "ambience": [
+      {"id": "ferry_splashes", "path": "assets/cinematic/start/audio/ferry_splashes.mp3", "volume": 0.65, "enabled": true},
+      {"id": "boat_engine", "path": "assets/cinematic/start/audio/boat_engine.mp3", "volume": 0.35, "enabled": true}
+    ]
+  },
+  "activeShot": "overhead",
+  "shots": [
+    {"id": "overhead", "label": "Ship and Wingull overhead", "durationSeconds": 5, "key": 1, "vessel": "virbank_forward", "position": [2.796777, 10.803934, -1.319800], "yawDegrees": 303.450165, "pitchDegrees": -73.200005, "fovYDegrees": 45.000000, "foregroundBlurStrength": 3},
+    {"id": "haru_deck", "label": "Behind Haru toward the island", "durationSeconds": 7, "key": 2, "vessel": "virbank_deck", "position": [0.25, 0.95, 0.25], "yawDegrees": 180, "pitchDegrees": -3, "fovYDegrees": 48, "foregroundBlurStrength": 0}
+  ],
+  "skyModels": [
+    { "id": "environment", "label": "Original ocean-set sky", "model": "" },
+    {
+      "id": "day_dome_0409",
+      "label": "Day sky dome (0409)",
+      "model": "assets/cinematic/start/skies/day_dome_0409.glb",
+      "materialSubstrings": ["hai01_"]
+    }
+  ],
+  "activeVessel": "virbank_forward",
+  "activeEnvironment": "day",
+  "vessels": [
+    {
+      "id": "virbank_forward",
+      "placementAnchor": "center",
+      "centerMaterialSubstrings": ["c13ship_01", "h_mado"],
+      "materialMotionSpeed": -60,
+      "label": "Virbank ship exterior",
+      "model": "assets/cinematic/start/vessels/virbank_forward.glb",
+      "materialUvScroll": {"nami_04": [-1.0653409, 0], "aqua_wv1": [-3.4090909, 0], "aqua_wv3": [-3.4090909, 0]},
+      "animation": "",
+      "position": [
+        0,
+        0.0,
+        0
+      ],
+      "yawDegrees": 0,
+      "scale": 1.5,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3
+    },
+    {
+      "id": "virbank_deck",
+      "placementAnchor": "center",
+      "centerMaterialSubstrings": ["ship_body", "ship_yuka"],
+      "materialMotionSpeed": 1,
+      "label": "Virbank deck with Haru",
+      "model": "assets/cinematic/start/vessels/virbank_deck.glb",
+      "materialUvScroll": {"ship_wave": [3, 0]},
+      "characterSprite": {"package": "assets/characters/playable/haru.charbin", "material": "hero_m", "animate": false},
+      "animation": "",
+      "position": [
+        0,
+        0.0,
+        0
+      ],
+      "yawDegrees": 29.76,
+      "scale": 0.13,
+      "bobAmplitude": 0,
+      "bobPeriodSeconds": 3
+    }
+  ],
+  "environments": [
+    {
+      "id": "day",
+      "label": "Day ocean",
+      "model": "assets/cinematic/start/environments/ocean_day.glb",
+      "animation": "ocean_day",
+      "ocean": {
+        "distantWater": {"start": 12, "end": 65, "color": [0.08, 0.36, 0.57], "materialSubstrings": ["sea_", "nami_01"]},
+        "materialOpacity": {"nami_06_01": 0.5},
+        "materialUvScroll": {"nami_06_01": [-2.5, 0], "sea_01": [0.4, 0.03125], "sea_01_2": [0.4, 0.03125], "nami_01": [0, 0.5454545]},
+        "widthMultiplier": 16,
+        "depthMultiplier": 24,
+        "materialSubstrings": ["sea_01", "nami_01"],
+        "position": [
+          0,
+          -0.8161758,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "modelId": "day_dome_0409",
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          -20.0,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_05"
+      ]
+    },
+    {
+      "id": "sunset",
+      "label": "Sunset ocean",
+      "model": "assets/cinematic/start/environments/ocean_sunset.glb",
+      "animation": "ocean_sunset",
+      "ocean": {
+        "distantWater": {"start": 12, "end": 65, "color": [0.08, 0.36, 0.57], "materialSubstrings": ["sea_", "nami_01"]},
+        "materialOpacity": {"nami_06_02": 0.5},
+        "materialUvScroll": {"nami_06_02": [-2.5, 0], "sea_02": [0.4, 0.03125], "sea_02_2": [0.4, 0.03125], "nami_01": [0, 0.5454545]},
+        "widthMultiplier": 16,
+        "depthMultiplier": 24,
+        "materialSubstrings": ["sea_01", "nami_01"],
+        "position": [
+          0,
+          -0.8161758,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "modelId": "environment",
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          -0.8161758,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_05"
+      ]
+    },
+    {
+      "id": "night",
+      "label": "Night ocean",
+      "model": "assets/cinematic/start/environments/ocean_night.glb",
+      "animation": "ocean_night",
+      "ocean": {
+        "distantWater": {"start": 12, "end": 65, "color": [0.04, 0.12, 0.23], "materialSubstrings": ["sea_", "nami_01"]},
+        "materialOpacity": {"C3Ship_wa": 0.5},
+        "materialUvScroll": {"C3Ship_wa": [-2.5, 0], "sea_03": [0.4, 0.03125], "sea_03_2": [0.4, 0.03125], "nami_01": [0, 0.5454545]},
+        "widthMultiplier": 16,
+        "depthMultiplier": 24,
+        "materialSubstrings": ["sea_01", "nami_01"],
+        "position": [
+          0,
+          -1.8161758,
+          0
+        ],
+        "scale": 1,
+        "yawDegrees": 0
+      },
+      "sky": {
+        "modelId": "environment",
+        "materialSubstrings": [
+          "hai01_",
+          "cloud_"
+        ],
+        "position": [
+          0,
+          -1.8161758,
+          0
+        ],
+        "scale": 4,
+        "yawDegrees": 0
+      },
+      "singleSidedMaterialSubstrings": [
+        "hai01_",
+        "cloud_"
+      ],
+      "hiddenMaterialSubstrings": [
+        "nami_05"
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "id": "wingull_left",
+      "foregroundBlurRadius": 0,
+      "foregroundBlurDistance": 6,
+      "placementAnchor": "center",
+      "model": "assets/pokemon_attend/pokemon_models/pm0278_00_Wingull.glbz",
+      "animation": "slot6_02",
+      "animationSpeed": 1,
+      "animationPhaseSeconds": 0,
+      "position": [
+        1.54,
+        7.2,
+        -2.605
+      ],
+      "yawDegrees": 180,
+      "scale": 0.018,
+      "velocity": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "wingull_right",
+      "foregroundBlurRadius": 0,
+      "foregroundBlurDistance": 6,
+      "placementAnchor": "center",
+      "model": "assets/pokemon_attend/pokemon_models/pm0278_00_Wingull.glbz",
+      "animation": "slot6_02",
+      "animationSpeed": 1,
+      "animationPhaseSeconds": 0.35,
+      "position": [
+        3.58,
+        7.29,
+        0.2
+      ],
+      "yawDegrees": 180,
+      "scale": 0.018,
+      "velocity": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "island": {
+    "placementAnchor": "center",
+    "id": "resort_island",
+    "label": "Resort island preview",
+    "enabled": true,
+    "model": "assets/cinematic/start/island/island_nocliff.glb",
+    "position": [
+      0,
+      9.2609047,
+      -208
+    ],
+    "yawDegrees": 12,
+    "scale": 0.0075
+  },
+  "camera": {
+    "targetX": 0,
+    "targetY": 1,
+    "targetZ": 3,
+    "distance": 10,
+    "height": 4,
+    "fovYDegrees": 43,
+    "nearClip": 0.03,
+    "farClip": 600,
+    "moveSpeed": 8,
+    "mouseSensitivity": 0.12,
+    "initialPosition": [
+      8.5,
+      2.9838242,
+      -9.5
+    ],
+    "initialYawDegrees": -35,
+    "initialPitchDegrees": -8
+  },
+  "clearColor": [
+    0.36,
+    0.65,
+    0.86
+  ]
+}
