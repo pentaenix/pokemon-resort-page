@@ -1,0 +1,90 @@
+{
+  "dossier": {
+    "overview": "An optional card shop unlocked by connecting the Pokémon Trading Card Game realm. Collect English cards in Resort-made era packs, keep an album and trade duplicates with visitors. This is an uncommitted idea, not an implemented feature or a promise of playable TCG battles.",
+    "sections": [
+      {
+        "id": "shop-loop",
+        "title": "A shop to visit",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Connecting the TCG realm would introduce the shopkeeper. The original handheld TCG game is on Game Boy Color; existing connection tracking in Resort still needs verification.\n\nWelcoming Pokémon from other games would expand the shop assortments. A Pokémon arriving from Sun or Moon could unlock an Alola-era pack, rather than a pack limited to that species.\n\nThe player would visit the shop to obtain packs. Transfers would never interrupt play with a pack-opening popup. Opening could happen at the counter or later, with skipped animation, batch opening and a quick results view. Resort-currency purchases are one possibility; prices and stock rules remain undecided."
+          }
+        ]
+      },
+      {
+        "id": "packs-album",
+        "title": "English cards and era assortments",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Use English cards only. Resort packs would have their own designs and assortments, rather than reproduce official booster contents or real-world pull rates. The long-term ambition is broad English coverage, but an initial experiment needs only a small catalogue.\n\nThe album would show owned cards, duplicates, set information and artwork credits. Favorite Pokémon and smaller era collections should provide goals without requiring completion of the entire catalogue. Repeated transfers of the same Pokémon must not produce unlimited rewards or stock."
+          }
+        ]
+      },
+      {
+        "id": "npc-trades",
+        "title": "Trading with resort visitors",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "NPCs could offer cards in exchange for particular duplicates. Visible wants and offers would let players choose packs, save useful duplicates and seek a trade.\n\nThe intended appeal is a quiet activity with a place in the resort, alongside exploration, contests, battling and other minigames. Cards would not gate normal Resort progression. Full card battles would be a separate possible project."
+          }
+        ]
+      },
+      {
+        "id": "experiment",
+        "title": "What needs to be fun",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Pack opening provides surprise, but a large image catalogue alone does not establish a satisfying activity. Choosing assortments and making trades need to provide reasons to return after the first opening.\n\nA small experiment could include two era assortments, a manageable English catalogue, a persistent album, a shop and a few NPC trades. Include duplicates so trading can be tested.\n\nLook for a player choosing a collection goal, caring about a trade and wanting to revisit the shop. If it is only repeated picture reveals, revise or shelve it before expanding. The world map and core gameplay retain priority."
+          }
+        ]
+      },
+      {
+        "id": "assets",
+        "title": "Artwork and catalogue",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Existing card fronts and the card back could provide reference artwork. Resort would need its own pack designs and DS-style shop and album presentation. TCGdex is a candidate metadata and image source. Coverage, attribution and applicable asset-use terms need checking before image import or distribution; API availability alone does not grant artwork redistribution rights.\n\nUse stable card IDs, source and illustrator credits, and saved owned-copy counts. An imported catalogue and cached images would allow opening and saved ownership to work without a live API response."
+          }
+        ]
+      },
+      {
+        "id": "open-questions",
+        "title": "Open questions",
+        "blocks": [
+          {
+            "type": "text",
+            "body": "Confirm whether Resort already tracks a verified TCG connection. Decide whether era eligibility follows the connected source game, original game or species debut; source-game context is the current preference.\n\nDefine era boundaries, remake handling, pack availability, currency costs, duplicate use and NPC trade refresh rules. Decide which printing and foil variants are separate collectibles. These decisions remain open."
+          }
+        ]
+      },
+      {
+        "id": "references",
+        "title": "References",
+        "blocks": [
+          {
+            "type": "links",
+            "items": [
+              {
+                "label": "TCGdex coverage",
+                "href": "https://tcgdex.dev/status"
+              },
+              {
+                "label": "TCGdex card images",
+                "href": "https://tcgdex.dev/assets"
+              },
+              {
+                "label": "Original Pokémon Trading Card Game",
+                "href": "https://www.pokemon.com/us/pokemon-video-games/pokemon-trading-card-game"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

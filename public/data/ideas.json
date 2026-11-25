@@ -90,6 +90,21 @@
         "fit": "pixel",
         "pixelScale": 4
       }
+    },
+    {
+      "id": "idea-tcg-card-shop",
+      "slug": "idea-tcg-card-shop",
+      "title": "TCG card shop and album",
+      "status": "spark",
+      "summary": "Connecting the TCG realm would unlock a card shop. Pokémon arrivals would unlock era-themed English packs, with an album and NPC trades.",
+      "tags": [
+        "tcg",
+        "collection",
+        "shop",
+        "trading",
+        "side-content"
+      ],
+      "updatedAt": "2026-11-25"
     }
   ]
 }
